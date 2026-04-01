@@ -118,3 +118,10 @@ pub use transport::{
     TlsTransport, TlsConfig, RealityConfig,
     GrpcTransport, GrpcConfig,
 };
+
+// Configuration module with hot reload support
+pub mod config;
+pub use config::{
+    HotReload, HotReloadError, HotReloadable,
+    ConfigEvent, WatchEvent, WatchEventKind,
+};
