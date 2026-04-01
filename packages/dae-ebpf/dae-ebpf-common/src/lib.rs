@@ -7,6 +7,7 @@
 #![no_std]
 
 pub mod config;
+pub mod direct;
 pub mod routing;
 pub mod session;
 pub mod stats;
