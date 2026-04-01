@@ -1,0 +1,359 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>dae-rs Dashboard</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, sans-serif;
+            background: #1a1a2e;
+            color: #eee;
+            min-height: 100vh;
+        }
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 20px;
+        }
+        header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 20px 0;
+            border-bottom: 1px solid #333;
+            margin-bottom: 20px;
+        }
+        h1 {
+            color: #00d9ff;
+        }
+        .status-badge {
+            padding: 8px 16px;
+            border-radius: 20px;
+            font-size: 14px;
+            font-weight: 500;
+        }
+        .status-connected {
+            background: #00d9ff20;
+            color: #00d9ff;
+            border: 1px solid #00d9ff;
+        }
+        .status-disconnected {
+            background: #ff444420;
+            color: #ff4444;
+            border: 1px solid #ff4444;
+        }
+        .stats-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 16px;
+            margin-bottom: 30px;
+        }
+        .stat-card {
+            background: #252540;
+            border-radius: 12px;
+            padding: 20px;
+            text-align: center;
+        }
+        .stat-value {
+            font-size: 32px;
+            font-weight: 700;
+            color: #00d9ff;
+        }
+        .stat-label {
+            font-size: 14px;
+            color: #888;
+            margin-top: 8px;
+        }
+        .section {
+            background: #252540;
+            border-radius: 12px;
+            padding: 20px;
+            margin-bottom: 20px;
+        }
+        .section-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 16px;
+        }
+        .section-title {
+            font-size: 18px;
+            font-weight: 600;
+        }
+        .connection-count {
+            font-size: 14px;
+            color: #888;
+        }
+        table {
+            width: 100%;
+            border-collapse: collapse;
+        }
+        th, td {
+            text-align: left;
+            padding: 12px;
+            border-bottom: 1px solid #333;
+        }
+        th {
+            color: #888;
+            font-weight: 500;
+            font-size: 12px;
+            text-transform: uppercase;
+        }
+        td {
+            font-size: 14px;
+        }
+        .protocol-badge {
+            display: inline-block;
+            padding: 4px 8px;
+            border-radius: 4px;
+            font-size: 12px;
+            font-weight: 500;
+            text-transform: uppercase;
+        }
+        .protocol-tcp { background: #00d9ff20; color: #00d9ff; }
+        .protocol-udp { background: #ff9f4320; color: #ff9f43; }
+        .node-item {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 12px;
+            border-bottom: 1px solid #333;
+        }
+        .node-item:last-child { border-bottom: none; }
+        .node-name { font-weight: 500; }
+        .node-latency { font-size: 14px; color: #888; }
+        .latency-good { color: #00d9ff; }
+        .latency-medium { color: #ff9f43; }
+        .latency-bad { color: #ff4444; }
+        .empty-state {
+            text-align: center;
+            padding: 40px;
+            color: #666;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>dae-rs Dashboard</h1>
+            <span id="connectionStatus" class="status-badge status-disconnected">Disconnected</span>
+        </header>
+
+        <div class="stats-grid">
+            <div class="stat-card">
+                <div class="stat-value" id="activeConnections">0</div>
+                <div class="stat-label">Active Connections</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-value" id="totalConnections">0</div>
+                <div class="stat-label">Total Connections</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-value" id="bytesIn">0</div>
+                <div class="stat-label">Bytes In</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-value" id="bytesOut">0</div>
+                <div class="stat-label">Bytes Out</div>
+            </div>
+        </div>
+
+        <div class="section">
+            <div class="section-header">
+                <span class="section-title">Active Connections</span>
+                <span class="connection-count" id="connectionTableCount">0 connections</span>
+            </div>
+            <div id="connectionsContainer">
+                <table>
+                    <thead>
+                        <tr>
+                            <th>Protocol</th>
+                            <th>Source</th>
+                            <th>Destination</th>
+                            <th>Bytes In</th>
+                            <th>Bytes Out</th>
+                            <th>State</th>
+                        </tr>
+                    </thead>
+                    <tbody id="connectionsTable">
+                        <tr>
+                            <td colspan="6" class="empty-state">No active connections</td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+
+        <div class="section">
+            <div class="section-header">
+                <span class="section-title">Node Status</span>
+            </div>
+            <div id="nodesContainer">
+                <div class="empty-state">No nodes configured</div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const WS_URL = `ws://${window.location.host}/ws`;
+        let ws = null;
+        let stats = {
+            totalConnections: 0,
+            totalBytesIn: 0,
+            totalBytesOut: 0,
+            activeConnections: 0,
+            activeTcp: 0,
+            activeUdp: 0
+        };
+        const connections = new Map();
+        const nodes = new Map();
+
+        function formatBytes(bytes) {
+            if (bytes === 0) return '0 B';
+            const k = 1024;
+            const sizes = ['B', 'KB', 'MB', 'GB', 'TB'];
+            const i = Math.floor(Math.log(bytes) / Math.log(k));
+            return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
+        }
+
+        function formatLatency(ms) {
+            if (ms < 100) return { class: 'latency-good', text: `${ms}ms` };
+            if (ms < 300) return { class: 'latency-medium', text: `${ms}ms` };
+            return { class: 'latency-bad', text: `${ms}ms` };
+        }
+
+        function updateStats() {
+            document.getElementById('activeConnections').textContent = stats.activeConnections;
+            document.getElementById('totalConnections').textContent = stats.totalConnections;
+            document.getElementById('bytesIn').textContent = formatBytes(stats.totalBytesIn);
+            document.getElementById('bytesOut').textContent = formatBytes(stats.totalBytesOut);
+        }
+
+        function updateConnectionsTable() {
+            const tbody = document.getElementById('connectionsTable');
+            const count = document.getElementById('connectionTableCount');
+            count.textContent = `${connections.size} connection${connections.size !== 1 ? 's' : ''}`;
+
+            if (connections.size === 0) {
+                tbody.innerHTML = '<tr><td colspan="6" class="empty-state">No active connections</td></tr>';
+                return;
+            }
+
+            tbody.innerHTML = Array.from(connections.values()).map(conn => `
+                <tr>
+                    <td><span class="protocol-badge protocol-${conn.protocol}">${conn.protocol}</span></td>
+                    <td>${conn.sourceAddr}</td>
+                    <td>${conn.destAddr}</td>
+                    <td>${formatBytes(conn.bytesIn)}</td>
+                    <td>${formatBytes(conn.bytesOut)}</td>
+                    <td>${conn.state}</td>
+                </tr>
+            `).join('');
+        }
+
+        function updateNodesContainer() {
+            const container = document.getElementById('nodesContainer');
+
+            if (nodes.size === 0) {
+                container.innerHTML = '<div class="empty-state">No nodes configured</div>';
+                return;
+            }
+
+            container.innerHTML = Array.from(nodes.entries()).map(([id, status]) => {
+                let statusText = status;
+                let latencyClass = '';
+                let latencyText = '';
+
+                if (status === 'online') {
+                    statusText = '🟢 Online';
+                } else if (status === 'offline') {
+                    statusText = '🔴 Offline';
+                } else if (status === 'testing') {
+                    statusText = '🟡 Testing...';
+                } else if (typeof status === 'object' && status.latency) {
+                    const { class: cls, text } = formatLatency(status.latency);
+                    latencyClass = cls;
+                    latencyText = text;
+                    statusText = `🟢 ${text}`;
+                }
+
+                return `
+                    <div class="node-item">
+                        <span class="node-name">${id}</span>
+                        <span class="node-latency ${latencyClass}">${statusText}</span>
+                    </div>
+                `;
+            }).join('');
+        }
+
+        function handleUpdate(update) {
+            switch (update.type) {
+                case 'connectionNew':
+                    connections.set(update.id, update.info);
+                    updateConnectionsTable();
+                    break;
+
+                case 'connectionClose':
+                    connections.delete(update.id);
+                    updateConnectionsTable();
+                    break;
+
+                case 'statsUpdate':
+                    stats = { ...stats, ...update.stats };
+                    updateStats();
+                    break;
+
+                case 'nodeUpdate':
+                    nodes.set(update.nodeId, update.status);
+                    updateNodesContainer();
+                    break;
+            }
+        }
+
+        function connect() {
+            ws = new WebSocket(WS_URL);
+
+            ws.onopen = () => {
+                document.getElementById('connectionStatus').textContent = 'Connected';
+                document.getElementById('connectionStatus').className = 'status-badge status-connected';
+            };
+
+            ws.onclose = () => {
+                document.getElementById('connectionStatus').textContent = 'Disconnected';
+                document.getElementById('connectionStatus').className = 'status-badge status-disconnected';
+                // Reconnect after 3 seconds
+                setTimeout(connect, 3000);
+            };
+
+            ws.onerror = (error) => {
+                console.error('WebSocket error:', error);
+            };
+
+            ws.onmessage = (event) => {
+                try {
+                    const update = JSON.parse(event.data);
+                    handleUpdate(update);
+                } catch (e) {
+                    console.error('Failed to parse message:', e);
+                }
+            };
+        }
+
+        // Initialize
+        connect();
+
+        // Ping every 30 seconds to keep connection alive
+        setInterval(() => {
+            if (ws && ws.readyState === WebSocket.OPEN) {
+                ws.send(JSON.stringify({ cmd: 'ping' }));
+            }
+        }, 30000);
+    </script>
+</body>
+</html>

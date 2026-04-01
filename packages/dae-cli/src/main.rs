@@ -14,6 +14,7 @@ use dae_proxy::{
 };
 use dae_core::Engine;
 use dae_config::{Config, NodeConfig, NodeType, ProxyConfig as DaeProxyConfig};
+use dae_cli::api::{ApiServer, AppState};
 use std::path::PathBuf;
 use std::sync::Arc;
 use std::time::Duration;
@@ -237,6 +238,15 @@ enum Commands {
     Rules {
         #[command(subcommand)]
         command: RulesCommands,
+    },
+    /// Start REST API server
+    Api {
+        /// Port to listen on
+        #[arg(long, default_value = "8080")]
+        port: u16,
+        /// Host to bind to
+        #[arg(long, default_value = "0.0.0.0")]
+        host: String,
     },
 }
 
@@ -651,6 +661,14 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                     eprintln!("Failed to parse configuration: {}", e);
                     std::process::exit(1);
                 }
+            }
+        }
+        Some(Commands::Api { port, host: _host }) => {
+            tracing::info!("Starting REST API server on port {}", port);
+            let server = ApiServer::new(port).await;
+            if let Err(e) = server.start().await {
+                eprintln!("API server error: {}", e);
+                std::process::exit(1);
             }
         }
         Some(Commands::RunEngine { config }) => {
