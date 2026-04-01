@@ -1,70 +1,67 @@
-//! Proxy protocol implementations
+//! Protocol abstraction layer
+//!
+//! This module provides protocol type definitions and registry
+//! for proxy protocol handlers.
 
+use std::collections::HashMap;
 use std::sync::Arc;
-use tokio::io::{AsyncReadExt, AsyncWriteExt};
-use tokio::net::TcpStream;
 
-#[derive(Debug, Clone)]
-pub enum ProxyProtocol {
+/// Protocol type enumeration
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub enum ProtocolType {
     Http,
     Socks5,
     Shadowsocks,
     VLess,
     Trojan,
+    Vmess,
 }
 
-impl ProxyProtocol {
+impl ProtocolType {
     pub fn name(&self) -> &'static str {
         match self {
-            ProxyProtocol::Http => "HTTP",
-            ProxyProtocol::Socks5 => "SOCKS5",
-            ProxyProtocol::Shadowsocks => "Shadowsocks",
-            ProxyProtocol::VLess => "VLESS",
-            ProxyProtocol::Trojan => "Trojan",
+            ProtocolType::Http => "HTTP",
+            ProtocolType::Socks5 => "SOCKS5",
+            ProtocolType::Shadowsocks => "Shadowsocks",
+            ProtocolType::VLess => "VLESS",
+            ProtocolType::Trojan => "Trojan",
+            ProtocolType::Vmess => "VMess",
         }
     }
 }
 
-/// A proxy connection handler
-pub struct ProxyHandler {
-    protocol: ProxyProtocol,
+/// Protocol handler trait
+pub trait ProtocolHandler: Send + Sync {
+    /// Get the protocol type
+    fn protocol_type(&self) -> ProtocolType;
+    
+    /// Handle a new connection (takes raw connection info)
+    fn handle(&self, local_addr: &str, remote_addr: &str);
 }
 
-impl ProxyHandler {
-    pub fn new(protocol: ProxyProtocol) -> Self {
-        Self { protocol }
-    }
+/// Protocol registry for managing protocol handlers
+pub struct ProtocolRegistry {
+    handlers: HashMap<ProtocolType, Arc<dyn ProtocolHandler>>,
+}
 
-    pub fn protocol_name(&self) -> &'static str {
-        self.protocol.name()
-    }
-
-    /// Forward traffic between client and remote
-    pub async fn forward(&self, mut client: TcpStream, remote_addr: &str) -> std::io::Result<()> {
-        let mut remote = TcpStream::connect(remote_addr).await?;
-
-        // Simple byte forwarding (placeholder for actual protocol implementation)
-        let mut buf = vec![0u8; 8192];
-        loop {
-            let n = client.read(&mut buf).await?;
-            if n == 0 {
-                break;
-            }
-            remote.write_all(&buf[..n]).await?;
+impl ProtocolRegistry {
+    pub fn new() -> Self {
+        Self {
+            handlers: HashMap::new(),
         }
-
-        Ok(())
+    }
+    
+    pub fn register(&mut self, handler: Arc<dyn ProtocolHandler>) {
+        self.handlers.insert(handler.protocol_type(), handler);
+    }
+    
+    pub fn get(&self, protocol: ProtocolType) -> Option<Arc<dyn ProtocolHandler>> {
+        self.handlers.get(&protocol).cloned()
     }
 }
 
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn test_protocol_names() {
-        assert_eq!(ProxyProtocol::Http.name(), "HTTP");
-        assert_eq!(ProxyProtocol::Socks5.name(), "SOCKS5");
-        assert_eq!(ProxyProtocol::Shadowsocks.name(), "Shadowsocks");
+impl Default for ProtocolRegistry {
+    fn default() -> Self {
+        Self::new()
     }
 }
