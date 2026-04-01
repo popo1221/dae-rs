@@ -2,6 +2,7 @@
 
 use clap::{Parser, Subcommand};
 use dae_proxy::{Proxy, ProxyConfig};
+use dae_proxy::shadowsocks::{SsCipherType, SsServerConfig};
 use dae_core::Engine;
 use std::path::PathBuf;
 use std::time::Duration;
@@ -70,6 +71,34 @@ enum Commands {
         /// HTTP proxy authentication password (requires --http-username)
         #[arg(long, requires = "http_username")]
         http_password: Option<String>,
+
+        /// Enable Shadowsocks proxy mode
+        #[arg(long)]
+        shadowsocks: bool,
+
+        /// Shadowsocks listen address (e.g., 127.0.0.1:1080)
+        #[arg(long, default_value = "127.0.0.1:1080")]
+        ss_listen: String,
+
+        /// Shadowsocks server address (IP or domain)
+        #[arg(long, requires = "shadowsocks")]
+        ss_server: Option<String>,
+
+        /// Shadowsocks server port
+        #[arg(long, default_value = "8388", requires = "shadowsocks")]
+        ss_port: u16,
+
+        /// Shadowsocks encryption method (chacha20-ietf-poly1305, aes-256-gcm, aes-128-gcm)
+        #[arg(long, default_value = "chacha20-ietf-poly1305", requires = "shadowsocks")]
+        ss_method: String,
+
+        /// Shadowsocks password
+        #[arg(long, requires = "shadowsocks")]
+        ss_password: Option<String>,
+
+        /// Enable Shadowsocks OTA (One-Time Auth)
+        #[arg(long, requires = "shadowsocks")]
+        ss_ota: bool,
     },
     /// Run in engine mode (default)
     Run {
@@ -108,6 +137,13 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             http_listen,
             http_username,
             http_password,
+            shadowsocks,
+            ss_listen,
+            ss_server,
+            ss_port,
+            ss_method,
+            ss_password,
+            ss_ota,
         }) => {
             tracing::info!("Starting dae-rs proxy mode...");
 
@@ -148,6 +184,40 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                 tracing::info!("HTTP proxy authentication enabled");
             }
 
+            // Shadowsocks configuration
+            if shadowsocks {
+                let server_addr = ss_server.unwrap_or_else(|| {
+                    tracing::warn!("--ss-server not specified, using default 127.0.0.1");
+                    "127.0.0.1".to_string()
+                });
+                let password = ss_password.unwrap_or_else(|| {
+                    tracing::warn!("--ss-password not specified, using empty password");
+                    String::new()
+                });
+                let method = SsCipherType::from_str(&ss_method).unwrap_or_else(|| {
+                    tracing::warn!("Invalid Shadowsocks method: {}, using chacha20-ietf-poly1305", ss_method);
+                    SsCipherType::Chacha20IetfPoly1305
+                });
+                let ss_listen_addr: std::net::SocketAddr = ss_listen.parse().unwrap_or_else(|_| {
+                    tracing::warn!("Invalid Shadowsocks listen address: {}, using 127.0.0.1:1080", ss_listen);
+                    std::net::SocketAddr::from(([127, 0, 0, 1], 1080))
+                });
+
+                config.ss_listen = Some(ss_listen_addr);
+                config.ss_server = Some(SsServerConfig {
+                    addr: server_addr.clone(),
+                    port: ss_port,
+                    method,
+                    password,
+                    ota: ss_ota,
+                });
+                tracing::info!("Shadowsocks enabled: listen={}, server={}:{}, method={}, ota={}",
+                    ss_listen_addr, server_addr, ss_port, method, ss_ota);
+            } else {
+                config.ss_listen = None;
+                config.ss_server = None;
+            }
+
             // Log config before moving
             tracing::info!("Proxy configuration:");
             tracing::info!("  TCP listen: {}", config.tcp.listen_addr);
@@ -163,6 +233,11 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                 tracing::info!("  HTTP proxy listen: {}", http);
             } else {
                 tracing::info!("  HTTP proxy listen: disabled");
+            }
+            if let Some(ref ss) = config.ss_listen {
+                tracing::info!("  Shadowsocks listen: {}", ss);
+            } else {
+                tracing::info!("  Shadowsocks: disabled");
             }
             tracing::info!("  eBPF enabled: {}", ebpf_enabled);
 

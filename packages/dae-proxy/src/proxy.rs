@@ -6,6 +6,7 @@
 use crate::connection_pool::{new_connection_pool, SharedConnectionPool};
 use crate::ebpf_integration::{EbpfMaps, EbpfRoutingHandle, EbpfSessionHandle, EbpfStatsHandle};
 use crate::protocol_dispatcher::{CombinedProxyServer, ProtocolDispatcherConfig};
+use crate::shadowsocks::{ShadowsocksHandler, ShadowsocksServer};
 use crate::tcp::{TcpProxy, TcpProxyConfig};
 use crate::udp::{UdpProxy, UdpProxyConfig};
 use std::net::SocketAddr;
@@ -30,6 +31,8 @@ pub enum ProxyError {
     ConfigError(String),
     #[error("Shutdown error: {0}")]
     ShutdownError(String),
+    #[error("Shadowsocks error: {0}")]
+    ShadowsocksError(String),
 }
 
 impl From<std::io::Error> for ProxyError {
@@ -59,6 +62,10 @@ pub struct ProxyConfig {
     pub http_listen: Option<SocketAddr>,
     /// HTTP proxy authentication (username, password) - None to disable auth
     pub http_auth: Option<(String, String)>,
+    /// Shadowsocks listen address (None to disable)
+    pub ss_listen: Option<SocketAddr>,
+    /// Shadowsocks server configuration (None to disable)
+    pub ss_server: Option<super::shadowsocks::SsServerConfig>,
 }
 
 impl Default for ProxyConfig {
@@ -73,6 +80,8 @@ impl Default for ProxyConfig {
             socks5_listen: Some(SocketAddr::from(([127, 0, 0, 1], 1080))),
             http_listen: Some(SocketAddr::from(([127, 0, 0, 1], 8080))),
             http_auth: None,
+            ss_listen: None,
+            ss_server: None,
         }
     }
 }
@@ -134,6 +143,7 @@ pub struct Proxy {
     shutdown_tx: broadcast::Sender<()>,
     running: RwLock<bool>,
     combined_server: Option<Arc<CombinedProxyServer>>,
+    shadowsocks_server: Option<Arc<ShadowsocksServer>>,
 }
 
 impl Proxy {
@@ -172,6 +182,9 @@ impl Proxy {
         // Create combined proxy server if any protocol is enabled
         let combined_server = Self::create_combined_server(&config).await?;
 
+        // Create Shadowsocks server if configured
+        let shadowsocks_server = Self::create_shadowsocks_server(&config).await?;
+
         Ok(Self {
             config,
             tcp_proxy,
@@ -183,6 +196,7 @@ impl Proxy {
             shutdown_tx,
             running: RwLock::new(false),
             combined_server,
+            shadowsocks_server,
         })
     }
 
@@ -199,6 +213,26 @@ impl Proxy {
         }
 
         let server = CombinedProxyServer::new(dispatcher_config).await?;
+        Ok(Some(Arc::new(server)))
+    }
+
+    /// Create Shadowsocks server if configured
+    async fn create_shadowsocks_server(config: &ProxyConfig) -> std::io::Result<Option<Arc<ShadowsocksServer>>> {
+        if config.ss_listen.is_none() || config.ss_server.is_none() {
+            return Ok(None);
+        }
+
+        let ss_config = config.ss_server.as_ref().unwrap();
+        let ss_listen = config.ss_listen.unwrap();
+
+        let ss_client_config = super::shadowsocks::SsClientConfig {
+            listen_addr: ss_listen,
+            server: ss_config.clone(),
+            tcp_timeout: config.pool.tcp_timeout,
+            udp_timeout: config.pool.udp_timeout,
+        };
+
+        let server = ShadowsocksServer::with_config(ss_client_config).await?;
         Ok(Some(Arc::new(server)))
     }
 
@@ -255,6 +289,22 @@ impl Proxy {
                 let _ = srv.start().await;
             });
             handles.push(combined_handle);
+        }
+
+        // Start Shadowsocks server if configured
+        if let Some(ref ss_server) = self.shadowsocks_server {
+            if let Some(ss_listen) = self.config.ss_listen {
+                info!("Starting Shadowsocks server on {}", ss_listen);
+                if let Some(ref ss_config) = self.config.ss_server {
+                    info!("  -> {}:{} (method: {}, ota: {})",
+                        ss_config.addr, ss_config.port, ss_config.method, ss_config.ota);
+                }
+            }
+            let srv = ss_server.clone();
+            let ss_handle = tokio::spawn(async move {
+                let _ = srv.start().await;
+            });
+            handles.push(ss_handle);
         }
 
         info!("Proxy services started");
@@ -348,6 +398,8 @@ mod tests {
         let config = ProxyConfig::default();
         assert_eq!(config.tcp.listen_addr.port(), 1080);
         assert_eq!(config.udp.listen_addr.port(), 1080);
+        assert!(config.ss_listen.is_none());
+        assert!(config.ss_server.is_none());
     }
 
     #[tokio::test]

@@ -25,6 +25,10 @@ pub use crate::proxy::{Proxy, ProxyConfig, ProxyError};
 pub use crate::socks5::{Socks5Handler, Socks5Server};
 pub use crate::http_proxy::{HttpProxyHandler, HttpProxyServer};
 pub use crate::protocol_dispatcher::{ProtocolDispatcher, ProtocolDispatcherConfig};
+pub use crate::shadowsocks::{
+    ShadowsocksHandler, ShadowsocksServer,
+    SsCipherType, SsClientConfig, SsServerConfig,
+};
 
 pub mod connection;
 pub mod connection_pool;
@@ -35,6 +39,7 @@ pub mod udp;
 pub mod socks5;
 pub mod http_proxy;
 pub mod protocol_dispatcher;
+pub mod shadowsocks;
 
 /// Proxy protocol implementations (Phase 4 placeholder)
 ///
