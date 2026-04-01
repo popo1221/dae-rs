@@ -78,6 +78,13 @@ pub mod core;
 pub mod node;
 pub mod protocol;
 pub mod protocol_legacy;
+pub mod process;
+
+// Process rule engine exports
+pub use crate::process::{
+    ProcessMatchRule, ProcessRuleSet, ProcessInfo, ProcessResolver,
+    match_process_name, ProcessRuleSetBuilder, TASK_COMM_LEN,
+};
 
 // Re-export transport types
 pub use transport::{
