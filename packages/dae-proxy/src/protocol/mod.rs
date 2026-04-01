@@ -1,0 +1,134 @@
+//!
+//! Protocol abstraction layer for dae-proxy
+//!
+//! This module provides a unified interface for handling various proxy protocols.
+//! Each protocol implementation (SOCKS5, HTTP, Shadowsocks, VLESS, VMess, Trojan, etc.)
+//! must implement the [`ProtocolHandler`] trait.
+
+use async_trait::async_trait;
+use crate::core::{Context, Result as ProxyResult};
+
+/// Protocol handler trait - all protocol implementations must implement this trait
+///
+/// This trait defines the interface for handling inbound and outbound connections
+/// for a specific proxy protocol.
+#[async_trait]
+pub trait ProtocolHandler: Send + Sync {
+    /// Returns the protocol name
+    fn name(&self) -> &'static str;
+
+    /// Handle inbound connection (client -> proxy)
+    async fn handle_inbound(
+        &self,
+        ctx: &mut Context,
+    ) -> ProxyResult<()>;
+
+    /// Handle outbound connection (proxy -> remote)
+    async fn handle_outbound(
+        &self,
+        ctx: &mut Context,
+    ) -> ProxyResult<()>;
+}
+
+/// Protocol types supported by the proxy
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub enum ProtocolType {
+    /// SOCKS5 protocol (RFC 1928)
+    Socks5,
+    /// HTTP proxy protocol (CONNECT tunnel)
+    Http,
+    /// Shadowsocks protocol
+    Shadowsocks,
+    /// VLESS protocol (XTLS)
+    Vless,
+    /// VMess protocol
+    Vmess,
+    /// Trojan protocol
+    Trojan,
+    /// TUIC protocol
+    Tuic,
+    /// Juicity protocol
+    Juicity,
+    /// Hysteria2 protocol
+    Hysteria2,
+}
+
+impl ProtocolType {
+    /// Returns the protocol name as a string
+    pub fn as_str(&self) -> &'static str {
+        match self {
+            ProtocolType::Socks5 => "socks5",
+            ProtocolType::Http => "http",
+            ProtocolType::Shadowsocks => "shadowsocks",
+            ProtocolType::Vless => "vless",
+            ProtocolType::Vmess => "vmess",
+            ProtocolType::Trojan => "trojan",
+            ProtocolType::Tuic => "tuic",
+            ProtocolType::Juicity => "juicity",
+            ProtocolType::Hysteria2 => "hysteria2",
+        }
+    }
+
+    /// Get protocol type from string name
+    pub fn from_str(s: &str) -> Option<Self> {
+        match s.to_lowercase().as_str() {
+            "socks5" | "socks" => Some(ProtocolType::Socks5),
+            "http" | "https" => Some(ProtocolType::Http),
+            "shadowsocks" | "ss" => Some(ProtocolType::Shadowsocks),
+            "vless" => Some(ProtocolType::Vless),
+            "vmess" => Some(ProtocolType::Vmess),
+            "trojan" => Some(ProtocolType::Trojan),
+            "tuic" => Some(ProtocolType::Tuic),
+            "juicity" => Some(ProtocolType::Juicity),
+            "hysteria2" | "h2" => Some(ProtocolType::Hysteria2),
+            _ => None,
+        }
+    }
+}
+
+impl std::fmt::Display for ProtocolType {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}", self.as_str())
+    }
+}
+
+// Re-export handler module and its types
+pub mod handler;
+pub use handler::ProtocolRegistry;
+
+// Protocol submodules for future expansion
+pub mod socks5;
+pub mod http;
+pub mod shadowsocks;
+pub mod vless;
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_protocol_type_as_str() {
+        assert_eq!(ProtocolType::Socks5.as_str(), "socks5");
+        assert_eq!(ProtocolType::Http.as_str(), "http");
+        assert_eq!(ProtocolType::Shadowsocks.as_str(), "shadowsocks");
+        assert_eq!(ProtocolType::Vless.as_str(), "vless");
+        assert_eq!(ProtocolType::Vmess.as_str(), "vmess");
+        assert_eq!(ProtocolType::Trojan.as_str(), "trojan");
+    }
+
+    #[test]
+    fn test_protocol_type_from_str() {
+        assert_eq!(ProtocolType::from_str("socks5"), Some(ProtocolType::Socks5));
+        assert_eq!(ProtocolType::from_str("SOCKS5"), Some(ProtocolType::Socks5));
+        assert_eq!(ProtocolType::from_str("http"), Some(ProtocolType::Http));
+        assert_eq!(ProtocolType::from_str("ss"), Some(ProtocolType::Shadowsocks));
+        assert_eq!(ProtocolType::from_str("vless"), Some(ProtocolType::Vless));
+        assert_eq!(ProtocolType::from_str("unknown"), None);
+    }
+
+    #[test]
+    fn test_protocol_type_display() {
+        assert_eq!(format!("{}", ProtocolType::Socks5), "socks5");
+        assert_eq!(format!("{}", ProtocolType::Vmess), "vmess");
+    }
+}
