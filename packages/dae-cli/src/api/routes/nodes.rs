@@ -10,7 +10,7 @@ use axum::{
 use std::sync::Arc;
 use tokio::sync::RwLock;
 
-use crate::api::models::{NodeResponse, NodeStatus};
+use crate::api::models::NodeResponse;
 use crate::api::AppState;
 
 /// List all nodes

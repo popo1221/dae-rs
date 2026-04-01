@@ -43,7 +43,7 @@ pub async fn rules_summary(
 }
 
 #[derive(Debug, serde::Serialize)]
-struct RulesSummary {
+pub struct RulesSummary {
     total: usize,
     proxy_rules: usize,
     accept_rules: usize,

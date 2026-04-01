@@ -51,7 +51,7 @@ pub async fn update_config(
 }
 
 #[derive(Debug, serde::Deserialize)]
-struct ConfigUpdate {
+pub struct ConfigUpdate {
     socks5_listen: Option<String>,
     http_listen: Option<String>,
     ebpf_enabled: Option<bool>,

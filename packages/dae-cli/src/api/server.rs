@@ -102,7 +102,7 @@ impl Default for AppState {
 
 /// API server instance
 pub struct ApiServer {
-    app: Router<Arc<RwLock<AppState>>>,
+    app: Router,
     port: u16,
 }
 
@@ -206,6 +206,7 @@ impl IntoResponse for ApiError {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use axum::body::Body;
     use axum::http::Request;
     use tower::ServiceExt;
 
@@ -213,7 +214,7 @@ mod tests {
     async fn test_list_nodes() {
         let server = ApiServer::new(0).await;
         let response = server.app
-            .oneshot(Request::builder().uri("/api/nodes").body(()).unwrap())
+            .oneshot(Request::builder().uri("/api/nodes").body(Body::empty()).unwrap())
             .await
             .unwrap();
         
@@ -224,7 +225,7 @@ mod tests {
     async fn test_get_node_not_found() {
         let server = ApiServer::new(0).await;
         let response = server.app
-            .oneshot(Request::builder().uri("/api/nodes/nonexistent").body(()).unwrap())
+            .oneshot(Request::builder().uri("/api/nodes/nonexistent").body(Body::empty()).unwrap())
             .await
             .unwrap();
         
@@ -235,7 +236,7 @@ mod tests {
     async fn test_health() {
         let server = ApiServer::new(0).await;
         let response = server.app
-            .oneshot(Request::builder().uri("/api/health").body(()).unwrap())
+            .oneshot(Request::builder().uri("/api/health").body(Body::empty()).unwrap())
             .await
             .unwrap();
         
