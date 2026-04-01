@@ -29,6 +29,21 @@ pub use crate::shadowsocks::{
     ShadowsocksHandler, ShadowsocksServer,
     SsCipherType, SsClientConfig, SsServerConfig,
 };
+pub use crate::vless::{
+    VlessHandler, VlessServer,
+    VlessServerConfig, VlessClientConfig, VlessTlsConfig,
+    VlessCommand, VlessAddressType, VlessTargetAddress,
+};
+pub use crate::vmess::{
+    VmessHandler, VmessServer,
+    VmessServerConfig, VmessClientConfig,
+    VmessSecurity, VmessCommand, VmessAddressType, VmessTargetAddress,
+};
+pub use crate::trojan::{
+    TrojanHandler, TrojanServer,
+    TrojanServerConfig, TrojanClientConfig, TrojanTlsConfig,
+    TrojanCommand, TrojanAddressType, TrojanTargetAddress,
+};
 
 pub mod connection;
 pub mod connection_pool;
@@ -40,6 +55,9 @@ pub mod socks5;
 pub mod http_proxy;
 pub mod protocol_dispatcher;
 pub mod shadowsocks;
+pub mod vless;
+pub mod vmess;
+pub mod trojan;
 
 /// Proxy protocol implementations (Phase 4 placeholder)
 ///

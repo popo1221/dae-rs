@@ -7,6 +7,9 @@ use crate::connection_pool::{new_connection_pool, SharedConnectionPool};
 use crate::ebpf_integration::{EbpfMaps, EbpfRoutingHandle, EbpfSessionHandle, EbpfStatsHandle};
 use crate::protocol_dispatcher::{CombinedProxyServer, ProtocolDispatcherConfig};
 use crate::shadowsocks::{ShadowsocksHandler, ShadowsocksServer};
+use crate::vless::{VlessHandler, VlessServer, VlessServerConfig, VlessClientConfig};
+use crate::vmess::{VmessHandler, VmessServer, VmessServerConfig, VmessSecurity};
+use crate::trojan::{TrojanHandler, TrojanServer, TrojanServerConfig, TrojanClientConfig};
 use crate::tcp::{TcpProxy, TcpProxyConfig};
 use crate::udp::{UdpProxy, UdpProxyConfig};
 use std::net::SocketAddr;
@@ -66,6 +69,18 @@ pub struct ProxyConfig {
     pub ss_listen: Option<SocketAddr>,
     /// Shadowsocks server configuration (None to disable)
     pub ss_server: Option<super::shadowsocks::SsServerConfig>,
+    /// VLESS listen address (None to disable)
+    pub vless_listen: Option<SocketAddr>,
+    /// VLESS server configuration (None to disable)
+    pub vless_server: Option<VlessServerConfig>,
+    /// VMess listen address (None to disable)
+    pub vmess_listen: Option<SocketAddr>,
+    /// VMess server configuration (None to disable)
+    pub vmess_server: Option<VmessServerConfig>,
+    /// Trojan listen address (None to disable)
+    pub trojan_listen: Option<SocketAddr>,
+    /// Trojan server configuration (None to disable)
+    pub trojan_server: Option<TrojanServerConfig>,
 }
 
 impl Default for ProxyConfig {
@@ -82,6 +97,12 @@ impl Default for ProxyConfig {
             http_auth: None,
             ss_listen: None,
             ss_server: None,
+            vless_listen: None,
+            vless_server: None,
+            vmess_listen: None,
+            vmess_server: None,
+            trojan_listen: None,
+            trojan_server: None,
         }
     }
 }
@@ -144,6 +165,9 @@ pub struct Proxy {
     running: RwLock<bool>,
     combined_server: Option<Arc<CombinedProxyServer>>,
     shadowsocks_server: Option<Arc<ShadowsocksServer>>,
+    vless_server: Option<Arc<VlessServer>>,
+    vmess_server: Option<Arc<VmessServer>>,
+    trojan_server: Option<Arc<TrojanServer>>,
 }
 
 impl Proxy {
@@ -185,6 +209,15 @@ impl Proxy {
         // Create Shadowsocks server if configured
         let shadowsocks_server = Self::create_shadowsocks_server(&config).await?;
 
+        // Create VLESS server if configured
+        let vless_server = Self::create_vless_server(&config).await?;
+
+        // Create VMess server if configured
+        let vmess_server = Self::create_vmess_server(&config).await?;
+
+        // Create Trojan server if configured
+        let trojan_server = Self::create_trojan_server(&config).await?;
+
         Ok(Self {
             config,
             tcp_proxy,
@@ -197,6 +230,9 @@ impl Proxy {
             running: RwLock::new(false),
             combined_server,
             shadowsocks_server,
+            vless_server,
+            vmess_server,
+            trojan_server,
         })
     }
 
@@ -233,6 +269,66 @@ impl Proxy {
         };
 
         let server = ShadowsocksServer::with_config(ss_client_config).await?;
+        Ok(Some(Arc::new(server)))
+    }
+
+    /// Create VLESS server if configured
+    async fn create_vless_server(config: &ProxyConfig) -> std::io::Result<Option<Arc<VlessServer>>> {
+        if config.vless_listen.is_none() || config.vless_server.is_none() {
+            return Ok(None);
+        }
+
+        let vless_config = config.vless_server.as_ref().unwrap();
+        let vless_listen = config.vless_listen.unwrap();
+
+        let vless_client_config = VlessClientConfig {
+            listen_addr: vless_listen,
+            server: vless_config.clone(),
+            tcp_timeout: config.pool.tcp_timeout,
+            udp_timeout: config.pool.udp_timeout,
+        };
+
+        let server = VlessServer::with_config(vless_client_config).await?;
+        Ok(Some(Arc::new(server)))
+    }
+
+    /// Create VMess server if configured
+    async fn create_vmess_server(config: &ProxyConfig) -> std::io::Result<Option<Arc<VmessServer>>> {
+        if config.vmess_listen.is_none() || config.vmess_server.is_none() {
+            return Ok(None);
+        }
+
+        let vmess_config = config.vmess_server.as_ref().unwrap();
+        let vmess_listen = config.vmess_listen.unwrap();
+
+        let vmess_client_config = crate::vmess::VmessClientConfig {
+            listen_addr: vmess_listen,
+            server: vmess_config.clone(),
+            tcp_timeout: config.pool.tcp_timeout,
+            udp_timeout: config.pool.udp_timeout,
+        };
+
+        let server = VmessServer::with_config(vmess_client_config).await?;
+        Ok(Some(Arc::new(server)))
+    }
+
+    /// Create Trojan server if configured
+    async fn create_trojan_server(config: &ProxyConfig) -> std::io::Result<Option<Arc<TrojanServer>>> {
+        if config.trojan_listen.is_none() || config.trojan_server.is_none() {
+            return Ok(None);
+        }
+
+        let trojan_config = config.trojan_server.as_ref().unwrap();
+        let trojan_listen = config.trojan_listen.unwrap();
+
+        let trojan_client_config = TrojanClientConfig {
+            listen_addr: trojan_listen,
+            server: trojan_config.clone(),
+            tcp_timeout: config.pool.tcp_timeout,
+            udp_timeout: config.pool.udp_timeout,
+        };
+
+        let server = TrojanServer::with_config(trojan_client_config).await?;
         Ok(Some(Arc::new(server)))
     }
 
@@ -305,6 +401,54 @@ impl Proxy {
                 let _ = srv.start().await;
             });
             handles.push(ss_handle);
+        }
+
+        // Start VLESS server if configured
+        if let Some(ref vless_server) = self.vless_server {
+            if let Some(vless_listen) = self.config.vless_listen {
+                info!("Starting VLESS server on {}", vless_listen);
+                if let Some(ref vless_config) = self.config.vless_server {
+                    info!("  -> {}:{} (uuid: {})",
+                        vless_config.addr, vless_config.port, vless_config.uuid);
+                }
+            }
+            let srv = vless_server.clone();
+            let vless_handle = tokio::spawn(async move {
+                let _ = srv.start().await;
+            });
+            handles.push(vless_handle);
+        }
+
+        // Start VMess server if configured
+        if let Some(ref vmess_server) = self.vmess_server {
+            if let Some(vmess_listen) = self.config.vmess_listen {
+                info!("Starting VMess server on {}", vmess_listen);
+                if let Some(ref vmess_config) = self.config.vmess_server {
+                    info!("  -> {}:{} (user_id: {}, security: {})",
+                        vmess_config.addr, vmess_config.port, vmess_config.user_id, vmess_config.security);
+                }
+            }
+            let srv = vmess_server.clone();
+            let vmess_handle = tokio::spawn(async move {
+                let _ = srv.start().await;
+            });
+            handles.push(vmess_handle);
+        }
+
+        // Start Trojan server if configured
+        if let Some(ref trojan_server) = self.trojan_server {
+            if let Some(trojan_listen) = self.config.trojan_listen {
+                info!("Starting Trojan server on {}", trojan_listen);
+                if let Some(ref trojan_config) = self.config.trojan_server {
+                    info!("  -> {}:{} (password: [hidden])",
+                        trojan_config.addr, trojan_config.port);
+                }
+            }
+            let srv = trojan_server.clone();
+            let trojan_handle = tokio::spawn(async move {
+                let _ = srv.start().await;
+            });
+            handles.push(trojan_handle);
         }
 
         info!("Proxy services started");

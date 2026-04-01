@@ -3,6 +3,9 @@
 use clap::{Parser, Subcommand};
 use dae_proxy::{Proxy, ProxyConfig};
 use dae_proxy::shadowsocks::{SsCipherType, SsServerConfig};
+use dae_proxy::vless::{VlessServerConfig, VlessTlsConfig};
+use dae_proxy::vmess::{VmessServerConfig, VmessSecurity};
+use dae_proxy::trojan::{TrojanServerConfig, TrojanTlsConfig};
 use dae_core::Engine;
 use std::path::PathBuf;
 use std::time::Duration;
@@ -99,6 +102,70 @@ enum Commands {
         /// Enable Shadowsocks OTA (One-Time Auth)
         #[arg(long, requires = "shadowsocks")]
         ss_ota: bool,
+
+        /// Enable VLESS proxy mode
+        #[arg(long)]
+        vless: bool,
+
+        /// VLESS listen address (e.g., 127.0.0.1:1080)
+        #[arg(long, default_value = "127.0.0.1:1080", requires = "vless")]
+        vless_listen: String,
+
+        /// VLESS server address (IP or domain)
+        #[arg(long, requires = "vless")]
+        vless_server: Option<String>,
+
+        /// VLESS server port
+        #[arg(long, default_value = "443", requires = "vless")]
+        vless_port: u16,
+
+        /// VLESS UUID
+        #[arg(long, requires = "vless")]
+        vless_uuid: Option<String>,
+
+        /// Enable VMess proxy mode
+        #[arg(long)]
+        vmess: bool,
+
+        /// VMess listen address (e.g., 127.0.0.1:1080)
+        #[arg(long, default_value = "127.0.0.1:1080", requires = "vmess")]
+        vmess_listen: String,
+
+        /// VMess server address (IP or domain)
+        #[arg(long, requires = "vmess")]
+        vmess_server: Option<String>,
+
+        /// VMess server port
+        #[arg(long, default_value = "10086", requires = "vmess")]
+        vmess_port: u16,
+
+        /// VMess security type (aes-128-gcm-aead, chacha20-poly1305-aead)
+        #[arg(long, default_value = "aes-128-gcm-aead", requires = "vmess")]
+        vmess_security: String,
+
+        /// VMess User ID (UUID)
+        #[arg(long, requires = "vmess")]
+        vmess_user_id: Option<String>,
+
+        /// Enable Trojan proxy mode
+        #[arg(long)]
+        trojan: bool,
+
+        /// Trojan listen address (e.g., 127.0.0.1:1080)
+        #[arg(long, default_value = "127.0.0.1:1080", requires = "trojan")]
+        trojan_listen: String,
+
+        /// Trojan server address (IP or domain)
+        #[arg(long, requires = "trojan")]
+        trojan_server: Option<String>,
+
+        /// Trojan server port
+        #[arg(long, default_value = "443", requires = "trojan")]
+        trojan_port: u16,
+
+        /// Trojan password
+        #[arg(long, requires = "trojan")]
+        trojan_password: Option<String>,
     },
     /// Run in engine mode (default)
     Run {
@@ -144,6 +211,22 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             ss_method,
             ss_password,
             ss_ota,
+            vless,
+            vless_listen,
+            vless_server,
+            vless_port,
+            vless_uuid,
+            vmess,
+            vmess_listen,
+            vmess_server,
+            vmess_port,
+            vmess_security,
+            vmess_user_id,
+            trojan,
+            trojan_listen,
+            trojan_server,
+            trojan_port,
+            trojan_password,
         }) => {
             tracing::info!("Starting dae-rs proxy mode...");
 
@@ -216,6 +299,114 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             } else {
                 config.ss_listen = None;
                 config.ss_server = None;
+            }
+
+            // VLESS configuration
+            if vless {
+                let server_addr = vless_server.unwrap_or_else(|| {
+                    tracing::warn!("--vless-server not specified, using default 127.0.0.1");
+                    "127.0.0.1".to_string()
+                });
+                let uuid = vless_uuid.unwrap_or_else(|| {
+                    tracing::warn!("--vless-uuid not specified, using empty UUID");
+                    String::new()
+                });
+                let vless_listen_addr: std::net::SocketAddr = vless_listen.parse().unwrap_or_else(|_| {
+                    tracing::warn!("Invalid VLESS listen address: {}, using 127.0.0.1:1080", vless_listen);
+                    std::net::SocketAddr::from(([127, 0, 0, 1], 1080))
+                });
+
+                config.vless_listen = Some(vless_listen_addr);
+                config.vless_server = Some(VlessServerConfig {
+                    addr: server_addr.clone(),
+                    port: vless_port,
+                    uuid,
+                    tls: VlessTlsConfig {
+                        enabled: true,
+                        version: "1.3".to_string(),
+                        alpn: vec!["h2".to_string(), "http/1.1".to_string()],
+                        server_name: None,
+                        cert_file: None,
+                        key_file: None,
+                        insecure: false,
+                    },
+                });
+                tracing::info!("VLESS enabled: listen={}, server={}:{}",
+                    vless_listen_addr, server_addr, vless_port);
+            } else {
+                config.vless_listen = None;
+                config.vless_server = None;
+            }
+
+            // VMess configuration
+            if vmess {
+                let server_addr = vmess_server.unwrap_or_else(|| {
+                    tracing::warn!("--vmess-server not specified, using default 127.0.0.1");
+                    "127.0.0.1".to_string()
+                });
+                let user_id = vmess_user_id.unwrap_or_else(|| {
+                    tracing::warn!("--vmess-user-id not specified, using empty User ID");
+                    String::new()
+                });
+                let vmess_listen_addr: std::net::SocketAddr = vmess_listen.parse().unwrap_or_else(|_| {
+                    tracing::warn!("Invalid VMess listen address: {}, using 127.0.0.1:1080", vmess_listen);
+                    std::net::SocketAddr::from(([127, 0, 0, 1], 1080))
+                });
+                let security = VmessSecurity::from_str(&vmess_security).unwrap_or_else(|| {
+                    tracing::warn!("Invalid VMess security: {}, using aes-128-gcm-aead", vmess_security);
+                    VmessSecurity::Aes128GcmAead
+                });
+
+                config.vmess_listen = Some(vmess_listen_addr);
+                config.vmess_server = Some(VmessServerConfig {
+                    addr: server_addr.clone(),
+                    port: vmess_port,
+                    user_id,
+                    security,
+                    enable_aead: true,
+                });
+                tracing::info!("VMess enabled: listen={}, server={}:{}, security={}",
+                    vmess_listen_addr, server_addr, vmess_port, security);
+            } else {
+                config.vmess_listen = None;
+                config.vmess_server = None;
+            }
+
+            // Trojan configuration
+            if trojan {
+                let server_addr = trojan_server.unwrap_or_else(|| {
+                    tracing::warn!("--trojan-server not specified, using default 127.0.0.1");
+                    "127.0.0.1".to_string()
+                });
+                let password = trojan_password.unwrap_or_else(|| {
+                    tracing::warn!("--trojan-password not specified, using empty password");
+                    String::new()
+                });
+                let trojan_listen_addr: std::net::SocketAddr = trojan_listen.parse().unwrap_or_else(|_| {
+                    tracing::warn!("Invalid Trojan listen address: {}, using 127.0.0.1:1080", trojan_listen);
+                    std::net::SocketAddr::from(([127, 0, 0, 1], 1080))
+                });
+
+                config.trojan_listen = Some(trojan_listen_addr);
+                config.trojan_server = Some(TrojanServerConfig {
+                    addr: server_addr.clone(),
+                    port: trojan_port,
+                    password,
+                    tls: TrojanTlsConfig {
+                        enabled: true,
+                        version: "1.3".to_string(),
+                        alpn: vec!["h2".to_string(), "http/1.1".to_string()],
+                        server_name: None,
+                        cert_file: None,
+                        key_file: None,
+                        insecure: false,
+                    },
+                });
+                tracing::info!("Trojan enabled: listen={}, server={}:{}",
+                    trojan_listen_addr, server_addr, trojan_port);
+            } else {
+                config.trojan_listen = None;
+                config.trojan_server = None;
             }
 
             // Log config before moving
