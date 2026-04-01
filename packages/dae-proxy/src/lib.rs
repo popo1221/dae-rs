@@ -79,6 +79,7 @@ pub mod mac;
 pub mod node;
 pub mod protocol;
 pub mod protocol_legacy;
+pub mod dns;
 pub mod process;
 
 // Process rule engine exports
@@ -90,6 +91,11 @@ pub use crate::process::{
 // MAC address rule engine exports
 pub use crate::mac::{
     MacRule, MacRuleSet, MacAddr, OuiDatabase,
+};
+
+// DNS module exports
+pub use crate::dns::{
+    MacDnsResolver, MacDnsConfig, MacDnsRule, DnsCacheEntry, DnsResolution, DnsError,
 };
 
 // Re-export transport types
