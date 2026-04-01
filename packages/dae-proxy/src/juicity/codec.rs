@@ -8,8 +8,7 @@
 //! [1 byte command][4 bytes connection_id][4 bytes session_id]
 //! [4 bytes sequence][2 bytes port][1 byte address_type][address][payload...]
 
-use std::net::{IpAddr, Ipv4Addr, Ipv6Addr, SocketAddr};
-use bytes::{Buf, BufMut, BytesMut};
+use std::net::{IpAddr, Ipv4Addr, Ipv6Addr};
 
 /// Juicity protocol commands
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -256,25 +255,35 @@ impl JuicityAddress {
     }
 }
 
+impl std::fmt::Display for JuicityAddress {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            JuicityAddress::Ipv4(ip, port) => write!(f, "{}:{}", ip, port),
+            JuicityAddress::Domain(domain, port) => write!(f, "{}:{}", domain, port),
+            JuicityAddress::Ipv6(ip, port) => write!(f, "[{}]:{}", ip, port),
+        }
+    }
+}
+
 /// Juicity codec for encoding/decoding frames
 pub struct JuicityCodec;
 
 impl JuicityCodec {
     /// Encode a frame to bytes
     pub fn encode(frame: &JuicityFrame) -> Vec<u8> {
-        let mut buf = BytesMut::with_capacity(1024);
+        let mut buf = Vec::with_capacity(1024);
 
         // Command (1 byte)
-        buf.put_u8(frame.command.to_byte());
+        buf.push(frame.command.to_byte());
 
-        // Connection ID (4 bytes)
-        buf.put_u32_le(frame.connection_id);
+        // Connection ID (4 bytes, little-endian)
+        buf.extend_from_slice(&frame.connection_id.to_le_bytes());
 
-        // Session ID (4 bytes)
-        buf.put_u32_le(frame.session_id);
+        // Session ID (4 bytes, little-endian)
+        buf.extend_from_slice(&frame.session_id.to_le_bytes());
 
-        // Sequence (4 bytes)
-        buf.put_u32_le(frame.sequence);
+        // Sequence (4 bytes, little-endian)
+        buf.extend_from_slice(&frame.sequence.to_le_bytes());
 
         // Address (if present)
         if let Some(ref addr) = frame.address {
@@ -286,13 +295,14 @@ impl JuicityCodec {
             buf.extend_from_slice(&frame.payload);
         }
 
-        buf.to_vec()
+        buf
     }
 
     /// Decode a frame from bytes
     pub fn decode(buf: &[u8]) -> Option<JuicityFrame> {
-        if buf.len() < 14 {
-            // Minimum: 1 cmd + 4 conn_id + 4 sess_id + 4 seq + 1 atyp
+        if buf.len() < 13 {
+            // Minimum: 1 cmd + 4 conn_id + 4 sess_id + 4 seq = 13 bytes
+            // For Open with address, we need at least 14 bytes (add 1 for address type)
             return None;
         }
 
@@ -316,7 +326,8 @@ impl JuicityCodec {
 
         // Address (if present, for Open command)
         let address = if command == JuicityCommand::Open && pos < buf.len() {
-            let (addr, addr_len) = JuicityAddress::parse_from_bytes(&buf[pos:])?;
+            let slice = &buf[pos..];
+            let (addr, addr_len) = JuicityAddress::parse_from_bytes(slice)?;
             pos += addr_len;
             Some(addr)
         } else {
@@ -342,18 +353,18 @@ impl JuicityCodec {
 
     /// Encode frame header only (for Open command with large payload)
     pub fn encode_header(frame: &JuicityFrame) -> Vec<u8> {
-        let mut buf = BytesMut::with_capacity(14);
+        let mut buf = Vec::with_capacity(14);
 
-        buf.put_u8(frame.command.to_byte());
-        buf.put_u32_le(frame.connection_id);
-        buf.put_u32_le(frame.session_id);
-        buf.put_u32_le(frame.sequence);
+        buf.push(frame.command.to_byte());
+        buf.extend_from_slice(&frame.connection_id.to_le_bytes());
+        buf.extend_from_slice(&frame.session_id.to_le_bytes());
+        buf.extend_from_slice(&frame.sequence.to_le_bytes());
 
         if let Some(ref addr) = frame.address {
             buf.extend_from_slice(&addr.to_bytes());
         }
 
-        buf.to_vec()
+        buf
     }
 }
 
@@ -400,7 +411,7 @@ mod tests {
         let bytes = [
             0x02,       // ATYP_DOMAIN
             0x0b,       // domain length = 11
-            b'e', b'x', b'a', b'm', b'p', b'l', b'e', b'.', b'c', b'o', b'm',  // "example.com"
+            b'e', b'x', b'a', b'm', b'p', b'l', b'e', b'.', b'c', b'o', b'm',  // "example.com" (11 chars)
             0x00, 0x50  // port = 80
         ];
         let (addr, len) = JuicityAddress::parse_from_bytes(&bytes).unwrap();
@@ -442,10 +453,11 @@ mod tests {
     fn test_address_to_bytes_domain() {
         let addr = JuicityAddress::Domain("example.com".to_string(), 80);
         let bytes = addr.to_bytes();
+        // 1 byte type + 1 byte length + 11 bytes domain + 2 bytes port = 15 bytes
         assert_eq!(bytes, vec![
             0x02,       // ATYP_DOMAIN
-            0x0b,       // length
-            b'e', b'x', b'a', b'm', b'p', b'l', b'.', b'c', b'o', b'm',
+            0x0b,       // length (11 chars for "example.com")
+            b'e', b'x', b'a', b'm', b'p', b'l', b'e', b'.', b'c', b'o', b'm',  // "example.com"
             0x00, 0x50  // port = 80
         ]);
     }

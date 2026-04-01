@@ -11,5 +11,5 @@
 pub mod codec;
 pub mod juicity;
 
-pub use juicity::{JuicityConfig, JuicityHandler, JuicityServer, JuicityClient, JuicityError};
-pub use codec::{JuicityCodec, JuicityFrame, JuicityCommand};
+pub use juicity::{JuicityConfig, JuicityHandler, JuicityServer, JuicityClient, JuicityError, CongestionControl, JuicityConnection};
+pub use codec::{JuicityCodec, JuicityFrame, JuicityCommand, JuicityAddress};

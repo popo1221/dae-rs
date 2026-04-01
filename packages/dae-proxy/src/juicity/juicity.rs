@@ -47,6 +47,12 @@ pub enum JuicityError {
     Protocol(String),
 }
 
+impl From<tokio::time::error::Elapsed> for JuicityError {
+    fn from(_: tokio::time::error::Elapsed) -> Self {
+        JuicityError::Timeout
+    }
+}
+
 /// Juicity configuration
 #[derive(Debug, Clone)]
 pub struct JuicityConfig {
