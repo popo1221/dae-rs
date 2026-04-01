@@ -32,6 +32,12 @@ rand_core = "0.6"
 hmac = "0.12"
 sha2 = "0.10"
 
+# Metrics and observability
+prometheus = "0.13"
+axum = "0.7"
+tower-http = { version = "0.6", features = ["cors"] }
+lazy_static = "1.4"
+
 # Hysteria2 protocol support
 quinn = "0.10"
 

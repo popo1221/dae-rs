@@ -125,3 +125,24 @@ pub use config::{
     HotReload, HotReloadError, HotReloadable,
     ConfigEvent, WatchEvent, WatchEventKind,
 };
+
+// Metrics module with Prometheus export
+pub mod metrics;
+pub use metrics::{
+    MetricsServer,
+    // Counter functions
+    inc_connection, inc_bytes_sent, inc_bytes_received,
+    inc_rule_match, inc_dns_resolution, inc_error, inc_node_latency_test,
+    // Gauge functions
+    inc_active_connections, dec_active_connections,
+    inc_active_tcp_connections, dec_active_tcp_connections,
+    inc_active_udp_connections, dec_active_udp_connections,
+    set_connection_pool_size, set_node_count, set_node_latency,
+    set_memory_usage, set_ebpf_map_entries,
+    // Histogram functions
+    observe_connection_duration, observe_request_size,
+    observe_response_time, observe_dns_latency,
+    observe_ebpf_latency, observe_rule_match_latency, observe_node_latency,
+    // Server
+    start_metrics_server, stop_metrics_server,
+};
