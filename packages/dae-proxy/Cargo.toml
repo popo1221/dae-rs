@@ -26,6 +26,10 @@ tungstenite = "0.21"
 rand = "0.8"
 futures = "0.3"
 glob = "0.3"
+curve25519-dalek = { version = "4", features = ["rand_core"] }
+rand_core = "0.6"
+hmac = "0.12"
+sha2 = "0.10"
 
 [dev-dependencies]
 tokio-test = "0.4"
