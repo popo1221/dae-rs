@@ -75,6 +75,7 @@ pub mod rule_engine;
 pub mod control;
 pub mod transport;
 pub mod core;
+pub mod mac;
 pub mod node;
 pub mod protocol;
 pub mod protocol_legacy;
@@ -84,6 +85,11 @@ pub mod process;
 pub use crate::process::{
     ProcessMatchRule, ProcessRuleSet, ProcessInfo, ProcessResolver,
     match_process_name, ProcessRuleSetBuilder, TASK_COMM_LEN,
+};
+
+// MAC address rule engine exports
+pub use crate::mac::{
+    MacRule, MacRuleSet, MacAddr, OuiDatabase,
 };
 
 // Re-export transport types

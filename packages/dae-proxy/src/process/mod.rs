@@ -40,6 +40,7 @@ pub use rule::{ProcessMatchRule, ProcessRuleSet, ProcessRuleSetBuilder};
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::rule_engine::RuleAction;
 
     #[test]
     fn test_module_exports() {

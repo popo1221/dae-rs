@@ -5,6 +5,8 @@
 
 use crate::node::NodeId;
 use crate::rule_engine::RuleAction;
+use crate::process::ProcessInfo;
+use crate::mac::MacAddr;
 use std::net::SocketAddr;
 use std::sync::atomic::{AtomicU64, Ordering};
 
@@ -75,6 +77,26 @@ impl Context {
     /// Check if this context should be dropped
     pub fn should_drop(&self) -> bool {
         self.rule_action == RuleAction::Drop
+    }
+    
+    /// Get process information if available
+    /// 
+    /// Returns a ProcessInfo struct with PID, name, and optional path/cmdline
+    /// if process information was captured for this connection.
+    pub fn process_info(&self) -> Option<ProcessInfo> {
+        self.process_pid.map(|pid| {
+            let name = self.process_name.clone().unwrap_or_else(|| "unknown".to_string());
+            ProcessInfo::new(pid, name)
+        })
+    }
+    
+    /// Get MAC address if available
+    /// 
+    /// Returns the MAC address of the source device if captured.
+    pub fn mac_address(&self) -> Option<MacAddr> {
+        // Context doesn't currently store MAC address, this would be set by
+        // the connection handler when processing packets
+        None
     }
 }
 

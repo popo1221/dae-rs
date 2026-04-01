@@ -230,10 +230,11 @@ mod tests {
     fn test_process_rule_prefix_match() {
         let rule = ProcessMatchRule::new("chrome*", RuleAction::Proxy);
         
-        assert!(rule.matches("chrome"));
-        assert!(rule.matches("chromium"));
-        assert!(rule.matches("chrome-stable"));
-        assert!(!rule.matches("chromedriver"));
+        assert!(rule.matches("chrome"));       // exact match
+        assert!(rule.matches("chromedriver")); // starts with chrome
+        assert!(rule.matches("chrome-stable")); // starts with chrome
+        assert!(!rule.matches("chromium"));     // chromium != chrome* (has 'i' not 'e' after 'chrom')
+        assert!(!rule.matches("firefox"));
     }
 
     #[test]

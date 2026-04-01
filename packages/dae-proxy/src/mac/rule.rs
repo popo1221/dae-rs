@@ -26,17 +26,33 @@ impl MacAddr {
             if parts.len() != 6 {
                 return None;
             }
-            let bytes: Option<[u8; 6]> = parts
+            let bytes: Option<Vec<u8>> = parts
                 .iter()
                 .map(|p| u8::from_str_radix(p, 16).ok())
-                .collect::<Option<_>>();
-            return bytes.map(Self);
+                .collect();
+            return bytes.and_then(|b| {
+                if b.len() == 6 {
+                    let mut arr = [0u8; 6];
+                    arr.copy_from_slice(&b);
+                    Some(Self(arr))
+                } else {
+                    None
+                }
+            });
         }
-        let bytes: Option<[u8; 6]> = parts
+        let bytes: Option<Vec<u8>> = parts
             .iter()
             .map(|p| u8::from_str_radix(p, 16).ok())
-            .collect::<Option<_>>();
-        bytes.map(Self)
+            .collect();
+        bytes.and_then(|b| {
+            if b.len() == 6 {
+                let mut arr = [0u8; 6];
+                arr.copy_from_slice(&b);
+                Some(Self(arr))
+            } else {
+                None
+            }
+        })
     }
 
     /// Get the 6 bytes of this MAC address
@@ -126,7 +142,7 @@ impl MacRule {
         };
 
         let mac = MacAddr::parse(mac_str)?;
-        let mac_mask = mask_str.map(MacAddr::parse).transpose()?;
+        let mac_mask = mask_str.map(MacAddr::parse).flatten();
         Some(Self { mac, mac_mask, action })
     }
 }
@@ -174,7 +190,7 @@ impl MacRuleSet {
     /// Returns the action of the first matching rule, or default_action
     pub fn match_mac(&self, mac: &MacAddr) -> RuleAction {
         for rule in &self.rules {
-            if let Some(true) = self::matcher::match_mac_with_mask_opt(mac, &rule.mac, &rule.mac_mask) {
+            if let Some(true) = super::matcher::match_mac_with_mask_opt(mac, &rule.mac, &rule.mac_mask) {
                 return rule.action.clone();
             }
         }
