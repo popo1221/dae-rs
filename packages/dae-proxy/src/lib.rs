@@ -44,6 +44,13 @@ pub use crate::trojan::{
     TrojanServerConfig, TrojanClientConfig, TrojanTlsConfig,
     TrojanCommand, TrojanAddressType, TrojanTargetAddress,
 };
+pub use crate::juicity::{
+    JuicityHandler, JuicityServer, JuicityClient, JuicityConfig,
+    JuicityError, CongestionControl, JuicityConnection,
+};
+pub use crate::juicity::codec::{
+    JuicityCodec, JuicityFrame, JuicityCommand, JuicityAddress,
+};
 pub use crate::rules::{Rule, RuleGroup, RuleMatchAction, RuleType, DomainRule, IpCidrRule, GeoIpRule, ProcessRule, DnsTypeRule};
 pub use crate::rule_engine::{RuleEngine, RuleEngineConfig, RuleEngineStats, RuleAction, PacketInfo, SharedRuleEngine, new_rule_engine};
 pub use crate::core::{Error, Result, Context};
@@ -70,6 +77,7 @@ pub mod shadowsocks;
 pub mod vless;
 pub mod vmess;
 pub mod trojan;
+pub mod juicity;
 pub mod rules;
 pub mod rule_engine;
 pub mod control;
@@ -81,6 +89,7 @@ pub mod protocol;
 pub mod protocol_legacy;
 pub mod dns;
 pub mod process;
+pub mod hysteria2;
 
 // Process rule engine exports
 pub use crate::process::{
@@ -91,6 +100,11 @@ pub use crate::process::{
 // MAC address rule engine exports
 pub use crate::mac::{
     MacRule, MacRuleSet, MacAddr, OuiDatabase,
+};
+
+// Hysteria2 protocol exports
+pub use crate::hysteria2::{
+    Hysteria2Handler, Hysteria2Server, Hysteria2Config, Hysteria2Error,
 };
 
 // DNS module exports
