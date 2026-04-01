@@ -5,8 +5,10 @@
 
 use crate::connection_pool::{new_connection_pool, SharedConnectionPool};
 use crate::ebpf_integration::{EbpfMaps, EbpfRoutingHandle, EbpfSessionHandle, EbpfStatsHandle};
+use crate::protocol_dispatcher::{CombinedProxyServer, ProtocolDispatcherConfig};
 use crate::tcp::{TcpProxy, TcpProxyConfig};
 use crate::udp::{UdpProxy, UdpProxyConfig};
+use std::net::SocketAddr;
 use std::path::PathBuf;
 use std::sync::Arc;
 use std::time::Duration;
@@ -51,6 +53,12 @@ pub struct ProxyConfig {
     pub xdp_object: PathBuf,
     /// XDP interface
     pub xdp_interface: String,
+    /// SOCKS5 listen address (None to disable)
+    pub socks5_listen: Option<SocketAddr>,
+    /// HTTP proxy listen address (None to disable)
+    pub http_listen: Option<SocketAddr>,
+    /// HTTP proxy authentication (username, password) - None to disable auth
+    pub http_auth: Option<(String, String)>,
 }
 
 impl Default for ProxyConfig {
@@ -62,6 +70,9 @@ impl Default for ProxyConfig {
             pool: ConnectionPoolConfig::default(),
             xdp_object: PathBuf::from("bpf/dae-xdp.o"),
             xdp_interface: String::from("eth0"),
+            socks5_listen: Some(SocketAddr::from(([127, 0, 0, 1], 1080))),
+            http_listen: Some(SocketAddr::from(([127, 0, 0, 1], 8080))),
+            http_auth: None,
         }
     }
 }
@@ -122,6 +133,7 @@ pub struct Proxy {
     stats_handle: Arc<RwLock<EbpfStatsHandle>>,
     shutdown_tx: broadcast::Sender<()>,
     running: RwLock<bool>,
+    combined_server: Option<Arc<CombinedProxyServer>>,
 }
 
 impl Proxy {
@@ -157,6 +169,9 @@ impl Proxy {
         // Create shutdown channel
         let (shutdown_tx, _) = broadcast::channel(1);
 
+        // Create combined proxy server if any protocol is enabled
+        let combined_server = Self::create_combined_server(&config).await?;
+
         Ok(Self {
             config,
             tcp_proxy,
@@ -167,7 +182,24 @@ impl Proxy {
             stats_handle,
             shutdown_tx,
             running: RwLock::new(false),
+            combined_server,
         })
+    }
+
+    /// Create combined SOCKS5/HTTP proxy server
+    async fn create_combined_server(config: &ProxyConfig) -> std::io::Result<Option<Arc<CombinedProxyServer>>> {
+        let dispatcher_config = ProtocolDispatcherConfig {
+            socks5_addr: config.socks5_listen,
+            http_addr: config.http_listen,
+        };
+
+        // Check if any protocol is configured
+        if dispatcher_config.socks5_addr.is_none() && dispatcher_config.http_addr.is_none() {
+            return Ok(None);
+        }
+
+        let server = CombinedProxyServer::new(dispatcher_config).await?;
+        Ok(Some(Arc::new(server)))
     }
 
     /// Start the proxy
@@ -209,6 +241,22 @@ impl Proxy {
             }
         });
 
+        // Start combined SOCKS5/HTTP proxy server
+        let mut handles = vec![tcp_handle, udp_handle, pool_handle];
+        if let Some(ref server) = self.combined_server {
+            if let Some(socks5) = self.config.socks5_listen {
+                info!("Starting SOCKS5 server on {}", socks5);
+            }
+            if let Some(http) = self.config.http_listen {
+                info!("Starting HTTP proxy server on {}", http);
+            }
+            let srv = server.clone();
+            let combined_handle = tokio::spawn(async move {
+                let _ = srv.start().await;
+            });
+            handles.push(combined_handle);
+        }
+
         info!("Proxy services started");
 
         // Wait for shutdown signal
@@ -226,9 +274,9 @@ impl Proxy {
         self.connection_pool.close_all().await;
 
         // Abort running tasks
-        tcp_handle.abort();
-        udp_handle.abort();
-        pool_handle.abort();
+        for handle in handles {
+            handle.abort();
+        }
 
         info!("Proxy shutdown complete");
         Ok(())

@@ -22,6 +22,9 @@ pub use crate::ebpf_integration::{
     EbpfError, EbpfMaps, EbpfRoutingHandle, EbpfSessionHandle, EbpfStatsHandle, Result as EbpfResult,
 };
 pub use crate::proxy::{Proxy, ProxyConfig, ProxyError};
+pub use crate::socks5::{Socks5Handler, Socks5Server};
+pub use crate::http_proxy::{HttpProxyHandler, HttpProxyServer};
+pub use crate::protocol_dispatcher::{ProtocolDispatcher, ProtocolDispatcherConfig};
 
 pub mod connection;
 pub mod connection_pool;
@@ -29,6 +32,9 @@ pub mod ebpf_integration;
 pub mod proxy;
 pub mod tcp;
 pub mod udp;
+pub mod socks5;
+pub mod http_proxy;
+pub mod protocol_dispatcher;
 
 /// Proxy protocol implementations (Phase 4 placeholder)
 ///

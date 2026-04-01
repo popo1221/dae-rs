@@ -54,6 +54,22 @@ enum Commands {
         /// Disable eBPF integration
         #[arg(long)]
         no_ebpf: bool,
+
+        /// SOCKS5 listen address (e.g., 127.0.0.1:1080) - omit to disable SOCKS5
+        #[arg(long)]
+        socks5_listen: Option<String>,
+
+        /// HTTP proxy listen address (e.g., 127.0.0.1:8080) - omit to disable HTTP proxy
+        #[arg(long)]
+        http_listen: Option<String>,
+
+        /// HTTP proxy authentication username (requires --http-password)
+        #[arg(long, requires = "http_password")]
+        http_username: Option<String>,
+
+        /// HTTP proxy authentication password (requires --http-username)
+        #[arg(long, requires = "http_username")]
+        http_password: Option<String>,
     },
     /// Run in engine mode (default)
     Run {
@@ -88,6 +104,10 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             connection_timeout,
             udp_timeout,
             no_ebpf,
+            socks5_listen,
+            http_listen,
+            http_username,
+            http_password,
         }) => {
             tracing::info!("Starting dae-rs proxy mode...");
 
@@ -110,12 +130,40 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             let ebpf_enabled = !no_ebpf;
             config.ebpf.enabled = ebpf_enabled;
 
+            // SOCKS5 listen address
+            config.socks5_listen = socks5_listen.as_ref().map(|s| s.parse().unwrap_or_else(|_| {
+                tracing::warn!("Invalid SOCKS5 listen address: {}, using default", s);
+                std::net::SocketAddr::from(([127, 0, 0, 1], 1080))
+            }));
+
+            // HTTP proxy listen address
+            config.http_listen = http_listen.as_ref().map(|s| s.parse().unwrap_or_else(|_| {
+                tracing::warn!("Invalid HTTP proxy listen address: {}, using default", s);
+                std::net::SocketAddr::from(([127, 0, 0, 1], 8080))
+            }));
+
+            // HTTP proxy authentication
+            if let (Some(username), Some(password)) = (http_username, http_password) {
+                config.http_auth = Some((username, password));
+                tracing::info!("HTTP proxy authentication enabled");
+            }
+
             // Log config before moving
             tracing::info!("Proxy configuration:");
             tracing::info!("  TCP listen: {}", config.tcp.listen_addr);
             tracing::info!("  UDP listen: {}", config.udp.listen_addr);
             tracing::info!("  XDP interface: {}", config.xdp_interface);
             tracing::info!("  XDP object: {}", config.xdp_object.display());
+            if let Some(ref socks5) = config.socks5_listen {
+                tracing::info!("  SOCKS5 listen: {}", socks5);
+            } else {
+                tracing::info!("  SOCKS5 listen: disabled");
+            }
+            if let Some(ref http) = config.http_listen {
+                tracing::info!("  HTTP proxy listen: {}", http);
+            } else {
+                tracing::info!("  HTTP proxy listen: disabled");
+            }
             tracing::info!("  eBPF enabled: {}", ebpf_enabled);
 
             // Create and start proxy
