@@ -2,6 +2,9 @@
 
 use serde::Deserialize;
 
+pub mod rules;
+pub use rules::{RuleConfig, RuleGroupConfig, RuleConfigItem};
+
 #[derive(Debug, Deserialize)]
 pub struct Config {
     pub global: GlobalConfig,

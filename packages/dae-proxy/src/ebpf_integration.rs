@@ -3,11 +3,14 @@
 //! Provides wrappers around eBPF maps for session, routing, and stats management.
 
 use crate::connection_pool::ConnectionKey;
+use crate::rule_engine::{RuleEngine, SharedRuleEngine, PacketInfo, RuleAction};
 use dae_ebpf_common::session::{SessionEntry, SessionKey};
 use dae_ebpf_common::routing::RoutingEntry;
 use dae_ebpf_common::stats::{StatsEntry, idx as stats_idx};
 use thiserror::Error;
-use tracing::debug;
+use tracing::{debug, info};
+use std::sync::Arc;
+use tokio::sync::RwLock;
 
 /// Error type for eBPF operations
 #[derive(Error, Debug)]
@@ -319,6 +322,167 @@ impl From<&ConnectionKey> for SessionKey {
             key.proto,
         )
     }
+}
+
+// ============================================
+// Rule Engine Integration
+// ============================================
+
+/// Rule engine integration with eBPF
+///
+/// This handle coordinates between the eBPF layer (packet classification)
+/// and the user-space rule engine (routing decisions).
+pub struct EbpfRuleEngineHandle {
+    /// The rule engine
+    rule_engine: SharedRuleEngine,
+    /// eBPF maps for writing routing decisions
+    maps: EbpfMaps,
+}
+
+impl EbpfRuleEngineHandle {
+    /// Create a new rule engine handle
+    pub fn new(rule_engine: SharedRuleEngine, maps: EbpfMaps) -> Self {
+        Self { rule_engine, maps }
+    }
+
+    /// Create a new rule engine handle with default maps
+    pub fn with_default_maps(rule_engine: SharedRuleEngine) -> Self {
+        Self {
+            rule_engine,
+            maps: EbpfMaps::new(),
+        }
+    }
+
+    /// Match a packet and get the routing action
+    ///
+    /// This is the main entry point for user-space rule matching.
+    /// The eBPF layer provides initial packet classification (IP, port, protocol),
+    /// and this method enriches with domain/GeoIP/process info and applies rules.
+    pub async fn match_packet(&self, info: PacketInfo) -> RuleAction {
+        self.rule_engine.match_packet(&info).await
+    }
+
+    /// Match a packet from connection key
+    ///
+    /// For when we only have the 4-tuple from eBPF.
+    pub async fn match_connection(
+        &self,
+        src_ip: u32,
+        dst_ip: u32,
+        src_port: u16,
+        dst_port: u16,
+        proto: u8,
+    ) -> RuleAction {
+        let info = PacketInfo::from_tuple(src_ip, dst_ip, src_port, dst_port, proto);
+        self.match_packet(info).await
+    }
+
+    /// Match a packet and write the routing decision to eBPF map
+    ///
+    /// This integrates with the eBPF routing map to persist
+    /// the routing decision for the kernel to use.
+    pub async fn match_and_write_routing(
+        &self,
+        info: &PacketInfo,
+        route_id: u32,
+    ) -> std::result::Result<RuleAction, EbpfError> {
+        let action = self.match_packet(info.clone()).await;
+
+        // Write routing decision to eBPF map if available
+        if let Some(ref routing) = self.maps.routing {
+            let entry = RoutingEntry::new(
+                route_id,
+                action.to_ebpf_action(),
+                0, // ifindex
+            );
+            // Note: In real implementation, we'd use aya to update the map
+            debug!("Would write routing entry: {:?}", entry);
+        }
+
+        Ok(action)
+    }
+
+    /// Get the rule engine
+    pub fn rule_engine(&self) -> &SharedRuleEngine {
+        &self.rule_engine
+    }
+
+    /// Get rule engine stats
+    pub async fn get_stats(&self) -> crate::rule_engine::RuleEngineStats {
+        self.rule_engine.get_stats().await
+    }
+
+    /// Reload rules from file
+    pub async fn reload_rules(&self, path: &str) -> std::result::Result<(), String> {
+        info!("Reloading rules from {}", path);
+        self.rule_engine.reload(path).await
+    }
+
+    /// Check if rules are loaded
+    pub async fn is_loaded(&self) -> bool {
+        self.rule_engine.is_loaded().await
+    }
+}
+
+/// Packet classifier that combines eBPF and user-space classification
+pub struct PacketClassifier {
+    /// Rule engine handle
+    rule_engine_handle: EbpfRuleEngineHandle,
+    /// Whether to enable DNS resolution for domain matching
+    enable_dns_resolution: bool,
+}
+
+impl PacketClassifier {
+    /// Create a new packet classifier
+    pub fn new(rule_engine: SharedRuleEngine, maps: EbpfMaps) -> Self {
+        Self {
+            rule_engine_handle: EbpfRuleEngineHandle::new(rule_engine, maps),
+            enable_dns_resolution: true,
+        }
+    }
+
+    /// Create with DNS resolution disabled
+    pub fn with_dns_resolution(mut self, enabled: bool) -> Self {
+        self.enable_dns_resolution = enabled;
+        self
+    }
+
+    /// Classify a packet
+    ///
+    /// Returns the routing action for the packet.
+    pub async fn classify(&self, info: PacketInfo) -> RuleAction {
+        self.rule_engine_handle.match_packet(info).await
+    }
+
+    /// Classify from connection tuple
+    pub async fn classify_connection(
+        &self,
+        src_ip: u32,
+        dst_ip: u32,
+        src_port: u16,
+        dst_port: u16,
+        proto: u8,
+    ) -> RuleAction {
+        self.rule_engine_handle
+            .match_connection(src_ip, dst_ip, src_port, dst_port, proto)
+            .await
+    }
+
+    /// Get the rule engine stats
+    pub async fn stats(&self) -> crate::rule_engine::RuleEngineStats {
+        self.rule_engine_handle.get_stats().await
+    }
+}
+
+/// Shared packet classifier type
+pub type SharedPacketClassifier = Arc<PacketClassifier>;
+
+/// Create a new shared packet classifier
+pub fn new_packet_classifier(
+    rule_engine: SharedRuleEngine,
+    maps: EbpfMaps,
+) -> SharedPacketClassifier {
+    Arc::new(PacketClassifier::new(rule_engine, maps))
 }
 
 #[cfg(test)]

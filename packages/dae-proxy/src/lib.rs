@@ -44,6 +44,8 @@ pub use crate::trojan::{
     TrojanServerConfig, TrojanClientConfig, TrojanTlsConfig,
     TrojanCommand, TrojanAddressType, TrojanTargetAddress,
 };
+pub use crate::rules::{Rule, RuleGroup, RuleMatchAction, RuleType, DomainRule, IpCidrRule, GeoIpRule, ProcessRule, DnsTypeRule};
+pub use crate::rule_engine::{RuleEngine, RuleEngineConfig, RuleEngineStats, RuleAction, PacketInfo, SharedRuleEngine, new_rule_engine};
 
 pub mod connection;
 pub mod connection_pool;
@@ -58,6 +60,8 @@ pub mod shadowsocks;
 pub mod vless;
 pub mod vmess;
 pub mod trojan;
+pub mod rules;
+pub mod rule_engine;
 
 /// Proxy protocol implementations (Phase 4 placeholder)
 ///

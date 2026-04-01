@@ -12,7 +12,12 @@ socket2 = { version = "0.5", features = ["all"] }
 thiserror = "1"
 anyhow = "1"
 dae-ebpf-common = { path = "../dae-ebpf/dae-ebpf-common" }
+dae-config = { path = "../dae-config" }
 clap = { version = "4", features = ["derive"] }
+ipnet = "2"
+maxminddb = "0.27"
+notify = "7"
+toml = "0.8"
 
 [dev-dependencies]
 tokio-test = "0.4"

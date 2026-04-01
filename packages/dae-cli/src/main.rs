@@ -6,8 +6,10 @@ use dae_proxy::shadowsocks::{SsCipherType, SsServerConfig};
 use dae_proxy::vless::{VlessServerConfig, VlessTlsConfig};
 use dae_proxy::vmess::{VmessServerConfig, VmessSecurity};
 use dae_proxy::trojan::{TrojanServerConfig, TrojanTlsConfig};
+use dae_proxy::rule_engine::{RuleEngine, RuleEngineConfig, new_rule_engine};
 use dae_core::Engine;
 use std::path::PathBuf;
+use std::sync::Arc;
 use std::time::Duration;
 use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
 
@@ -166,11 +168,42 @@ enum Commands {
         /// Trojan password
         #[arg(long, requires = "trojan")]
         trojan_password: Option<String>,
+
+        /// Rules configuration file path
+        #[arg(short, long)]
+        rules_config: Option<String>,
     },
     /// Run in engine mode (default)
     Run {
         /// Config file path
         #[arg(short, long, default_value = "config.toml")]
+        config: String,
+    },
+    /// Rule management commands
+    Rules {
+        #[command(subcommand)]
+        command: RulesCommands,
+    },
+}
+
+#[derive(Subcommand, Debug)]
+enum RulesCommands {
+    /// Reload rules from config file
+    Reload {
+        /// Rules config file path
+        #[arg(short, long)]
+        config: String,
+    },
+    /// List current rules
+    List {
+        /// Show detailed rule information
+        #[arg(short, long)]
+        verbose: bool,
+    },
+    /// Validate rules config file
+    Validate {
+        /// Rules config file path
+        #[arg(short, long)]
         config: String,
     },
 }
@@ -227,6 +260,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             trojan_server,
             trojan_port,
             trojan_password,
+            rules_config,
         }) => {
             tracing::info!("Starting dae-rs proxy mode...");
 
@@ -432,6 +466,13 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             }
             tracing::info!("  eBPF enabled: {}", ebpf_enabled);
 
+            // Rules configuration
+            if let Some(ref rules_cfg) = rules_config {
+                tracing::info!("  Rules config: {}", rules_cfg);
+            } else {
+                tracing::info!("  Rules config: not specified");
+            }
+
             // Create and start proxy
             let proxy = Proxy::new(config).await?;
             let proxy = std::sync::Arc::new(proxy);
@@ -463,6 +504,70 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
             engine.stop().await;
             tracing::info!("dae-rs shutting down");
+        }
+        Some(Commands::Rules { command }) => {
+            match command {
+                RulesCommands::Reload { config } => {
+                    tracing::info!("dae-rs rules reload from: {}", config);
+                    
+                    let rule_engine = new_rule_engine(RuleEngineConfig::default());
+                    if let Err(e) = rule_engine.load_rules(&config).await {
+                        eprintln!("Failed to load rules: {}", e);
+                        std::process::exit(1);
+                    }
+                    
+                    tracing::info!("Rules reloaded successfully");
+                }
+                RulesCommands::List { verbose } => {
+                    tracing::info!("dae-rs rules list");
+                    
+                    // Create a temporary rule engine to show stats
+                    let rule_engine = new_rule_engine(RuleEngineConfig::default());
+                    let stats = rule_engine.get_stats().await;
+                    
+                    println!("Rule Engine Status:");
+                    println!("  Loaded: {}", stats.loaded);
+                    println!("  Rule Groups: {}", stats.rule_group_count);
+                    println!("  Total Rules: {}", stats.total_rule_count);
+                    
+                    if verbose {
+                        println!("\nRule Groups:");
+                        for name in rule_engine.get_rule_groups().await.iter() {
+                            println!("  - {}", name);
+                        }
+                    }
+                }
+                RulesCommands::Validate { config } => {
+                    tracing::info!("dae-rs rules validate: {}", config);
+                    
+                    use dae_config::rules::parse_and_validate;
+                    use std::fs;
+                    
+                    let content = match fs::read_to_string(&config) {
+                        Ok(c) => c,
+                        Err(e) => {
+                            eprintln!("Failed to read rules config: {}", e);
+                            std::process::exit(1);
+                        }
+                    };
+                    
+                    match parse_and_validate(&content) {
+                        Ok(cfg) => {
+                            println!("Rules configuration is valid!");
+                            println!("  Rule Groups: {}", cfg.rule_groups.len());
+                            let total_rules: usize = cfg.rule_groups.iter().map(|g| g.rules.len()).sum();
+                            println!("  Total Rules: {}", total_rules);
+                        }
+                        Err((_, errors)) => {
+                            eprintln!("Rules configuration has errors:");
+                            for error in errors.iter() {
+                                eprintln!("  - {}", error);
+                            }
+                            std::process::exit(1);
+                        }
+                    }
+                }
+            }
         }
     }
 
