@@ -1,0 +1,18 @@
+# ===================================================================
+# dae-rs Helm Chart - PDB Template
+# ===================================================================
+
+{{- if and .Values.podDisruptionBudget.enabled (gt (int .Values.daemonset.replicas) 1) -}}
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: {{ include "dae-rs.fullname" . }}-pdb
+  namespace: {{ .Values.namespace }}
+  labels:
+    {{- include "dae-rs.labels" . | nindent 4 }}
+spec:
+  minAvailable: {{ .Values.podDisruptionBudget.minAvailable }}
+  selector:
+    matchLabels:
+      {{- include "dae-rs.selectorLabels" . | nindent 6 }}
+{{- end }}

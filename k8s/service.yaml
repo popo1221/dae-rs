@@ -1,0 +1,71 @@
+# ===================================================================
+# dae-rs - Kubernetes Service
+# 
+# Note: dae-rs typically uses hostNetwork, so ClusterIP/NodePort
+# services are less relevant. However, for control plane access,
+# we can expose metrics and control endpoints.
+# ===================================================================
+
+apiVersion: v1
+kind: Service
+metadata:
+  name: dae-rs-control
+  namespace: dae-rs
+  labels:
+    app: dae-rs
+    component: control-plane
+spec:
+  type: ClusterIP
+  # Headless service for direct pod access
+  clusterIP: None
+  ports:
+    # Control plane API
+    - name: control
+      port: 9090
+      targetPort: 9090
+      protocol: TCP
+    # Metrics endpoint (if exposed)
+    - name: metrics
+      port: 9091
+      targetPort: 9091
+      protocol: TCP
+  selector:
+    app: dae-rs
+
+---
+# ServiceMonitor for Prometheus Operator (optional)
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: dae-rs-monitor
+  namespace: dae-rs
+  labels:
+    app: dae-rs
+    release: prometheus
+spec:
+  selector:
+    matchLabels:
+      app: dae-rs
+  endpoints:
+    - port: metrics
+      interval: 30s
+      path: /metrics
+  namespaceSelector:
+    matchNames:
+      - dae-rs
+
+---
+# PodDisruptionBudget (ensure at least one pod per node during updates)
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: dae-rs-pdb
+  namespace: dae-rs
+  labels:
+    app: dae-rs
+spec:
+  # At least one dae-rs per node (since it's DaemonSet)
+  minAvailable: 1
+  selector:
+    matchLabels:
+      app: dae-rs

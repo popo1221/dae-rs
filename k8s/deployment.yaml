@@ -1,0 +1,210 @@
+# ===================================================================
+# dae-rs - Kubernetes Deployment (DaemonSet)
+# 
+# Note: dae-rs uses eBPF/XDP for packet processing, which requires:
+# 1. Running as a DaemonSet (one per node)
+# 2. Privileged container capabilities
+# 3. Access to host network interfaces
+# ===================================================================
+
+apiVersion: apps/v1
+kind: DaemonSet
+metadata:
+  name: dae-rs
+  namespace: dae-rs
+  labels:
+    app: dae-rs
+    version: v0.1.0
+spec:
+  selector:
+    matchLabels:
+      app: dae-rs
+  template:
+    metadata:
+      labels:
+        app: dae-rs
+        version: v0.1.0
+      annotations:
+        # Prometheus scraping (if metrics are exposed)
+        prometheus.io/scrape: "true"
+        prometheus.io/port: "9090"
+        prometheus.io/path: "/metrics"
+    spec:
+      # tolerations for control-plane nodes (if using taints)
+      tolerations:
+        - key: "node-role.kubernetes.io/control-plane"
+          operator: "Exists"
+          effect: "NoSchedule"
+        - key: "node.kubernetes.io/not-ready"
+          operator: "Exists"
+          effect: "NoExecute"
+          tolerationSeconds: 300
+
+      # Use host network for eBPF/XDP packet processing
+      hostNetwork: true
+      # Share network namespace with host
+      hostPID: true
+
+      # Security context
+      securityContext:
+        runAsNonRoot: false
+        runAsUser: 0
+        fsGroup: 0
+        seLinuxOptions:
+          level: "s0"
+          # MLS sensitivity level (adjust based on your environment)
+
+      # Init container to load eBPF modules
+      initContainers:
+        - name: init-ebpf
+          image: dae-rs:latest
+          imagePullPolicy: IfNotPresent
+          securityContext:
+            privileged: true
+            capabilities:
+              add:
+                - SYS_ADMIN
+                - SYS_RESOURCE
+          command:
+            - /bin/sh
+            - -c
+            - |
+              echo "Loading eBPF modules..."
+              modprobe xdp-util 2>/dev/null || true
+              modprobe cls_flower 2>/dev/null || true
+              echo "eBPF initialization complete"
+          env:
+            - name: RUST_LOG
+              value: "info"
+
+      containers:
+        - name: dae-rs
+          image: dae-rs:latest
+          imagePullPolicy: IfNotPresent
+
+          # Required capabilities for eBPF/XDP
+          securityContext:
+            privileged: true
+            capabilities:
+              add:
+                - SYS_ADMIN
+                - NET_ADMIN
+                - SYS_RESOURCE
+                - NET_RAW
+                - IPC_LOCK
+
+          # Resources (adjust based on workload)
+          resources:
+            requests:
+              cpu: 100m
+              memory: 128Mi
+            limits:
+              cpu: 2000m
+              memory: 1Gi
+              # No memory limit for eBPF (uses kernel memory)
+
+          env:
+            - name: RUST_LOG
+              valueFrom:
+                configMapKeyRef:
+                  name: dae-rs-config
+                  key: log_level
+                  optional: true
+            - name: DAE_INTERFACE
+              valueFrom:
+                configMapKeyRef:
+                  name: dae-rs-config
+                  key: interface
+                  optional: true
+
+          args:
+            - run
+            - --config
+            - /etc/dae/config.yml
+            - --verbose
+
+          # Volume mounts
+          volumeMounts:
+            - name: config
+              mountPath: /etc/dae
+              readOnly: true
+            - name: xtables
+              mountPath: /usr/lib/x86_64-linux-gnu
+              readOnly: true
+            - name: xtables-alt
+              mountPath: /lib/x86_64-linux-gnu
+              readOnly: true
+            - name: sys
+              mountPath: /sys
+              readOnly: false
+            - name: run
+              mountPath: /run
+            - name: log
+              mountPath: /var/log/dae
+            - name: data
+              mountPath: /var/lib/dae
+
+          # Liveness probe (check if process is running)
+          livenessProbe:
+            exec:
+              command:
+                - pgrep
+                - dae
+            initialDelaySeconds: 10
+            periodSeconds: 30
+            timeoutSeconds: 5
+            failureThreshold: 3
+
+          # Readiness probe
+          readinessProbe:
+            exec:
+              command:
+                - pgrep
+                - dae
+            initialDelaySeconds: 5
+            periodSeconds: 10
+            timeoutSeconds: 3
+            failureThreshold: 3
+
+      # Volumes
+      volumes:
+        - name: config
+          configMap:
+            name: dae-rs-config
+            optional: true
+        - name: xtables
+          hostPath:
+            path: /usr/lib/x86_64-linux-gnu
+            type: Directory
+        - name: xtables-alt
+          hostPath:
+            path: /lib/x86_64-linux-gnu
+            type: Directory
+        - name: sys
+          hostPath:
+            path: /sys
+            type: Directory
+        - name: run
+          hostPath:
+            path: /run
+            type: Directory
+        - name: log
+          hostPath:
+            path: /var/log/dae
+            type: DirectoryOrCreate
+        - name: data
+          hostPath:
+            path: /var/lib/dae
+            type: DirectoryOrCreate
+
+      # Node selection (optional, restrict to specific nodes)
+      # nodeSelector:
+      #   kubernetes.io/os: linux
+      #   dae-rs/enabled: "true"
+
+  # Update strategy
+  updateStrategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxUnavailable: 1
+      maxSurge: 0

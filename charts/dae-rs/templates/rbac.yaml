@@ -1,0 +1,69 @@
+# ===================================================================
+# dae-rs Helm Chart - RBAC Templates
+# ===================================================================
+
+{{- if .Values.rbac.create -}}
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: {{ include "dae-rs.fullname" . }}-ebpf
+  labels:
+    {{- include "dae-rs.labels" . | nindent 4 }}
+rules:
+  - apiGroups: [""]
+    resources: ["nodes"]
+    verbs: ["get", "list", "watch"]
+  - apiGroups: [""]
+    resources: ["pods"]
+    verbs: ["get", "list", "watch"]
+  - apiGroups: [""]
+    resources: ["configmaps"]
+    verbs: ["get", "list", "watch", "create", "update", "patch"]
+  - apiGroups: [""]
+    resources: ["events"]
+    verbs: ["create", "patch"]
+
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: {{ include "dae-rs.fullname" . }}-ebpf-binding
+  labels:
+    {{- include "dae-rs.labels" . | nindent 4 }}
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: {{ include "dae-rs.fullname" . }}-ebpf
+subjects:
+  - kind: ServiceAccount
+    name: {{ include "dae-rs.serviceAccountName" . }}
+    namespace: {{ .Values.namespace }}
+
+---
+apiVersion: policy/v1beta1
+kind: PodSecurityPolicy
+metadata:
+  name: {{ .Values.rbac.pspName }}
+  labels:
+    {{- include "dae-rs.labels" . | nindent 4 }}
+spec:
+  privileged: true
+  hostNetwork: true
+  hostPID: true
+  allowedCapabilities:
+    - SYS_ADMIN
+    - NET_ADMIN
+    - SYS_RESOURCE
+    - NET_RAW
+    - IPC_LOCK
+  volumes:
+    - '*'
+  runAsUser:
+    rule: 'RunAsAny'
+  seLinux:
+    rule: 'RunAsAny'
+  supplementalGroups:
+    rule: 'RunAsAny'
+  fsGroup:
+    rule: 'RunAsAny'
+{{- end }}

@@ -1,0 +1,44 @@
+# ===================================================================
+# dae-rs Helm Chart
+# ===================================================================
+
+apiVersion: v2
+name: dae-rs
+description: High-performance transparent proxy in Rust with eBPF
+type: application
+
+# Application version
+version: 0.1.0
+appVersion: "0.1.0"
+
+# Maintainers
+maintainers:
+  - name: dae-rs team
+    url: https://github.com/popo1221/dae-rs
+
+# Keywords
+keywords:
+  - dae-rs
+  - proxy
+  - ebpf
+  - xdp
+  - socks5
+  - v2ray
+
+# Home
+home: https://github.com/popo1221/dae-rs
+
+# Sources
+sources:
+  - https://github.com/popo1221/dae-rs
+
+# Dependencies
+dependencies: []
+
+# KubeVersion constraint (eBPF requires modern kernel)
+kubeVersion: ">=1.19.0"
+
+# Annotations
+annotations:
+  category: Networking
+  licenses: MIT

@@ -1,0 +1,124 @@
+# ===================================================================
+# dae-rs - Kubernetes RBAC Configuration
+# 
+# dae-rs with eBPF/XDP requires significant kernel access.
+# This RBAC configuration grants the necessary permissions.
+# ===================================================================
+
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: dae-rs
+  labels:
+    name: dae-rs
+    pod-security.kubernetes.io/enforce: privileged
+
+---
+# ServiceAccount for dae-rs pods
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: dae-rs
+  namespace: dae-rs
+
+---
+# ClusterRole for eBPF operations
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: dae-rs-ebpf
+  labels:
+    app: dae-rs
+rules:
+  # eBPF syscalls
+  - apiGroups: [""]
+    resources: ["nodes"]
+    verbs: ["get", "list", "watch"]
+
+  # For querying node capabilities
+  - apiGroups: ["node.k8s.io"]
+    resources: ["runtimeclasses"]
+    verbs: ["get", "list"]
+
+  # Network operations (for XDP attachment)
+  - apiGroups: [""]
+    resources: ["networkpolicies"]
+    verbs: ["get", "list", "watch"]
+
+  # Pod network namespace access
+  - apiGroups: [""]
+    resources: ["pods"]
+    verbs: ["get", "list", "watch"]
+
+  # ConfigMaps for configuration
+  - apiGroups: [""]
+    resources: ["configmaps"]
+    verbs: ["get", "list", "watch", "create", "update", "patch"]
+
+  # Events for debugging
+  - apiGroups: [""]
+    resources: ["events"]
+    verbs: ["create", "patch"]
+
+  # For eBPF program loading
+  - apiGroups: ["security.k8s.io"]
+    resources: ["securitycontexts"]
+    verbs: ["use"]
+
+---
+# ClusterRoleBinding
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: dae-rs-ebpf-binding
+  labels:
+    app: dae-rs
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: dae-rs-ebpf
+subjects:
+  - kind: ServiceAccount
+    name: dae-rs
+    namespace: dae-rs
+
+---
+# PodSecurityPolicy (for older Kubernetes versions < 1.25)
+# Note: PSP is deprecated in Kubernetes 1.25+
+# Use Pod Security Standards instead
+apiVersion: policy/v1beta1
+kind: PodSecurityPolicy
+metadata:
+  name: dae-rs-privileged
+  namespace: dae-rs
+  labels:
+    app: dae-rs
+spec:
+  # Allow privileged containers
+  privileged: true
+  # Allow host network
+  hostNetwork: true
+  # Allow host PID
+  hostPID: true
+  # Required capabilities
+  allowedCapabilities:
+    - SYS_ADMIN
+    - NET_ADMIN
+    - SYS_RESOURCE
+    - NET_RAW
+    - IPC_LOCK
+  # Volumne types
+  volumes:
+    - '*'
+  # Run as any user
+  runAsUser:
+    rule: 'RunAsAny'
+  # SELinux
+  seLinux:
+    rule: 'RunAsAny'
+  # Supplemental groups
+  supplementalGroups:
+    rule: 'RunAsAny'
+  # FS groups
+  fsGroup:
+    rule: 'RunAsAny'

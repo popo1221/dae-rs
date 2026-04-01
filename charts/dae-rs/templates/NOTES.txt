@@ -1,0 +1,59 @@
+# ===================================================================
+# dae-rs Helm Chart - NOTES.txt Template
+# ===================================================================
+
+Thank you for installing {{ .Chart.Name }}.
+
+Your release is named {{ .Release.Name }}.
+
+To learn more about the release, try:
+
+  $ helm status {{ .Release.Name }} -n {{ .Values.namespace }}
+  $ helm get all {{ .Release.Name }} -n {{ .Values.namespace }}
+
+== dae-rs Deployment Status ==
+
+To check if dae-rs pods are running:
+
+  $ kubectl get pods -n {{ .Values.namespace }} -l app.kubernetes.io/name={{ include "dae-rs.name" . }}
+
+To view logs:
+
+  $ kubectl logs -n {{ .Values.namespace }} -l app.kubernetes.io/name={{ include "dae-rs.name" . }} --tail=100
+
+== Configuration ==
+
+The dae-rs configuration is stored in the ConfigMap:
+  {{ include "dae-rs.fullname" . }}-config
+
+To update the configuration:
+
+  $ helm upgrade {{ .Release.Name }} . -n {{ .Values.namespace }} \
+    --set config.inline="$(cat your-config.yml)"
+
+== Accessing dae-rs ==
+
+From within the cluster:
+  - SOCKS5: {{ include "dae-rs.fullname" . }}-control.{{ .Values.namespace }}.svc.cluster.local:1080
+  - HTTP: {{ include "dae-rs.fullname" . }}-control.{{ .Values.namespace }}.svc.cluster.local:8080
+
+From outside the cluster (NodePort mode):
+  - SOCKS5: <node-ip>:30080
+  - HTTP: <node-ip>:30081
+
+== Troubleshooting ==
+
+1. Check if eBPF is loading:
+   $ dmesg | grep -i xdp
+
+2. Check pod status:
+   $ kubectl describe pod -n {{ .Values.namespace }} -l app.kubernetes.io/name={{ include "dae-rs.name" . }}
+
+3. Check RBAC:
+   $ kubectl auth can-i use podsecuritypolicy/{{ .Values.rbac.pspName }} -n {{ .Values.namespace }}
+
+== Uninstall ==
+
+To uninstall/delete the release:
+
+  $ helm delete {{ .Release.Name }} -n {{ .Values.namespace }}

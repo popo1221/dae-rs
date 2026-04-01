@@ -1,0 +1,190 @@
+# ===================================================================
+# dae-rs - GitHub Actions Docker Build Workflow
+# Builds and pushes Docker image to GHCR on every release and master push
+# ===================================================================
+
+name: Docker Build and Push
+
+on:
+  push:
+    branches: [master, main]
+    tags:
+      - 'v*'
+  pull_request:
+    branches: [master, main]
+  workflow_dispatch:
+
+env:
+  # Use Docker Buildx for multi-platform builds
+  IMAGE_NAME: ${{ github.repository }}
+  REGISTRY: ghcr.io
+  # Multi-arch support
+  PLATFORMS: linux/amd64,linux/arm64
+
+jobs:
+  # =========================================================================
+  # Build and push Docker image
+  # =========================================================================
+  docker:
+    name: Build & Push
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+
+    steps:
+      # Checkout code
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      # Setup Docker Buildx
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      # Login to GHCR
+      - name: Login to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      # Extract metadata (tags, labels) from git
+      - name: Extract metadata
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
+          tags: |
+            # Use semver version from tag
+            type=semver,pattern={{version}}
+            # Use semver version without 'v' prefix
+            type=semver,pattern={{major}}.{{minor}}
+            # Use short commit hash as tag
+            type=sha,prefix=
+            # Use branch name for PRs
+            type=ref,event=branch
+            # Use 'latest' for master/main on tags
+            type=raw,value=latest,enable={{is_default_branch}}
+            # Enable datetime suffix for builds on branches
+            type=raw,value={{branch}}-{{date 'YYYYMMDD'}}-{{hash '%h'}},enable={{is_default_branch}}
+
+      # Build and push with multi-platform support
+      - name: Build and push
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          push: ${{ github.event_name != 'pull_request' }}
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          platforms: ${{ env.PLATFORMS }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+          build-args: |
+            BUILD_DATE=${{ env.BUILD_DATE }}
+            VCS_REF=${{ github.sha }}
+            VERSION=${{ github.ref_name }}
+
+      # Generate SBOM (Software Bill of Materials)
+      - name: Generate SBOM
+        uses: anchore/sbom-action@v0
+        if: github.event_name != 'pull_request'
+        with:
+          image: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ github.ref_name }}
+          format: spdx-json
+          output-file: sbom.spdx.json
+
+      # Upload SBOM as artifact
+      - name: Upload SBOM artifact
+        uses: actions/upload-artifact@v4
+        if: github.event_name != 'pull_request'
+        with:
+          name: sbom
+          path: sbom.spdx.json
+          retention-days: 30
+
+  # =========================================================================
+  # Build manifest (combine multi-arch images)
+  # =========================================================================
+  manifest:
+    name: Create Manifest
+    runs-on: ubuntu-latest
+    needs: docker
+    if: github.event_name != 'pull_request'
+    permissions:
+      packages: write
+
+    steps:
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Login to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Pull all platforms
+        run: |
+          docker pull ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:linux-amd64
+          docker pull ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:linux-arm64
+
+      - name: Create manifest list
+        run: |
+          docker manifest create \
+            ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:latest \
+            ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:linux-amd64 \
+            ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:linux-arm64
+
+          docker manifest push ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:latest
+
+  # =========================================================================
+  # Security scan (run Trivy vulnerability scanner)
+  # =========================================================================
+  security:
+    name: Security Scan
+    runs-on: ubuntu-latest
+    needs: docker
+    if: github.event_name != 'pull_request'
+    permissions:
+      packages: read
+      security-events: write
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Run Trivy vulnerability scanner
+        uses: aquasecurity/trivy-action@master
+        with:
+          image-ref: '${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ github.ref_name }}'
+          format: 'sarif'
+          output: 'trivy-results.sarif'
+          severity: 'CRITICAL,HIGH'
+          exit-code: '1'
+
+      - name: Upload Trivy scan results to GitHub Security tab
+        uses: github/codeql-action/upload-sarif@v2
+        with:
+          sarif_file: 'trivy-results.sarif'
+
+  # =========================================================================
+  # Build summary
+  # =========================================================================
+  summary:
+    name: Build Summary
+    runs-on: ubuntu-latest
+    needs: [docker, manifest, security]
+    if: always()
+
+    steps:
+      - name: Summary
+        run: |
+          echo "## Docker Build Summary" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "| Check | Status |" >> $GITHUB_STEP_SUMMARY
+          echo "|-------|--------|" >> $GITHUB_STEP_SUMMARY
+          echo "| Docker Build | ${{ needs.docker.result }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| Manifest | ${{ needs.manifest.result }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| Security Scan | ${{ needs.security.result }} |" >> $GITHUB_STEP_SUMMARY

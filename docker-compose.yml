@@ -1,0 +1,80 @@
+# ===================================================================
+# dae-rs - Docker Compose Configuration
+# Local development and testing
+# ===================================================================
+
+services:
+  dae:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: runtime
+    image: dae-rs:latest
+    container_name: dae-rs
+
+    # Network mode: host required for eBPF/XDP
+    # Note: eBPF requires direct access to network interfaces
+    network_mode: host
+
+    # Privileged mode required for eBPF
+    privileged: true
+    security_opt:
+      - seccomp:unconfined
+    cap_add:
+      - SYS_ADMIN
+      - NET_ADMIN
+      - SYS_RESOURCE
+
+    volumes:
+      # Config file (mount local config)
+      - ./config:/etc/dae:ro
+
+      # Persist runtime data
+      - dae-data:/var/lib/dae
+      - dae-logs:/var/log/dae
+
+    environment:
+      - RUST_LOG=info
+      - DAE_VERBOSE=${DAE_VERBOSE:-false}
+
+    restart: unless-stopped
+
+    # Health check (if not using host network)
+    # healthcheck:
+    #   test: ["CMD", "pgrep", "dae"]
+    #   interval: 30s
+    #   timeout: 10s
+    #   retries: 3
+
+  # Alternative: Development mode with source mounting
+  dae-dev:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: builder
+    image: dae-rs:dev
+    container_name: dae-rs-dev
+    network_mode: host
+    privileged: true
+    security_opt:
+      - seccomp:unconfined
+    cap_add:
+      - SYS_ADMIN
+      - NET_ADMIN
+      - SYS_RESOURCE
+    volumes:
+      - .:/build
+      - ./config:/etc/dae:ro
+      - dae-data:/var/lib/dae
+      - dae-logs:/var/log/dae
+    environment:
+      - RUST_LOG=debug
+    command: tail -f /dev/null  # Keep container running for debugging
+    profiles:
+      - dev
+
+volumes:
+  dae-data:
+    driver: local
+  dae-logs:
+    driver: local

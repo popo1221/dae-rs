@@ -1,0 +1,27 @@
+# ===================================================================
+# dae-rs Helm Chart - Service Template
+# ===================================================================
+
+{{- if .Values.service.enabled -}}
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "dae-rs.fullname" . }}-control
+  namespace: {{ .Values.namespace }}
+  labels:
+    {{- include "dae-rs.labels" . | nindent 4 }}
+spec:
+  type: {{ .Values.service.type }}
+  clusterIP: None
+  ports:
+    - name: control
+      port: {{ .Values.service.ports.control }}
+      targetPort: {{ .Values.service.ports.control }}
+    {{- if .Values.metrics.enabled }}
+    - name: metrics
+      port: {{ .Values.service.ports.metrics }}
+      targetPort: {{ .Values.service.ports.metrics }}
+    {{- end }}
+  selector:
+    {{- include "dae-rs.selectorLabels" . | nindent 4 }}
+{{- end }}

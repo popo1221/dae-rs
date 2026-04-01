@@ -1,0 +1,50 @@
+# ===================================================================
+# dae-rs - Docker Ignore
+# Exclude unnecessary files from Docker build context
+# ===================================================================
+
+# Git
+.git
+.gitignore
+
+# Build artifacts (rebuilt inside Docker)
+target/
+**/target/
+
+# IDE and editor files
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+.DS_Store
+
+# Documentation (not needed for build)
+*.md
+docs/
+
+# Test and benchmark files
+**/tests/
+**/benches/
+**/*.test
+**/*.bench
+
+# CI/CD configs (not needed in image)
+.github/
+.gitlab-ci.yml
+.travis.yml
+Jenkinsfile
+
+# Development files
+.env
+.env.*
+docker-compose*.yml
+docker-compose*.yaml
+k8s/
+charts/
+
+# Misc
+*.log
+*.tmp
+*.bak
+*.orig

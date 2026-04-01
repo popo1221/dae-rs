@@ -1,0 +1,199 @@
+# ===================================================================
+# dae-rs Helm Chart - Values
+# ===================================================================
+
+# Global image settings
+image:
+  repository: ghcr.io/popo1221/dae-rs
+  pullPolicy: IfNotPresent
+  # Overrides the image tag
+  tag: ""
+
+# Image pull secrets (for private registry)
+imagePullSecrets: []
+
+# Service account configuration
+serviceAccount:
+  create: true
+  name: dae-rs
+  annotations: {}
+
+# Namespace configuration
+namespace: dae-rs
+
+# dae-rs deployment configuration
+dae:
+  # Log level: trace, debug, info, warn, error
+  logLevel: info
+
+  # Network interface for XDP (empty = auto-detect)
+  interface: ""
+
+  # Verbose mode
+  verbose: false
+
+  # Additional arguments
+  extraArgs: []
+
+# Configuration - can be either inline or external
+config:
+  # Use inline config
+  inline: |
+    # dae-rs configuration
+    global:
+      log_level: info
+      tcp_timeout: 300
+      udp_timeout: 600
+
+    inbound:
+      - name: socks5
+        type: socks5
+        listen: 0.0.0.0:1080
+        udp: true
+
+      - name: http
+        type: http
+        listen: 0.0.0.0:8080
+
+    outbound:
+      - name: direct
+        type: direct
+
+    rules:
+      - type: field
+        ip_cidr:
+          - 10.0.0.0/8
+          - 172.16.0.0/12
+          - 192.168.0.0/16
+        outbound: direct
+
+      - type: default
+        outbound: direct
+
+  # Use external ConfigMap
+  existingConfigMap: ""
+
+# DaemonSet configuration
+daemonset:
+  # Number of replicas (should match node count)
+  replicas: ~  # null means auto (one per node)
+
+  # Update strategy
+  updateStrategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxUnavailable: 1
+      maxSurge: 0
+
+  # Pod annotations
+  podAnnotations:
+    prometheus.io/scrape: "true"
+    prometheus.io/port: "9090"
+    prometheus.io/path: "/metrics"
+
+  # Pod labels
+  podLabels: {}
+
+  # Node selection
+  nodeSelector: {}
+
+  # Tolerations
+  tolerations:
+    - key: "node-role.kubernetes.io/control-plane"
+      operator: "Exists"
+      effect: "NoSchedule"
+    - key: "node.kubernetes.io/not-ready"
+      operator: "Exists"
+      effect: "NoExecute"
+      tolerationSeconds: 300
+
+  # Affinity
+  affinity: {}
+
+# Resource limits
+resources:
+  requests:
+    cpu: 100m
+    memory: 128Mi
+  limits:
+    cpu: 2000m
+    memory: 1Gi
+
+# Service configuration
+service:
+  # Enable control plane service
+  enabled: true
+  type: ClusterIP
+  ports:
+    control: 9090
+    metrics: 9091
+
+# Security context
+securityContext:
+  runAsNonRoot: false
+  runAsUser: 0
+  fsGroup: 0
+
+# Container security context
+containerSecurityContext:
+  privileged: true
+  capabilities:
+    add:
+      - SYS_ADMIN
+      - NET_ADMIN
+      - SYS_RESOURCE
+      - NET_RAW
+      - IPC_LOCK
+
+# Persistence
+persistence:
+  # Enable persistence
+  enabled: false
+  # Storage class
+  storageClass: ""
+  # Access mode
+  accessMode: ReadWriteOnce
+  # Size
+  size: 1Gi
+  # Annotations
+  annotations: {}
+
+# RBAC configuration
+rbac:
+  # Create RBAC resources
+  create: true
+  # PSP name (for older K8s)
+  pspName: dae-rs-privileged
+
+# Ingress configuration (optional)
+ingress:
+  enabled: false
+  className: ""
+  annotations: {}
+  hosts:
+    - host: dae-rs.local
+      paths:
+        - path: /
+          pathType: Prefix
+  tls: []
+
+# PodDisruptionBudget
+podDisruptionBudget:
+  enabled: true
+  minAvailable: 1
+
+# Metrics (Prometheus)
+metrics:
+  enabled: false
+  serviceMonitor:
+    enabled: false
+    interval: 30s
+
+# Name override
+nameOverride: ""
+
+# Full name override
+fullnameOverride: ""
+
+# Common labels
+commonLabels: {}

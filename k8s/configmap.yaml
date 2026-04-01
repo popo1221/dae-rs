@@ -1,0 +1,103 @@
+# ===================================================================
+# dae-rs - Kubernetes ConfigMap
+# ===================================================================
+
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: dae-rs-config
+  namespace: dae-rs
+  labels:
+    app: dae-rs
+    version: v0.1.0
+data:
+  # Log level (trace, debug, info, warn, error)
+  log_level: "info"
+
+  # Network interface for XDP attachment
+  # Leave empty for auto-detection
+  interface: ""
+
+  # Configuration file content (embedded)
+  config.yml: |
+    # dae-rs configuration
+    # Full config: https://github.com/popo1221/dae-rs/blob/master/docs/CONFIG.md
+
+    global:
+      log_level: info
+      # TCP connection timeout (seconds)
+      tcp_timeout: 300
+      # UDP session timeout (seconds)
+      udp_timeout: 600
+
+    # Inbound definitions
+    inbound:
+      # SOCKS5 proxy
+      - name: socks5
+        type: socks5
+        listen: 0.0.0.0:1080
+        udp: true
+
+      # HTTP proxy
+      - name: http
+        type: http
+        listen: 0.0.0.0:8080
+
+    # Outbound (upstream proxies)
+    outbound:
+      # Direct connection (no proxy)
+      - name: direct
+        type: direct
+
+      # VMess server
+      - name: vmess-us
+        type: vmess
+        server: 203.0.113.1
+        port: 10086
+        uuid: 00000000-0000-0000-0000-000000000001
+        security: auto
+        alter_id: 0
+
+      # VLESS + TLS
+      - name: vless-sg
+        type: vless
+        server: 203.0.113.2
+        port: 443
+        uuid: 00000000-0000-0000-0000-000000000002
+        tls: true
+        sni: example.com
+        alpn:
+          - h2
+          - http/1.1
+
+    # Routing rules
+    rules:
+      # Direct connect for private IPs
+      - type: field
+        ip_cidr:
+          - 10.0.0.0/8
+          - 172.16.0.0/12
+          - 192.168.0.0/16
+        outbound: direct
+
+      # Default rule - route through VMess
+      - type: default
+        outbound: vmess-us
+
+---
+# ===================================================================
+# dae-rs - Kubernetes Secret (for sensitive data)
+# ===================================================================
+apiVersion: v1
+kind: Secret
+metadata:
+  name: dae-rs-secret
+  namespace: dae-rs
+  labels:
+    app: dae-rs
+type: Opaque
+stringData:
+  # Example: VMess secrets (base64 encoded in real deployment)
+  # These should be set via sealed-secrets or external secrets operator
+  vmess-key: "base64-encoded-vmess-secret"
+  vless-key: "base64-encoded-vless-secret"
