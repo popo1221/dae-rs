@@ -1,0 +1,10 @@
+[package]
+name = "dae-xdp"
+version = "0.1.0"
+edition = "2021"
+description = "XDP eBPF program for dae-rs"
+authors = ["dae-rs team"]
+
+[dependencies]
+aya-ebpf = "0.1"
+dae-ebpf-common = { path = "../dae-ebpf-common" }

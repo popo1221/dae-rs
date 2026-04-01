@@ -1,9 +1,13 @@
 [workspace]
+resolver = "2"
 members = [
     "packages/dae-core",
     "packages/dae-cli",
     "packages/dae-config",
     "packages/dae-proxy",
+    "packages/dae-ebpf/dae-ebpf-common",
+    "packages/dae-ebpf/dae-xdp",
+    "packages/dae-ebpf/dae-ebpf",
 ]
 
 [profile.dev]
