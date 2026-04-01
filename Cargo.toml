@@ -8,7 +8,13 @@ members = [
     "packages/dae-ebpf/dae-ebpf-common",
     "packages/dae-ebpf/dae-xdp",
     "packages/dae-ebpf/dae-ebpf",
+    "benches",
 ]
+
+[workspace.dependencies]
+criterion = { version = "0.5", features = ["html_reports"] }
+tokio = { version = "1", features = ["full"] }
+tracing = "0.1"
 
 [profile.dev]
 opt-level = 0
