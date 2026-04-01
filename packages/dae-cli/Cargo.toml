@@ -6,6 +6,7 @@ description = "CLI for dae-rs"
 
 [dependencies]
 dae-core = { path = "../dae-core" }
+dae-proxy = { path = "../dae-proxy" }
 tokio = { version = "1", features = ["full"] }
 clap = { version = "4", features = ["derive"] }
 tracing = "0.1"

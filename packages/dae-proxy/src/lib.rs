@@ -1,6 +1,106 @@
 //! dae-proxy library
-//! Implements various proxy protocols
+//!
+//! High-performance user-space proxy core for dae-rs transparent proxy.
+//! This module provides the core TCP/UDP forwarding infrastructure
+//! that integrates with the eBPF subsystem.
+//!
+//! # Architecture
+//!
+//! - `connection`: Connection tracking with state management
+//! - `connection_pool`: Connection reuse by 4-tuple with expiration
+//! - `tcp`: TCP relay using tokio with bidirectional copy
+//! - `udp`: UDP relay with NAT semantics
+//! - `ebpf_integration`: eBPF map wrappers for session/routing/stats
+//! - `proxy`: Main proxy coordinator
 
-pub mod protocol;
+// Re-export public types for easy access
+pub use crate::connection::{Connection, ConnectionState, Protocol, SharedConnection};
+pub use crate::connection_pool::{ConnectionKey, ConnectionPool, SharedConnectionPool};
+pub use crate::tcp::{TcpProxy, TcpProxyConfig};
+pub use crate::udp::{UdpProxy, UdpProxyConfig};
+pub use crate::ebpf_integration::{
+    EbpfError, EbpfMaps, EbpfRoutingHandle, EbpfSessionHandle, EbpfStatsHandle, Result as EbpfResult,
+};
+pub use crate::proxy::{Proxy, ProxyConfig, ProxyError};
 
-pub use protocol::ProxyProtocol;
+pub mod connection;
+pub mod connection_pool;
+pub mod ebpf_integration;
+pub mod proxy;
+pub mod tcp;
+pub mod udp;
+
+/// Proxy protocol implementations (Phase 4 placeholder)
+///
+/// This module contains proxy protocol enums that will be
+/// implemented in Phase 4 (Shadowsocks, VLESS, etc.)
+#[allow(unused_imports)]
+pub mod protocol {
+    use tokio::io::{AsyncReadExt, AsyncWriteExt};
+    use tokio::net::TcpStream;
+
+    #[derive(Debug, Clone)]
+    pub enum ProxyProtocol {
+        Http,
+        Socks5,
+        Shadowsocks,
+        VLess,
+        Trojan,
+    }
+
+    impl ProxyProtocol {
+        pub fn name(&self) -> &'static str {
+            match self {
+                ProxyProtocol::Http => "HTTP",
+                ProxyProtocol::Socks5 => "SOCKS5",
+                ProxyProtocol::Shadowsocks => "Shadowsocks",
+                ProxyProtocol::VLess => "VLESS",
+                ProxyProtocol::Trojan => "Trojan",
+            }
+        }
+    }
+
+    /// A proxy connection handler
+    pub struct ProxyHandler {
+        protocol: ProxyProtocol,
+    }
+
+    impl ProxyHandler {
+        pub fn new(protocol: ProxyProtocol) -> Self {
+            Self { protocol }
+        }
+
+        pub fn protocol_name(&self) -> &'static str {
+            self.protocol.name()
+        }
+
+        /// Forward traffic between client and remote
+        pub async fn forward(&self, mut client: TcpStream, remote_addr: &str) -> std::io::Result<()> {
+            let mut remote = TcpStream::connect(remote_addr).await?;
+
+            // Simple byte forwarding (placeholder for actual protocol implementation)
+            let mut buf = vec![0u8; 8192];
+            loop {
+                let n = client.read(&mut buf).await?;
+                if n == 0 {
+                    break;
+                }
+                remote.write_all(&buf[..n]).await?;
+            }
+
+            Ok(())
+        }
+    }
+
+    #[cfg(test)]
+    mod tests {
+        use super::*;
+
+        #[test]
+        fn test_protocol_names() {
+            assert_eq!(ProxyProtocol::Http.name(), "HTTP");
+            assert_eq!(ProxyProtocol::Socks5.name(), "SOCKS5");
+            assert_eq!(ProxyProtocol::Shadowsocks.name(), "Shadowsocks");
+        }
+    }
+}
