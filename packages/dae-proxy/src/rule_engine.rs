@@ -125,13 +125,17 @@ pub enum RuleAction {
     Drop,
     /// No matching rule, use default
     Default,
+    /// Direct connection (explicit direct, not via routing rules)
+    Direct,
+    /// Must direct (force bypass proxy, highest priority direct)
+    MustDirect,
 }
 
 impl RuleAction {
     /// Convert to eBPF routing action
     pub fn to_ebpf_action(&self) -> u8 {
         match self {
-            RuleAction::Pass => 0, // dae_ebpf_common::routing::action::PASS
+            RuleAction::Pass | RuleAction::Direct | RuleAction::MustDirect => 0, // dae_ebpf_common::routing::action::PASS
             RuleAction::Drop => 2, // dae_ebpf_common::routing::action::DROP
             RuleAction::Proxy | RuleAction::Default => 0, // Default to pass for now
         }
