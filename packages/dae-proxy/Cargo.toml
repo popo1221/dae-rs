@@ -20,6 +20,9 @@ ipnet = "2"
 maxminddb = "0.27"
 notify = "7"
 toml = "0.8"
+async-trait = "0.1"
+tokio-tungstenite = "0.21"
+tungstenite = "0.21"
 
 [dev-dependencies]
 tokio-test = "0.4"

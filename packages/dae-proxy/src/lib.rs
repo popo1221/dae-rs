@@ -46,6 +46,8 @@ pub use crate::trojan::{
 };
 pub use crate::rules::{Rule, RuleGroup, RuleMatchAction, RuleType, DomainRule, IpCidrRule, GeoIpRule, ProcessRule, DnsTypeRule};
 pub use crate::rule_engine::{RuleEngine, RuleEngineConfig, RuleEngineStats, RuleAction, PacketInfo, SharedRuleEngine, new_rule_engine};
+pub use crate::core::{Error, Result, Context};
+pub use crate::node::NodeId;
 pub use crate::control::{
     ControlServer, ControlState, ControlCommand, ControlResponse,
     ProxyStatus, ProxyStats, NodeTestResult,
@@ -68,6 +70,16 @@ pub mod trojan;
 pub mod rules;
 pub mod rule_engine;
 pub mod control;
+pub mod transport;
+pub mod core;
+pub mod node;
+
+// Re-export transport types
+pub use transport::{
+    Transport, TcpTransport, WsTransport, WsConnector, WsConfig,
+    TlsTransport, TlsConfig, RealityConfig,
+    GrpcTransport, GrpcConfig,
+};
 
 /// Proxy protocol implementations (Phase 4 placeholder)
 ///
