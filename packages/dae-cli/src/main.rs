@@ -1,29 +1,37 @@
 //! dae-rs CLI entry point
+//!
+//! High-performance transparent proxy in Rust with eBPF integration
 
 use clap::{Parser, Subcommand};
-use dae_proxy::{Proxy, ProxyConfig};
-use dae_proxy::shadowsocks::{SsCipherType, SsServerConfig};
-use dae_proxy::vless::{VlessServerConfig, VlessTlsConfig};
-use dae_proxy::vmess::{VmessServerConfig, VmessSecurity};
-use dae_proxy::trojan::{TrojanServerConfig, TrojanTlsConfig};
-use dae_proxy::rule_engine::{RuleEngine, RuleEngineConfig, new_rule_engine};
+use dae_proxy::{
+    Proxy, ProxyConfig,
+    shadowsocks::{SsCipherType, SsServerConfig},
+    vless::{VlessServerConfig, VlessTlsConfig},
+    vmess::{VmessServerConfig, VmessSecurity},
+    trojan::{TrojanServerConfig, TrojanTlsConfig},
+    rule_engine::{RuleEngine, RuleEngineConfig, new_rule_engine},
+    control::{ControlServer, ControlState, connect_and_send, connect_and_get_status},
+};
 use dae_core::Engine;
+use dae_config::{Config, NodeConfig, NodeType, ProxyConfig as DaeProxyConfig};
 use std::path::PathBuf;
 use std::sync::Arc;
 use std::time::Duration;
+use tokio::signal;
+use tokio::sync::RwLock;
 use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
 
 #[derive(Parser, Debug)]
-#[command(name = "dae-rs")]
-#[command(version, about = "High-performance transparent proxy in Rust")]
+#[command(name = "dae")]
+#[command(version = "0.1.0", about = "High-performance transparent proxy in Rust with eBPF")]
 struct Args {
     /// Enable verbose logging
     #[arg(short, long)]
     verbose: bool,
 
     /// Config file path
-    #[arg(short, long, default_value = "config.toml")]
-    config: String,
+    #[arg(short, long)]
+    config: Option<String>,
 
     #[command(subcommand)]
     command: Option<Commands>,
@@ -32,7 +40,7 @@ struct Args {
 #[derive(Subcommand, Debug)]
 enum Commands {
     /// Run the proxy daemon
-    Proxy {
+    Run {
         /// XDP interface to attach to
         #[arg(long)]
         interface: Option<String>,
@@ -172,9 +180,55 @@ enum Commands {
         /// Rules configuration file path
         #[arg(short, long)]
         rules_config: Option<String>,
+
+        /// Run as daemon
+        #[arg(long, short = 'd')]
+        daemon: bool,
+
+        /// PID file path
+        #[arg(long)]
+        pid_file: Option<String>,
+
+        /// Control socket path
+        #[arg(long, default_value = "/var/run/dae/control.sock")]
+        control_socket: String,
+    },
+    /// Show proxy status and statistics
+    Status {
+        /// Control socket path
+        #[arg(long, default_value = "/var/run/dae/control.sock")]
+        socket: String,
+    },
+    /// Hot reload configuration (send SIGUSR1)
+    Reload {
+        /// Control socket path
+        #[arg(long, default_value = "/var/run/dae/control.sock")]
+        socket: String,
+    },
+    /// Test connectivity to a specific node
+    Test {
+        /// Node name to test
+        #[arg(short, long)]
+        node: String,
+
+        /// Control socket path
+        #[arg(long, default_value = "/var/run/dae/control.sock")]
+        socket: String,
+    },
+    /// Shutdown the proxy daemon
+    Shutdown {
+        /// Control socket path
+        #[arg(long, default_value = "/var/run/dae/control.sock")]
+        socket: String,
+    },
+    /// Validate configuration file
+    Validate {
+        /// Config file path
+        #[arg(short, long)]
+        config: String,
     },
     /// Run in engine mode (default)
-    Run {
+    RunEngine {
         /// Config file path
         #[arg(short, long, default_value = "config.toml")]
         config: String,
@@ -225,7 +279,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         .init();
 
     match args.command {
-        Some(Commands::Proxy {
+        Some(Commands::Run {
             interface,
             xdp_object,
             tcp_listen,
@@ -261,43 +315,62 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             trojan_port,
             trojan_password,
             rules_config,
+            daemon,
+            pid_file,
+            control_socket,
         }) => {
-            tracing::info!("Starting dae-rs proxy mode...");
+            // Try to load config file if specified
+            let config = if let Some(ref config_path) = args.config {
+                match Config::from_file(config_path) {
+                    Ok(cfg) => {
+                        tracing::info!("Loaded configuration from {}", config_path);
+                        Some(cfg)
+                    }
+                    Err(e) => {
+                        eprintln!("Warning: Failed to load config file {}: {}", config_path, e);
+                        None
+                    }
+                }
+            } else {
+                None
+            };
+
+            tracing::info!("Starting dae-rs proxy daemon...");
 
             // Build proxy configuration
             let tcp_addr: std::net::SocketAddr = tcp_listen.parse()?;
             let udp_addr: std::net::SocketAddr = udp_listen.parse()?;
 
-            let mut config = ProxyConfig::default();
-            config.tcp.listen_addr = tcp_addr;
-            config.udp.listen_addr = udp_addr;
-            config.pool.tcp_timeout = Duration::from_secs(connection_timeout);
-            config.pool.udp_timeout = Duration::from_secs(udp_timeout);
+            let mut proxy_config = ProxyConfig::default();
+            proxy_config.tcp.listen_addr = tcp_addr;
+            proxy_config.udp.listen_addr = udp_addr;
+            proxy_config.pool.tcp_timeout = Duration::from_secs(connection_timeout);
+            proxy_config.pool.udp_timeout = Duration::from_secs(udp_timeout);
 
             if let Some(ref iface) = interface {
-                config.xdp_interface = iface.clone();
+                proxy_config.xdp_interface = iface.clone();
             }
             if let Some(ref obj) = xdp_object {
-                config.xdp_object = obj.clone();
+                proxy_config.xdp_object = obj.clone();
             }
             let ebpf_enabled = !no_ebpf;
-            config.ebpf.enabled = ebpf_enabled;
+            proxy_config.ebpf.enabled = ebpf_enabled;
 
             // SOCKS5 listen address
-            config.socks5_listen = socks5_listen.as_ref().map(|s| s.parse().unwrap_or_else(|_| {
+            proxy_config.socks5_listen = socks5_listen.as_ref().map(|s| s.parse().unwrap_or_else(|_| {
                 tracing::warn!("Invalid SOCKS5 listen address: {}, using default", s);
                 std::net::SocketAddr::from(([127, 0, 0, 1], 1080))
             }));
 
             // HTTP proxy listen address
-            config.http_listen = http_listen.as_ref().map(|s| s.parse().unwrap_or_else(|_| {
+            proxy_config.http_listen = http_listen.as_ref().map(|s| s.parse().unwrap_or_else(|_| {
                 tracing::warn!("Invalid HTTP proxy listen address: {}, using default", s);
                 std::net::SocketAddr::from(([127, 0, 0, 1], 8080))
             }));
 
             // HTTP proxy authentication
             if let (Some(username), Some(password)) = (http_username, http_password) {
-                config.http_auth = Some((username, password));
+                proxy_config.http_auth = Some((username, password));
                 tracing::info!("HTTP proxy authentication enabled");
             }
 
@@ -320,8 +393,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                     std::net::SocketAddr::from(([127, 0, 0, 1], 1080))
                 });
 
-                config.ss_listen = Some(ss_listen_addr);
-                config.ss_server = Some(SsServerConfig {
+                proxy_config.ss_listen = Some(ss_listen_addr);
+                proxy_config.ss_server = Some(SsServerConfig {
                     addr: server_addr.clone(),
                     port: ss_port,
                     method,
@@ -331,8 +404,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                 tracing::info!("Shadowsocks enabled: listen={}, server={}:{}, method={}, ota={}",
                     ss_listen_addr, server_addr, ss_port, method, ss_ota);
             } else {
-                config.ss_listen = None;
-                config.ss_server = None;
+                proxy_config.ss_listen = None;
+                proxy_config.ss_server = None;
             }
 
             // VLESS configuration
@@ -350,8 +423,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                     std::net::SocketAddr::from(([127, 0, 0, 1], 1080))
                 });
 
-                config.vless_listen = Some(vless_listen_addr);
-                config.vless_server = Some(VlessServerConfig {
+                proxy_config.vless_listen = Some(vless_listen_addr);
+                proxy_config.vless_server = Some(VlessServerConfig {
                     addr: server_addr.clone(),
                     port: vless_port,
                     uuid,
@@ -368,8 +441,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                 tracing::info!("VLESS enabled: listen={}, server={}:{}",
                     vless_listen_addr, server_addr, vless_port);
             } else {
-                config.vless_listen = None;
-                config.vless_server = None;
+                proxy_config.vless_listen = None;
+                proxy_config.vless_server = None;
             }
 
             // VMess configuration
@@ -391,8 +464,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                     VmessSecurity::Aes128GcmAead
                 });
 
-                config.vmess_listen = Some(vmess_listen_addr);
-                config.vmess_server = Some(VmessServerConfig {
+                proxy_config.vmess_listen = Some(vmess_listen_addr);
+                proxy_config.vmess_server = Some(VmessServerConfig {
                     addr: server_addr.clone(),
                     port: vmess_port,
                     user_id,
@@ -402,8 +475,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                 tracing::info!("VMess enabled: listen={}, server={}:{}, security={}",
                     vmess_listen_addr, server_addr, vmess_port, security);
             } else {
-                config.vmess_listen = None;
-                config.vmess_server = None;
+                proxy_config.vmess_listen = None;
+                proxy_config.vmess_server = None;
             }
 
             // Trojan configuration
@@ -421,8 +494,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                     std::net::SocketAddr::from(([127, 0, 0, 1], 1080))
                 });
 
-                config.trojan_listen = Some(trojan_listen_addr);
-                config.trojan_server = Some(TrojanServerConfig {
+                proxy_config.trojan_listen = Some(trojan_listen_addr);
+                proxy_config.trojan_server = Some(TrojanServerConfig {
                     addr: server_addr.clone(),
                     port: trojan_port,
                     password,
@@ -439,32 +512,33 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                 tracing::info!("Trojan enabled: listen={}, server={}:{}",
                     trojan_listen_addr, server_addr, trojan_port);
             } else {
-                config.trojan_listen = None;
-                config.trojan_server = None;
+                proxy_config.trojan_listen = None;
+                proxy_config.trojan_server = None;
             }
 
-            // Log config before moving
+            // Log config
             tracing::info!("Proxy configuration:");
-            tracing::info!("  TCP listen: {}", config.tcp.listen_addr);
-            tracing::info!("  UDP listen: {}", config.udp.listen_addr);
-            tracing::info!("  XDP interface: {}", config.xdp_interface);
-            tracing::info!("  XDP object: {}", config.xdp_object.display());
-            if let Some(ref socks5) = config.socks5_listen {
+            tracing::info!("  TCP listen: {}", proxy_config.tcp.listen_addr);
+            tracing::info!("  UDP listen: {}", proxy_config.udp.listen_addr);
+            tracing::info!("  XDP interface: {}", proxy_config.xdp_interface);
+            tracing::info!("  XDP object: {}", proxy_config.xdp_object.display());
+            if let Some(ref socks5) = proxy_config.socks5_listen {
                 tracing::info!("  SOCKS5 listen: {}", socks5);
             } else {
                 tracing::info!("  SOCKS5 listen: disabled");
             }
-            if let Some(ref http) = config.http_listen {
+            if let Some(ref http) = proxy_config.http_listen {
                 tracing::info!("  HTTP proxy listen: {}", http);
             } else {
                 tracing::info!("  HTTP proxy listen: disabled");
             }
-            if let Some(ref ss) = config.ss_listen {
+            if let Some(ref ss) = proxy_config.ss_listen {
                 tracing::info!("  Shadowsocks listen: {}", ss);
             } else {
                 tracing::info!("  Shadowsocks: disabled");
             }
             tracing::info!("  eBPF enabled: {}", ebpf_enabled);
+            tracing::info!("  Control socket: {}", control_socket);
 
             // Rules configuration
             if let Some(ref rules_cfg) = rules_config {
@@ -473,25 +547,121 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                 tracing::info!("  Rules config: not specified");
             }
 
+            // Write PID file if requested
+            if let Some(ref pid_path) = pid_file {
+                if let Some(parent) = std::path::Path::new(pid_path).parent() {
+                    std::fs::create_dir_all(parent).ok();
+                }
+                std::fs::write(pid_path, std::process::id().to_string())?;
+                tracing::info!("PID file written to {}", pid_path);
+            }
+
+            // Create control server
+            let control_server = Arc::new(ControlServer::new(&control_socket));
+            let control_state = control_server.state();
+
+            // Start control server
+            let control_server_clone = control_server.clone();
+            tokio::spawn(async move {
+                if let Err(e) = control_server_clone.start().await {
+                    tracing::error!("Control server error: {}", e);
+                }
+            });
+
             // Create and start proxy
-            let proxy = Proxy::new(config).await?;
-            let proxy = std::sync::Arc::new(proxy);
+            let proxy = Proxy::new(proxy_config).await?;
+            let proxy = Arc::new(proxy);
+
+            // Set running state
+            control_state.set_running(true).await;
 
             // Run with signal handling
-            run_proxy_with_signals(proxy).await?;
+            run_proxy_with_signals(proxy, control_state).await?;
         }
-        Some(Commands::Run { config }) => {
+        Some(Commands::Status { socket }) => {
+            match connect_and_send(&socket, "status").await {
+                Ok(response) => {
+                    println!("{}", response);
+                }
+                Err(e) => {
+                    eprintln!("Error connecting to control socket: {}", e);
+                    eprintln!("Is the daemon running?");
+                    std::process::exit(1);
+                }
+            }
+        }
+        Some(Commands::Reload { socket }) => {
+            match connect_and_send(&socket, "reload").await {
+                Ok(response) => {
+                    println!("{}", response);
+                }
+                Err(e) => {
+                    eprintln!("Error connecting to control socket: {}", e);
+                    eprintln!("Is the daemon running?");
+                    std::process::exit(1);
+                }
+            }
+        }
+        Some(Commands::Test { node, socket }) => {
+            let command = format!("test {}", node);
+            match connect_and_send(&socket, &command).await {
+                Ok(response) => {
+                    println!("{}", response);
+                }
+                Err(e) => {
+                    eprintln!("Error connecting to control socket: {}", e);
+                    eprintln!("Is the daemon running?");
+                    std::process::exit(1);
+                }
+            }
+        }
+        Some(Commands::Shutdown { socket }) => {
+            match connect_and_send(&socket, "shutdown").await {
+                Ok(response) => {
+                    println!("{}", response);
+                }
+                Err(e) => {
+                    eprintln!("Error connecting to control socket: {}", e);
+                    eprintln!("Is the daemon running?");
+                    std::process::exit(1);
+                }
+            }
+        }
+        Some(Commands::Validate { config }) => {
+            match Config::from_file(&config) {
+                Ok(cfg) => {
+                    match cfg.validate() {
+                        Ok(_) => {
+                            println!("Configuration file '{}' is valid", config);
+                            println!("  SOCKS5 listen: {}", cfg.proxy.socks5_listen);
+                            println!("  HTTP listen: {}", cfg.proxy.http_listen);
+                            println!("  eBPF interface: {}", cfg.proxy.ebpf_interface);
+                            println!("  Nodes configured: {}", cfg.nodes.len());
+                            if let Some(ref rules_file) = cfg.rules.config_file {
+                                println!("  Rules file: {}", rules_file);
+                            }
+                        }
+                        Err(e) => {
+                            eprintln!("Configuration validation failed: {}", e);
+                            std::process::exit(1);
+                        }
+                    }
+                }
+                Err(e) => {
+                    eprintln!("Failed to parse configuration: {}", e);
+                    std::process::exit(1);
+                }
+            }
+        }
+        Some(Commands::RunEngine { config }) => {
             tracing::info!("dae-rs starting in engine mode...");
             tracing::info!("dae-rs running with config: {}", config);
 
             let engine = Engine::new();
             engine.start().await;
 
-            // Keep running
-            tokio::signal::ctrl_c().await?;
-
-            engine.stop().await;
-            tracing::info!("dae-rs shutting down");
+            // Keep running with signal handling
+            run_engine_with_signals(engine).await;
         }
         None => {
             tracing::info!("dae-rs starting in engine mode...");
@@ -499,11 +669,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             let engine = Engine::new();
             engine.start().await;
 
-            // Keep running
-            tokio::signal::ctrl_c().await?;
-
-            engine.stop().await;
-            tracing::info!("dae-rs shutting down");
+            // Keep running with signal handling
+            run_engine_with_signals(engine).await;
         }
         Some(Commands::Rules { command }) => {
             match command {
@@ -574,10 +741,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     Ok(())
 }
 
-/// Run proxy with graceful shutdown on SIGTERM/SIGINT
-async fn run_proxy_with_signals(proxy: std::sync::Arc<Proxy>) -> std::io::Result<()> {
-    use tokio::signal;
-
+/// Run proxy with graceful shutdown on SIGTERM/SIGINT/SIGUSR1
+async fn run_proxy_with_signals(proxy: Arc<Proxy>, control_state: Arc<ControlState>) -> std::io::Result<()> {
     // Spawn proxy task
     let proxy_for_handle = proxy.clone();
     let proxy_handle = tokio::spawn(async move {
@@ -594,10 +759,27 @@ async fn run_proxy_with_signals(proxy: std::sync::Arc<Proxy>) -> std::io::Result
             }
         }
         _ = signal::ctrl_c() => {
-            tracing::info!("Received Ctrl+C, shutting down...");
+            tracing::info!("Received Ctrl+C, shutting down gracefully...");
+            control_state.set_running(false).await;
             proxy.stop().await;
         }
     }
 
+    // Wait a bit for graceful cleanup
+    tokio::time::sleep(Duration::from_secs(1)).await;
+
+    tracing::info!("Proxy shutdown complete");
     Ok(())
+}
+
+/// Run engine with signal handling
+async fn run_engine_with_signals(mut engine: Engine) {
+    tokio::select! {
+        _ = tokio::signal::ctrl_c() => {
+            tracing::info!("Received Ctrl+C, shutting down...");
+        }
+    }
+
+    engine.stop().await;
+    tracing::info!("dae-rs shutting down");
 }

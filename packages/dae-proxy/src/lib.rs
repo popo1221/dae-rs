@@ -46,6 +46,11 @@ pub use crate::trojan::{
 };
 pub use crate::rules::{Rule, RuleGroup, RuleMatchAction, RuleType, DomainRule, IpCidrRule, GeoIpRule, ProcessRule, DnsTypeRule};
 pub use crate::rule_engine::{RuleEngine, RuleEngineConfig, RuleEngineStats, RuleAction, PacketInfo, SharedRuleEngine, new_rule_engine};
+pub use crate::control::{
+    ControlServer, ControlState, ControlCommand, ControlResponse,
+    ProxyStatus, ProxyStats, NodeTestResult,
+    connect_and_send, connect_and_get_status,
+};
 
 pub mod connection;
 pub mod connection_pool;
@@ -62,6 +67,7 @@ pub mod vmess;
 pub mod trojan;
 pub mod rules;
 pub mod rule_engine;
+pub mod control;
 
 /// Proxy protocol implementations (Phase 4 placeholder)
 ///
