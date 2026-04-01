@@ -1,0 +1,16 @@
+[workspace]
+members = [
+    "packages/dae-core",
+    "packages/dae-cli",
+    "packages/dae-config",
+    "packages/dae-proxy",
+]
+
+[profile.dev]
+opt-level = 0
+debug = true
+
+[profile.release]
+lto = true
+codegen-units = 1
+panic = "abort"

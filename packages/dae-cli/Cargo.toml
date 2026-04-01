@@ -1,0 +1,15 @@
+[package]
+name = "dae-cli"
+version = "0.1.0"
+edition = "2021"
+description = "CLI for dae-rs"
+
+[dependencies]
+dae-core = { path = "../dae-core" }
+tokio = { version = "1", features = ["full"] }
+clap = { version = "4", features = ["derive"] }
+tracing = "0.1"
+tracing-subscriber = "0.3"
+
+[dev-dependencies]
+assert_cmd = "2"
