@@ -10,6 +10,7 @@ use aya_ebpf::programs::XdpContext;
 pub mod ethertype {
     pub const IPV4: u16 = 0x0800;
     pub const IPV6: u16 = 0x86DD;
+    pub const VLAN: u16 = 0x8100;
 }
 
 /// IP protocol numbers
@@ -26,6 +27,15 @@ pub struct EthHdr {
     pub dst: [u8; 6],
     pub src: [u8; 6],
     pub ether_type: u16,
+}
+
+/// IEEE 802.1Q VLAN tag header (4 bytes)
+/// Present when EtherType is 0x8100 (VLAN)
+#[derive(Clone, Copy, Debug)]
+#[repr(C)]
+pub struct VlanHdr {
+    pub tpid: u16,  // Tag Protocol Identifier (0x8100)
+    pub tci: u16,   // Tag Control Information (VLAN ID, PCP, DEI)
 }
 
 impl EthHdr {
@@ -56,6 +66,46 @@ impl EthHdr {
     #[allow(dead_code)]
     pub fn is_ipv6(&self) -> bool {
         self.ether_type() == ethertype::IPV6
+    }
+
+    /// Check if this has a VLAN tag (EtherType is 0x8100)
+    #[allow(dead_code)]
+    pub fn has_vlan(&self) -> bool {
+        self.ether_type() == ethertype::VLAN
+    }
+
+    /// Get source MAC address as byte array
+    #[allow(dead_code)]
+    pub fn src_mac(&self) -> [u8; 6] {
+        self.src
+    }
+}
+
+impl VlanHdr {
+    /// Parse VLAN header from context (after Ethernet header)
+    pub fn from_ctx_after_eth(ctx: &XdpContext, eth_offset: usize) -> Option<*const VlanHdr> {
+        let data = ctx.data();
+        let data_end = ctx.data_end();
+
+        let ptr = unsafe {
+            (data as *const u8).add(eth_offset) as *const VlanHdr
+        };
+        if ptr as usize + core::mem::size_of::<VlanHdr>() > data_end {
+            return None;
+        }
+        Some(ptr)
+    }
+
+    /// Get the actual EtherType after VLAN tag (network byte order)
+    #[allow(dead_code)]
+    pub fn inner_ether_type(&self) -> u16 {
+        u16::from_be(self.tci) & 0xFFFF
+    }
+
+    /// Get VLAN ID from TCI
+    #[allow(dead_code)]
+    pub fn vlan_id(&self) -> u16 {
+        u16::from_be(self.tci) & 0x0FFF
     }
 }
 

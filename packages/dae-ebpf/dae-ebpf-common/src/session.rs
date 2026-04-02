@@ -41,7 +41,9 @@ pub struct SessionEntry {
     /// Connection state (0=NEW, 1=ESTABLISHED, 2=CLOSED)
     pub state: u8,
     /// Reserved for padding
-    reserved1: [u8; 3],
+    reserved1: [u8; 1],
+    /// Source MAC address length (0 = not set, 6 = valid)
+    pub src_mac_len: u8,
     /// Marked packet count
     pub packets: u64,
     /// Total bytes transferred
@@ -52,8 +54,8 @@ pub struct SessionEntry {
     pub last_time: u64,
     /// Routing decision for this session
     pub route_id: u32,
-    /// Reserved for future use
-    pub reserved2: [u8; 8],
+    /// Source MAC address (network byte order)
+    pub src_mac: [u8; 6],
 }
 
 /// Connection states

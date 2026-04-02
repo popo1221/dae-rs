@@ -22,6 +22,8 @@ pub enum RuleType {
     Process,
     /// DNS query type match
     DnsType,
+    /// Node capability match (fullcone, udp, v2ray)
+    Capability,
 }
 
 /// Domain rule types
@@ -294,6 +296,66 @@ impl DnsTypeRule {
     }
 }
 
+/// Node capability type
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum CapabilityType {
+    /// Full-Cone NAT capability
+    FullCone,
+    /// UDP protocol support
+    Udp,
+    /// V2Ray compatibility
+    V2Ray,
+}
+
+/// A node capability rule
+#[derive(Debug, Clone)]
+pub struct CapabilityRule {
+    /// Capability type to match
+    pub capability: CapabilityType,
+    /// Expected value (true/false)
+    pub expected_value: bool,
+}
+
+impl CapabilityRule {
+    /// Create a new capability rule from type string and value
+    ///
+    /// Supported formats:
+    /// - "fullcone" or "fullcone(true)" or "fullcone(enabled)" -> FullCone with true
+    /// - "fullcone(false)" or "fullcone(disabled)" -> FullCone with false
+    /// - "udp" or "udp(true)" -> Udp with true
+    /// - "v2ray" or "v2ray(compatible)" -> V2Ray with true
+    pub fn new(capability_str: &str, value_str: &str) -> Result<Self, String> {
+        let capability = match capability_str.to_lowercase().as_str() {
+            "fullcone" | "full-cone" => CapabilityType::FullCone,
+            "udp" => CapabilityType::Udp,
+            "v2ray" | "v2ray(compatible)" => CapabilityType::V2Ray,
+            _ => return Err(format!("Unknown capability type: {capability_str}")),
+        };
+
+        let expected_value = match value_str.to_lowercase().as_str() {
+            "true" | "1" | "enabled" | "compatible" => true,
+            "false" | "0" | "disabled" => false,
+            _ => return Err(format!("Invalid capability value: {value_str}")),
+        };
+
+        Ok(Self {
+            capability,
+            expected_value,
+        })
+    }
+
+    /// Check if this rule matches the given packet info
+    pub fn matches_packet(&self, info: &PacketInfo) -> bool {
+        // Get the actual capability value from packet info
+        let actual_value = match self.capability {
+            CapabilityType::FullCone => info.node_fullcone.unwrap_or(false),
+            CapabilityType::Udp => info.node_udp.unwrap_or(true),
+            CapabilityType::V2Ray => info.node_v2ray.unwrap_or(true),
+        };
+        actual_value == self.expected_value
+    }
+}
+
 /// Rule action for configuration
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum RuleMatchAction {
@@ -329,6 +391,8 @@ pub enum Rule {
     Process(ProcessRule),
     /// DNS type rule
     DnsType(DnsTypeRule),
+    /// Node capability rule
+    Capability(CapabilityRule),
 }
 
 impl Rule {
@@ -355,6 +419,16 @@ impl Rule {
             "dnstype" | "dns-type" | "dns" => {
                 let types: Vec<&str> = value.split(',').map(|s| s.trim()).collect();
                 Rule::DnsType(DnsTypeRule::new(&types)?)
+            }
+            // Node capability rules
+            "fullcone" | "full-cone" | "fullcone(enabled)" => {
+                Rule::Capability(CapabilityRule::new("fullcone", value)?)
+            }
+            "udp" | "udp(enabled)" => {
+                Rule::Capability(CapabilityRule::new("udp", value)?)
+            }
+            "v2ray" | "v2ray(compatible)" => {
+                Rule::Capability(CapabilityRule::new("v2ray", value)?)
             }
             _ => return Err(format!("Unknown rule type: {rule_type_str}")),
         };
@@ -399,6 +473,7 @@ impl Rule {
                     false
                 }
             }
+            Rule::Capability(r) => r.matches_packet(info),
         }
     }
 }

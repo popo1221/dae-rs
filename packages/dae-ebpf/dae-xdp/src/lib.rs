@@ -14,7 +14,7 @@ use aya_ebpf::maps::lpm_trie::Key;
 use aya_ebpf::maps::{Array, HashMap, LpmTrie, PerCpuArray};
 use aya_ebpf::programs::XdpContext;
 
-use dae_ebpf_common::{action, ConfigEntry, RoutingEntry, SessionEntry, SessionKey, StatsEntry};
+use dae_ebpf_common::{action, state, ConfigEntry, RoutingEntry, SessionEntry, SessionKey, StatsEntry};
 
 mod utils;
 
@@ -60,14 +60,39 @@ fn xdp_prog(ctx: &mut XdpContext) -> Result<u32, ()> {
         }
     };
 
+    // Extract source MAC address for LAN traffic classification
+    let src_mac = eth.src_mac();
+
+    // Handle MACv2 extension (VLAN tagging)
+    // When VLAN tag is present (EtherType = 0x8100), the actual protocol
+    // type is after the 4-byte VLAN tag, and IP header starts at offset 18
+    let (ip_offset, is_ipv4) = if eth.has_vlan() {
+        // VLAN tag present, check inner EtherType
+        let vlan = match VlanHdr::from_ctx_after_eth(ctx, core::mem::size_of::<EthHdr>()) {
+            Some(hdr) => unsafe { *hdr },
+            None => {
+                return Ok(XDP_PASS);
+            }
+        };
+        let inner_ethertype = vlan.inner_ether_type();
+        // Inner EtherType is in lower 16 bits of TCI
+        let actual_ethertype = inner_ethertype;
+        // After EthHdr (14 bytes) + VlanHdr (4 bytes) = 18 bytes
+        (core::mem::size_of::<EthHdr>() + core::mem::size_of::<VlanHdr>(),
+         actual_ethertype == ethertype::IPV4)
+    } else {
+        // No VLAN tag
+        (core::mem::size_of::<EthHdr>(), eth.is_ipv4())
+    };
+
     // Check if IPv4 (we only support IPv4 for now)
-    if !eth.is_ipv4() {
+    if !is_ipv4 {
         // Pass non-IPv4 packets
         return Ok(XDP_PASS);
     }
 
-    // Parse IPv4 header (Ethernet header is 14 bytes)
-    let ip = match IpHdr::from_ctx_after_eth(ctx, core::mem::size_of::<EthHdr>()) {
+    // Parse IPv4 header
+    let ip = match IpHdr::from_ctx_after_eth(ctx, ip_offset) {
         Some(hdr) => unsafe { *hdr },
         None => {
             return Ok(XDP_PASS);
@@ -79,8 +104,37 @@ fn xdp_prog(ctx: &mut XdpContext) -> Result<u32, ()> {
         return Ok(XDP_PASS);
     }
 
-    // Get destination IP for routing lookup
+    // Get source MAC and destination IP for routing lookup
+    let src_ip = ip.src_addr();
     let dst_ip = ip.dst_addr();
+
+    // Create session key
+    let session_key = SessionKey::new(src_ip, dst_ip, 0, 0, ip.protocol());
+
+    // Look up or create session entry with MAC information
+    let session = match unsafe { SESSIONS.get(&session_key) } {
+        Some(entry) => {
+            // Update existing session, preserve MAC if already set
+            let mut updated = *entry;
+            if updated.src_mac_len == 0 {
+                updated.src_mac = src_mac;
+                updated.src_mac_len = 6;
+            }
+            updated
+        }
+        None => {
+            // Create new session with MAC
+            let mut session = SessionEntry::default();
+            session.state = state::NEW;
+            session.src_mac_len = 6;
+            session.src_mac = src_mac;
+            session.packets = 1;
+            session
+        }
+    };
+
+    // Store session (ignore errors for now)
+    let _ = SESSIONS.insert(&session_key, &session, 0);
 
     // Look up routing decision
     let route = match lookup_routing(dst_ip) {
@@ -90,6 +144,11 @@ fn xdp_prog(ctx: &mut XdpContext) -> Result<u32, ()> {
             return Ok(XDP_PASS);
         }
     };
+
+    // Update session with routing decision
+    let mut updated_session = session;
+    updated_session.route_id = route.route_id;
+    let _ = SESSIONS.insert(&session_key, &updated_session, 0);
 
     // Handle based on routing action
     match route.action {
