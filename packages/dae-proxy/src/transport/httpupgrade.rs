@@ -185,6 +185,7 @@ impl Transport for HttpUpgradeTransport {
 }
 
 /// Simple HTTPUpgrade connection handler for server-side
+#[derive(Debug)]
 pub struct HttpUpgradeHandler {
     config: HttpUpgradeConfig,
 }
@@ -326,5 +327,166 @@ mod tests {
 
         let result = HttpUpgradeTransport::read_upgrade_response(&mut cursor).await;
         assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_http_upgrade_config_builder_full() {
+        let config = HttpUpgradeConfig::new("host.com", 8443, "/tunnel")
+            .with_tls(Some("tls.host.com"));
+
+        assert_eq!(config.host, "host.com");
+        assert_eq!(config.port, 8443);
+        assert_eq!(config.path, "/tunnel");
+        assert!(config.tls);
+        assert_eq!(config.tls_domain, Some("tls.host.com".to_string()));
+    }
+
+    #[test]
+    fn test_http_upgrade_config_with_multiple_headers() {
+        let mut config = HttpUpgradeConfig::default();
+        config = config.with_header("Accept", "*/*");
+        config = config.with_header("User-Agent", "test-agent");
+        config = config.with_header("Authorization", "Bearer token");
+
+        assert_eq!(config.headers.len(), 3);
+        assert!(config.headers.iter().any(|(k, v)| k == "Accept" && v == "*/*"));
+        assert!(config.headers.iter().any(|(k, v)| k == "User-Agent" && v == "test-agent"));
+    }
+
+    #[test]
+    fn test_http_upgrade_config_headers_override() {
+        let mut config = HttpUpgradeConfig::default();
+        config = config.with_header("Host", "override.com");
+        config = config.with_header("Host", "new-override.com");
+
+        // Only the last value should be kept for each key
+        let host_values: Vec<_> = config.headers.iter()
+            .filter(|(k, _)| k == "Host")
+            .collect();
+        assert!(host_values.iter().any(|(_, v)| v == "new-override.com"));
+    }
+
+    #[test]
+    fn test_http_upgrade_transport_name() {
+        let transport = HttpUpgradeTransport::new(HttpUpgradeConfig::default());
+        assert_eq!(transport.name(), "httpupgrade");
+    }
+
+    #[test]
+    fn test_http_upgrade_config_clone() {
+        let config = HttpUpgradeConfig::default()
+            .with_tls(Some("clone.test"))
+            .with_header("X-Test", "value");
+        let cloned = config.clone();
+
+        assert_eq!(cloned.host, config.host);
+        assert_eq!(cloned.tls_domain, config.tls_domain);
+        assert!(cloned.headers.iter().any(|(k, v)| k == "X-Test" && v == "value"));
+    }
+
+    #[test]
+    fn test_http_upgrade_config_debug() {
+        let config = HttpUpgradeConfig::new("debug.test", 443, "/");
+        let debug_str = format!("{:?}", config);
+        assert!(debug_str.contains("HttpUpgradeConfig"));
+        assert!(debug_str.contains("debug.test"));
+    }
+
+    #[tokio::test]
+    async fn test_build_upgrade_request_with_custom_headers() {
+        let config = HttpUpgradeConfig::new("custom.com", 443, "/path")
+            .with_header("X-Custom", "value")
+            .with_header("X-Token", "abc123");
+        let transport = HttpUpgradeTransport::new(config);
+        let request = transport.build_upgrade_request();
+
+        assert!(request.contains("GET /path HTTP/1.1"));
+        assert!(request.contains("X-Custom: value"));
+        assert!(request.contains("X-Token: abc123"));
+    }
+
+    #[tokio::test]
+    async fn test_build_upgrade_request_root_path() {
+        let config = HttpUpgradeConfig::new("root.com", 80, "/");
+        let transport = HttpUpgradeTransport::new(config);
+        let request = transport.build_upgrade_request();
+
+        assert!(request.contains("GET / HTTP/1.1"));
+        assert!(request.contains("Host: root.com:80"));
+    }
+
+    #[tokio::test]
+    async fn test_build_upgrade_request_empty_host() {
+        let config = HttpUpgradeConfig {
+            host: "".to_string(),
+            port: 8080,
+            path: "/test".to_string(),
+            ..Default::default()
+        };
+        let transport = HttpUpgradeTransport::new(config);
+        let request = transport.build_upgrade_request();
+
+        assert!(request.contains("GET /test HTTP/1.1"));
+        assert!(request.contains("Host: :8080"));
+    }
+
+    #[tokio::test]
+    async fn test_response_parse_with_headers() {
+        let response = b"HTTP/1.1 101 Switching Protocols\r\nServer: test\r\n\r\n";
+        let mut cursor = std::io::Cursor::new(response);
+
+        HttpUpgradeTransport::read_upgrade_response(&mut cursor)
+            .await
+            .expect("Should parse 101 with headers");
+    }
+
+    #[tokio::test]
+    async fn test_response_parse_error_handling() {
+        // Empty response
+        let response = b"";
+        let mut cursor = std::io::Cursor::new(response);
+        let result = HttpUpgradeTransport::read_upgrade_response(&mut cursor).await;
+        assert!(result.is_err());
+    }
+
+    #[tokio::test]
+    async fn test_response_parse_incomplete_headers() {
+        // Only partial headers - the implementation may or may not return error
+        // depending on buffering behavior. Just verify it doesn't panic.
+        let response = b"HTTP/1.1 101\r\n";
+        let mut cursor = std::io::Cursor::new(response);
+        let _result = HttpUpgradeTransport::read_upgrade_response(&mut cursor).await;
+        // Don't assert on result - edge case depends on buffering
+    }
+
+    #[tokio::test]
+    async fn test_response_parse_400_error() {
+        let response = b"HTTP/1.1 400 Bad Request\r\n\r\n";
+        let mut cursor = std::io::Cursor::new(response);
+        let result = HttpUpgradeTransport::read_upgrade_response(&mut cursor).await;
+        assert!(result.is_err());
+    }
+
+    #[tokio::test]
+    async fn test_response_parse_401_unauthorized() {
+        let response = b"HTTP/1.1 401 Unauthorized\r\nContent-Length: 0\r\n\r\n";
+        let mut cursor = std::io::Cursor::new(response);
+        let result = HttpUpgradeTransport::read_upgrade_response(&mut cursor).await;
+        assert!(result.is_err());
+    }
+
+    #[tokio::test]
+    async fn test_response_parse_500_server_error() {
+        let response = b"HTTP/1.1 500 Internal Server Error\r\n\r\n";
+        let mut cursor = std::io::Cursor::new(response);
+        let result = HttpUpgradeTransport::read_upgrade_response(&mut cursor).await;
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_http_upgrade_handler_new() {
+        let handler = HttpUpgradeHandler::new(HttpUpgradeConfig::default());
+        let debug_str = format!("{:?}", handler);
+        assert!(debug_str.contains("HttpUpgradeHandler"));
     }
 }

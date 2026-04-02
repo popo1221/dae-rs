@@ -552,4 +552,163 @@ mod tests {
 
         assert_eq!(config.tactic, MeekTactic::Gimmie);
     }
+
+    #[test]
+    fn test_meek_config_clone() {
+        let config = MeekConfig::default()
+            .with_tactic(MeekTactic::Https)
+            .with_sni("clone.test");
+        let cloned = config.clone();
+
+        assert_eq!(cloned.tactic, config.tactic);
+        assert_eq!(cloned.sni, config.sni);
+    }
+
+    #[test]
+    fn test_meek_config_debug() {
+        let config = MeekConfig::default();
+        let debug_str = format!("{:?}", config);
+        assert!(debug_str.contains("MeekConfig"));
+    }
+
+    #[test]
+    fn test_meek_transport_new() {
+        let transport = MeekTransport::new(MeekConfig::default());
+        assert_eq!(transport.name(), "meek");
+    }
+
+    #[test]
+    fn test_meek_transport_with_azure_front() {
+        let transport = MeekTransport::with_azure_front("www.microsoft.com");
+        assert_eq!(transport.config.front_domain, "www.microsoft.com");
+        assert_eq!(transport.config.tactic, MeekTactic::Snia);
+    }
+
+    #[test]
+    fn test_meek_transport_with_cloudflare_front() {
+        let transport = MeekTransport::with_cloudflare_front("www.cloudflare.com");
+        assert_eq!(transport.config.front_domain, "www.cloudflare.com");
+        assert_eq!(transport.config.tactic, MeekTactic::Bytepolding);
+    }
+
+    #[test]
+    fn test_tactic_all_variants() {
+        assert_eq!(MeekTactic::Http.to_string(), "http");
+        assert_eq!(MeekTactic::Https.to_string(), "https");
+        assert_eq!(MeekTactic::Bytepolding.to_string(), "bytepolding");
+        assert_eq!(MeekTactic::Snia.to_string(), "snia");
+        assert_eq!(MeekTactic::Patterns.to_string(), "patterns");
+        assert_eq!(MeekTactic::Gimmie.to_string(), "gimmie");
+        assert_eq!(MeekTactic::Redirect.to_string(), "redirect");
+    }
+
+    #[test]
+    fn test_tactic_default() {
+        let tactic = MeekTactic::default();
+        assert!(matches!(tactic, MeekTactic::Bytepolding));
+    }
+
+    #[test]
+    fn test_meek_config_custom_padding() {
+        let config = MeekConfig {
+            padding_size: 4096,
+            ..Default::default()
+        };
+        assert_eq!(config.padding_size, 4096);
+    }
+
+    #[test]
+    fn test_meek_config_session_ticket_id() {
+        let ticket_id = vec![0x01, 0x02, 0x03, 0x04];
+        let config = MeekConfig {
+            session_ticket_id: Some(ticket_id.clone()),
+            ..Default::default()
+        };
+        assert_eq!(config.session_ticket_id, Some(ticket_id));
+    }
+
+    #[test]
+    fn test_meek_config_timeout() {
+        let config = MeekConfig {
+            timeout: std::time::Duration::from_secs(60),
+            ..Default::default()
+        };
+        assert_eq!(config.timeout, std::time::Duration::from_secs(60));
+    }
+
+    #[test]
+    fn test_build_simple_request_with_path() {
+        let request = MeekTransport::build_simple_request("test.com", "/api/v1/resource");
+        let request_str = String::from_utf8_lossy(&request);
+        assert!(request_str.contains("GET /api/v1/resource HTTP/1.1"));
+        assert!(request_str.contains("Host: test.com"));
+    }
+
+    #[test]
+    fn test_build_simple_request_contains_user_agent() {
+        let request = MeekTransport::build_simple_request("ua.test.com", "/");
+        let request_str = String::from_utf8_lossy(&request);
+        assert!(request_str.contains("User-Agent: Mozilla/5.0"));
+    }
+
+    #[test]
+    fn test_build_simple_request_contains_accept() {
+        let request = MeekTransport::build_simple_request("accept.test.com", "/");
+        let request_str = String::from_utf8_lossy(&request);
+        assert!(request_str.contains("Accept: */*"));
+    }
+
+    #[test]
+    fn test_build_simple_request_connection_close() {
+        let request = MeekTransport::build_simple_request("conn.test.com", "/");
+        let request_str = String::from_utf8_lossy(&request);
+        assert!(request_str.contains("Connection: keep-alive"));
+    }
+
+    #[test]
+    fn test_meek_session_new() {
+        let session = MeekSession::new(MeekTransport::new(MeekConfig::default()));
+        let debug_str = format!("{:?}", session);
+        assert!(debug_str.contains("MeekSession"));
+    }
+
+    #[test]
+    fn test_meek_config_azure_with_custom_front() {
+        let config = MeekConfig::azure("custom.azure.front.com");
+        assert_eq!(config.front_domain, "custom.azure.front.com");
+        assert_eq!(config.server_host, "meek-reflect.appspot.com");
+        assert!(config.tls);
+    }
+
+    #[test]
+    fn test_meek_config_cloudflare_with_custom_front() {
+        let config = MeekConfig::cloudflare("custom.cf.front.com");
+        assert_eq!(config.front_domain, "custom.cf.front.com");
+        assert_eq!(config.server_host, "sni.cloudflarert.com");
+        assert!(config.tls);
+    }
+
+    #[test]
+    fn test_meek_config_with_path_prefix() {
+        let config = MeekConfig::default().with_path_prefix("/tunnel/path");
+        assert_eq!(config.path_prefix, "/tunnel/path");
+    }
+
+    #[test]
+    fn test_meek_config_path_prefix_default() {
+        let config = MeekConfig::default();
+        assert_eq!(config.path_prefix, "/");
+    }
+
+    #[test]
+    fn test_tls_sni_defaults_to_front() {
+        let config = MeekConfig::default();
+        assert_eq!(config.tls_sni(), config.front_domain);
+    }
+
+    #[test]
+    fn test_tls_sni_custom_overrides_front() {
+        let config = MeekConfig::default().with_sni("override.sni.com");
+        assert_eq!(config.tls_sni(), "override.sni.com");
+    }
 }

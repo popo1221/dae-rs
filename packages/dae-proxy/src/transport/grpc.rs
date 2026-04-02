@@ -458,4 +458,117 @@ mod tests {
         assert_eq!(frame[3], 0x0); // DATA
         assert_eq!(frame[4], 0x1); // END_STREAM
     }
+
+    #[test]
+    fn test_grpc_config_with_service() {
+        let config = GrpcConfig::default().with_service("CustomService");
+        assert_eq!(config.service_name, "CustomService");
+        assert_eq!(config.path(), "CustomService/WebSocket/Tunnel");
+    }
+
+    #[test]
+    fn test_grpc_config_with_method() {
+        let config = GrpcConfig::default().with_method("/Custom/Method");
+        assert_eq!(config.method_name, "/Custom/Method");
+        assert_eq!(config.path(), "grpc.WebSocket/Custom/Method");
+    }
+
+    #[test]
+    fn test_grpc_config_clone() {
+        let config = GrpcConfig::default()
+            .with_service("clone.test")
+            .with_insecure();
+        let cloned = config.clone();
+
+        assert_eq!(cloned.service_name, config.service_name);
+        assert_eq!(cloned.insecure, config.insecure);
+    }
+
+    #[test]
+    fn test_grpc_config_debug() {
+        let config = GrpcConfig::new("debug.test", 8443);
+        let debug_str = format!("{:?}", config);
+        assert!(debug_str.contains("GrpcConfig"));
+        assert!(debug_str.contains("debug.test"));
+    }
+
+    #[test]
+    fn test_build_settings_frame_format() {
+        let frame = GrpcTransport::build_settings_frame();
+        // Frame format: 3 bytes length + 1 byte type + 1 byte flags + 4 bytes stream ID
+        assert_eq!(frame.len(), 9);
+
+        // Verify HTTP/2 frame header structure
+        assert_eq!(frame[0], 0); // Length high byte
+        assert_eq!(frame[1], 0); // Length mid byte
+        assert_eq!(frame[2], 0); // Length low byte (0 length for SETTINGS with ACK)
+    }
+
+    #[test]
+    fn test_build_data_frame_with_different_stream_id() {
+        let data = b"test";
+        let frame1 = GrpcTransport::build_data_frame(1, data, false);
+        let frame2 = GrpcTransport::build_data_frame(2, data, false);
+
+        // Both should have same length but different stream IDs in header
+        assert_eq!(frame1.len(), frame2.len());
+    }
+
+    #[test]
+    fn test_build_data_frame_without_end_stream() {
+        let data = b"chunk";
+        let frame = GrpcTransport::build_data_frame(1, data, false);
+
+        // Without END_STREAM flag, flags byte should be 0
+        assert_eq!(frame[4], 0x0); // No END_STREAM
+    }
+
+    #[test]
+    fn test_build_data_frame_empty_data() {
+        let data = b"";
+        let frame = GrpcTransport::build_data_frame(1, data, true);
+
+        // Even empty data should have HTTP/2 frame overhead
+        assert!(frame.len() >= 9);
+        assert_eq!(frame[3], 0x0); // DATA frame type
+    }
+
+    #[test]
+    fn test_build_window_update_frame() {
+        let frame = GrpcTransport::build_window_update(65535);
+
+        // WINDOW_UPDATE frame: length=4, type=9, flags=0, stream=0, increment=65535
+        assert_eq!(frame.len(), 13);
+        assert_eq!(frame[3], 0x9); // WINDOW_UPDATE
+        assert_eq!(frame[4], 0x0); // No flags
+    }
+
+    #[test]
+    fn test_grpc_transport_new() {
+        let transport = GrpcTransport::new("new.test", 443);
+        assert_eq!(transport.config.host, "new.test");
+        assert_eq!(transport.config.port, 443);
+    }
+
+    #[test]
+    fn test_grpc_transport_with_config() {
+        let config = GrpcConfig::new("config.test", 8080);
+        let transport = GrpcTransport::with_config(config.clone());
+        assert_eq!(transport.config.host, config.host);
+    }
+
+    #[test]
+    fn test_grpc_client_new() {
+        let client = GrpcClient::new(GrpcConfig::default());
+        let debug_str = format!("{:?}", client);
+        assert!(debug_str.contains("GrpcClient"));
+    }
+
+    #[test]
+    fn test_grpc_config_path_special_chars() {
+        let config = GrpcConfig::default()
+            .with_service("Service.With.Dots")
+            .with_method("/method/with/slashes");
+        assert_eq!(config.path(), "Service.With.Dots/method/with/slashes");
+    }
 }

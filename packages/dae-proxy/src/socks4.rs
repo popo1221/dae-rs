@@ -605,4 +605,62 @@ mod tests {
             "request rejected"
         );
     }
+
+    #[test]
+    fn test_socks4_command_from_u8_exhaustive() {
+        // Test all valid command codes
+        assert!(Socks4Command::from_u8(0x01).is_some());
+        assert!(Socks4Command::from_u8(0x02).is_some());
+        // Test invalid command codes
+        assert!(Socks4Command::from_u8(0x00).is_none());
+        assert!(Socks4Command::from_u8(0x03).is_none());
+        assert!(Socks4Command::from_u8(0xFF).is_none());
+    }
+
+    #[tokio::test]
+    async fn test_socks4_request_parse_bind() {
+        let request = vec![
+            0x04,
+            0x02, // CMD BIND
+            0x00, 0x50, // DSTPORT: 80
+            0x00, 0x00, 0x00, 0x00, // DSTIP: 0.0.0.0 (will be determined later)
+            0x75, 0x73, 0x65, 0x72, 0x00, // USERID
+        ];
+
+        let mut cursor = std::io::Cursor::new(request);
+        let parsed = Socks4Request::parse(&mut cursor).await.unwrap();
+        assert!(matches!(parsed.command, Socks4Command::Bind));
+    }
+
+    #[tokio::test]
+    async fn test_socks4_request_parse_empty_user_id() {
+        let request = vec![
+            0x04,
+            0x01,
+            0x00, 0x50,
+            0xC0, 0xA8, 0x01, 0x01,
+            0x00, // Empty user ID (just null terminator)
+        ];
+
+        let mut cursor = std::io::Cursor::new(request);
+        let parsed = Socks4Request::parse(&mut cursor).await.unwrap();
+        assert_eq!(parsed.user_id, "");
+    }
+
+    #[test]
+    fn test_socks4_request_debug_repr() {
+        let request = Socks4Request {
+            command: Socks4Command::Connect,
+            address: Socks4Address {
+                ip: Ipv4Addr::new(10, 0, 0, 1),
+                port: 443,
+            },
+            user_id: "admin".to_string(),
+            is_socks4a: false,
+            domain: None,
+        };
+        let repr = format!("{:?}", request);
+        assert!(repr.contains("Connect"));
+        assert!(repr.contains("10.0.0.1"));
+    }
 }

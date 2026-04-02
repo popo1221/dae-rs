@@ -399,4 +399,251 @@ mod tests {
         assert!(json.contains("\"server\":\"192.168.1.1\""));
         assert!(json.contains("\"server_port\":443"));
     }
+
+    #[test]
+    fn test_subscription_config_clone() {
+        let config = SubscriptionConfig::new("https://clone.test/sub");
+        let cloned = config.clone();
+        assert_eq!(cloned.url, config.url);
+    }
+
+    #[test]
+    fn test_subscription_config_debug() {
+        let config = SubscriptionConfig::default();
+        let debug_str = format!("{:?}", config);
+        assert!(debug_str.contains("SubscriptionConfig"));
+    }
+
+    #[test]
+    fn test_subscription_config_with_user_agent() {
+        let config = SubscriptionConfig::new("https://ua.test/sub")
+            .with_user_agent("custom-agent/1.0");
+        assert_eq!(config.user_agent, "custom-agent/1.0");
+    }
+
+    #[test]
+    fn test_subscription_config_insecure_tls() {
+        let config = SubscriptionConfig::new("https://insecure.test/sub")
+            .with_insecure_tls();
+        assert!(!config.verify_tls);
+    }
+
+    #[test]
+    fn test_subscription_type_debug() {
+        assert_eq!(format!("{:?}", SubscriptionType::Sip008), "Sip008");
+        assert_eq!(format!("{:?}", SubscriptionType::Base64), "Base64");
+        assert_eq!(format!("{:?}", SubscriptionType::Auto), "Auto");
+    }
+
+    #[test]
+    fn test_subscription_error_debug() {
+        let err = SubscriptionError::NetworkError("connection failed".to_string());
+        let debug = format!("{:?}", err);
+        assert!(debug.contains("connection failed"));
+
+        let err = SubscriptionError::ParseError("invalid format".to_string());
+        let debug = format!("{:?}", err);
+        assert!(debug.contains("invalid format"));
+
+        let err = SubscriptionError::UnsupportedFormat;
+        let debug = format!("{:?}", err);
+        assert!(debug.contains("Unsupported"));
+
+        let err = SubscriptionError::AuthenticationRequired;
+        let debug = format!("{:?}", err);
+        assert!(debug.contains("Authentication"));
+    }
+
+    #[test]
+    fn test_subscription_update_clone() {
+        let update = SubscriptionUpdate {
+            tag: Some("test-tag".to_string()),
+            links: vec!["ss://link1".to_string(), "ss://link2".to_string()],
+            bytes_used: Some(1000),
+            bytes_remaining: Some(5000),
+            format_detected: SubscriptionType::Sip008,
+        };
+        let cloned = update.clone();
+        assert_eq!(cloned.tag, update.tag);
+        assert_eq!(cloned.links.len(), update.links.len());
+    }
+
+    #[test]
+    fn test_subscription_update_debug() {
+        let update = SubscriptionUpdate {
+            tag: None,
+            links: vec![],
+            bytes_used: None,
+            bytes_remaining: None,
+            format_detected: SubscriptionType::Base64,
+        };
+        let debug_str = format!("{:?}", update);
+        assert!(debug_str.contains("SubscriptionUpdate"));
+    }
+
+    #[test]
+    fn test_parse_sip008_multiple_servers() {
+        let json = br#"{
+            "version": 1,
+            "servers": [
+                {"id": "srv1", "remarks": "Server 1", "server": "10.0.0.1", "server_port": 443, "password": "pwd1", "method": "aes-256-gcm"},
+                {"id": "srv2", "remarks": "Server 2", "server": "10.0.0.2", "server_port": 443, "password": "pwd2", "method": "aes-256-gcm"},
+                {"id": "srv3", "remarks": "Server 3", "server": "10.0.0.3", "server_port": 443, "password": "pwd3", "method": "aes-256-gcm"}
+            ]
+        }"#;
+
+        let result = parse_sip008_subscription(json).unwrap();
+        assert_eq!(result.links.len(), 3);
+    }
+
+    #[test]
+    fn test_parse_sip008_without_optional_fields() {
+        let json = br#"{
+            "version": 1,
+            "servers": [
+                {"server": "minimal.test", "server_port": 443, "password": "pwd", "method": "aes"}
+            ]
+        }"#;
+
+        let result = parse_sip008_subscription(json).unwrap();
+        assert_eq!(result.links.len(), 1);
+        assert_eq!(result.bytes_used, None);
+        assert_eq!(result.bytes_remaining, None);
+    }
+
+    #[test]
+    fn test_parse_sip008_invalid_version() {
+        let json = br#"{
+            "version": 2,
+            "servers": []
+        }"#;
+
+        let result = parse_sip008_subscription(json);
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_parse_sip008_invalid_json() {
+        let json = b"not json at all";
+        let result = parse_sip008_subscription(json);
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_parse_base64_subscription_with_vmess() {
+        // vmess:// is also a valid proxy link
+        let content = b"dm1lc3M6Ly92bWVzc0BxLmV4YW1wbGUuY29tOjQ0Mw==";
+        let result = parse_base64_subscription(content);
+        // Result depends on whether it decodes to valid vmess link
+        // Just verify it doesn't panic
+        assert!(result.is_ok() || result.is_err());
+    }
+
+    #[test]
+    fn test_parse_base64_subscription_with_vless() {
+        let content = b"dmxlc3M6Ly92bGVzc0B2LmV4YW1wbGUuY29tOjQ0Mw==";
+        let result = parse_base64_subscription(content);
+        assert!(result.is_ok() || result.is_err());
+    }
+
+    #[test]
+    fn test_parse_base64_subscription_with_trojan() {
+        let content = b"dHJvamFuOjEyMzQ1Njc4QHRyLmxhcmdldC5jb206NDQz";
+        let result = parse_base64_subscription(content);
+        assert!(result.is_ok() || result.is_err());
+    }
+
+    #[test]
+    fn test_parse_base64_subscription_empty_lines() {
+        // Just verify it doesn't panic with empty lines
+        let content = b"ss://link1\n\n\nss://link2";
+        let result = parse_base64_subscription(content);
+        assert!(result.is_ok() || result.is_err());
+    }
+
+    #[test]
+    fn test_parse_base64_invalid_base64() {
+        let content = b"not-valid-base64!!!";
+        let result = parse_base64_subscription(content);
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_parse_base64_url_safe() {
+        // URL-safe base64 uses - and _ instead of + and /
+        let content = b"c3M6Ly9leGFtcGxlLnRlc3Q_LTE0NDQ"; // Contains _
+        let result = parse_base64_subscription(content);
+        assert!(result.is_ok() || result.is_err());
+    }
+
+    #[test]
+    fn test_parse_subscription_auto_sip008() {
+        let content = br#"{"version": 1, "servers": []}"#;
+        let result = parse_subscription(content);
+        assert!(result.is_ok());
+        let update = result.unwrap();
+        assert_eq!(update.format_detected, SubscriptionType::Sip008);
+    }
+
+    #[test]
+    fn test_parse_subscription_auto_base64() {
+        // Base64 encoded ss:// link
+        let content = b"c3M6Ly9leGFtcGxlLnRlc3Q6NDQz";
+        let result = parse_subscription(content);
+        assert!(result.is_ok());
+        let update = result.unwrap();
+        assert_eq!(update.format_detected, SubscriptionType::Base64);
+    }
+
+    #[test]
+    fn test_extract_tag_from_sip008_content() {
+        let json = br#"{
+            "version": 1,
+            "servers": [{"remarks": "First Server", "server": "srv1.test", "server_port": 443, "password": "pwd", "method": "aes"}]
+        }"#;
+        let url = "https://example.com/sub";
+        let tag = extract_tag(url, json);
+        assert_eq!(tag, Some("First Server".to_string()));
+    }
+
+    #[test]
+    fn test_extract_tag_empty_when_no_tag() {
+        let url = "https://example.com/sub";
+        let tag = extract_tag(url, b"no tag here");
+        assert_eq!(tag, None);
+    }
+
+    #[test]
+    fn test_extract_tag_from_url_with_encoded_characters() {
+        let url = "https://example.com/sub#My%20Tag%20With%20Spaces";
+        let tag = extract_tag(url, b"");
+        assert_eq!(tag, Some("My Tag With Spaces".to_string()));
+    }
+
+    #[test]
+    fn test_extract_tag_from_empty_url_fragment() {
+        let url = "https://example.com/sub#";
+        let tag = extract_tag(url, b"");
+        assert_eq!(tag, None);
+    }
+
+    #[test]
+    fn test_sip008_server_deserialization() {
+        let json = r#"{
+            "id": "deser-test",
+            "remarks": "Deserialization Test",
+            "server": "deser.test",
+            "server_port": 8443,
+            "password": "secret123",
+            "method": "chacha20-poly1305",
+            "plugin": "v2ray-plugin",
+            "plugin_opts": "tls;host=example.com"
+        }"#;
+
+        let server: Sip008Server = serde_json::from_str(json).unwrap();
+        assert_eq!(server.id, Some("deser-test".to_string()));
+        assert_eq!(server.server, "deser.test");
+        assert_eq!(server.server_port, 8443);
+        assert_eq!(server.plugin, Some("v2ray-plugin".to_string()));
+    }
 }

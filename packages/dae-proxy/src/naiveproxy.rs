@@ -215,6 +215,7 @@ impl Drop for NaiveProxyManager {
 }
 
 /// HTTP CONNECT tunnel handler for communicating with naiveproxy
+#[derive(Debug)]
 pub struct HttpConnectTunnel {
     /// Target host
     host: String,
@@ -301,5 +302,111 @@ mod tests {
         let expected = "CONNECT example.com:443 HTTP/1.1\r\nHost: example.com:443\r\n\r\n";
         // The actual request would be formatted as above
         assert!(true); // Placeholder - actual network test would require a server
+    }
+
+    #[test]
+    fn test_naive_proxy_config_clone() {
+        let config = NaiveProxyConfig::default()
+            .with_binary_path(PathBuf::from("/clone/path"))
+            .with_logging("info");
+        let cloned = config.clone();
+
+        assert_eq!(cloned.binary_path, config.binary_path);
+        assert_eq!(cloned.log_level, config.log_level);
+    }
+
+    #[test]
+    fn test_naive_proxy_config_debug() {
+        let config = NaiveProxyConfig::default();
+        let debug_str = format!("{:?}", config);
+        assert!(debug_str.contains("NaiveProxyConfig"));
+    }
+
+    #[test]
+    fn test_naive_proxy_manager_new() {
+        let manager = NaiveProxyManager::new(NaiveProxyConfig::default());
+        // Just verify it can be created
+        assert!(manager.config.listen_addr == "127.0.0.1:1090");
+    }
+
+    #[test]
+    fn test_naive_proxy_config_with_multiple_extra_args() {
+        let config = NaiveProxyConfig::new("127.0.0.1:1080", "https://proxy.com")
+            .with_extra_args(vec![
+                "--ipv6".to_string(),
+                "--verbose".to_string(),
+                "--conf=./config.json".to_string(),
+            ]);
+
+        assert_eq!(config.extra_args.len(), 3);
+        assert!(config.extra_args.contains(&"--ipv6".to_string()));
+        assert!(config.extra_args.contains(&"--verbose".to_string()));
+    }
+
+    #[test]
+    fn test_naive_proxy_config_logging_disabled() {
+        let config = NaiveProxyConfig::default();
+        assert!(!config.enable_logging);
+        assert_eq!(config.log_level, "info"); // Default
+    }
+
+    #[test]
+    fn test_naive_proxy_config_logging_enabled() {
+        let config = NaiveProxyConfig::default().with_logging("debug");
+        assert!(config.enable_logging);
+        assert_eq!(config.log_level, "debug");
+    }
+
+    #[test]
+    fn test_naive_proxy_config_different_log_levels() {
+        for level in &["error", "warn", "info", "debug", "trace"] {
+            let config = NaiveProxyConfig::default().with_logging(level);
+            assert_eq!(config.log_level, *level);
+        }
+    }
+
+    #[test]
+    fn test_http_connect_tunnel_with_different_ports() {
+        let tunnel = HttpConnectTunnel::new("example.com", 80);
+        assert_eq!(tunnel.port, 80);
+
+        let tunnel = HttpConnectTunnel::new("example.com", 8080);
+        assert_eq!(tunnel.port, 8080);
+
+        let tunnel = HttpConnectTunnel::new("example.com", 65535);
+        assert_eq!(tunnel.port, 65535);
+    }
+
+    #[test]
+    fn test_http_connect_tunnel_debug() {
+        let tunnel = HttpConnectTunnel::new("debug.test.com", 443);
+        let debug_str = format!("{:?}", tunnel);
+        assert!(debug_str.contains("HttpConnectTunnel"));
+        assert!(debug_str.contains("debug.test.com"));
+    }
+
+    #[test]
+    fn test_naive_proxy_config_listen_addr_variants() {
+        let config = NaiveProxyConfig::new("0.0.0.0:8080", "https://proxy.com");
+        assert_eq!(config.listen_addr, "0.0.0.0:8080");
+
+        let config = NaiveProxyConfig::new("[::]:8080", "https://proxy.com");
+        assert_eq!(config.listen_addr, "[::]:8080");
+
+        let config = NaiveProxyConfig::new("localhost:9090", "https://proxy.com");
+        assert_eq!(config.listen_addr, "localhost:9090");
+    }
+
+    #[test]
+    fn test_naive_proxy_manager_proxy_url() {
+        let manager = NaiveProxyManager::new(
+            NaiveProxyConfig::new("127.0.0.1:1080", "https://proxy1.com")
+        );
+        assert_eq!(manager.proxy_url(), "http://127.0.0.1:1080");
+
+        let manager = NaiveProxyManager::new(
+            NaiveProxyConfig::new("127.0.0.1:1081", "http://proxy2.com")
+        );
+        assert_eq!(manager.proxy_url(), "http://127.0.0.1:1081");
     }
 }
