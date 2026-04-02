@@ -55,7 +55,11 @@ pub use crate::juicity::codec::{
 pub use crate::rules::{Rule, RuleGroup, RuleMatchAction, RuleType, DomainRule, IpCidrRule, GeoIpRule, ProcessRule, DnsTypeRule};
 pub use crate::rule_engine::{RuleEngine, RuleEngineConfig, RuleEngineStats, RuleAction, PacketInfo, SharedRuleEngine, new_rule_engine};
 pub use crate::core::{Error, Result, Context};
-pub use crate::node::{Node, NodeId, NodeManager, NodeError, SelectionPolicy, NodeSelector};
+pub use crate::node::{
+    Node, NodeId, NodeManager, NodeError, SelectionPolicy, NodeSelector,
+    // Node Store - Zed-inspired naming
+    NodeStoreTrait, NodeHandle, NodeState, NodeManagerConfig,
+};
 pub use crate::control::{
     ControlServer, ControlState, ControlCommand, ControlResponse,
     ProxyStatus, ProxyStats, NodeTestResult,

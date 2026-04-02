@@ -25,6 +25,9 @@ pub mod selector;
 pub mod health;
 pub mod simple;
 
+// Node Store - Zed-inspired naming for node management
+pub mod store;
+
 // Re-export common types
 pub use node::{Node, NodeId, NodeError};
 pub use manager::{NodeManager, SelectionPolicy};
@@ -37,6 +40,14 @@ pub use simple::{
     SimpleNodeManager,
     LatencyTestResult,
     LatencyMonitor,
+};
+
+// Re-export NodeStore types (Zed-inspired)
+pub use store::{
+    NodeStore as NodeStoreTrait,
+    NodeHandle,
+    NodeState,
+    NodeManagerConfig,
 };
 
 // Type aliases following Zed's naming conventions
