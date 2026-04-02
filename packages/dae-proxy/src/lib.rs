@@ -63,7 +63,31 @@ pub use crate::control::{
 };
 
 // Protocol layer abstractions
-pub use crate::protocol::{ProtocolHandler, ProtocolType, ProtocolRegistry};
+//
+// # Unified Handler Architecture (Zed-inspired)
+//
+// The protocol module provides a unified Handler trait that all protocol
+// handlers should implement. For backward compatibility, ProtocolHandler is
+// still available but deprecated in favor of the simpler Handler trait.
+//
+// See [`protocol::unified_handler`] for the unified Handler trait.
+pub use crate::protocol::{
+    ProtocolType,
+    ProtocolRegistry,
+};
+
+// Unified Handler trait (primary interface)
+pub use crate::protocol::unified_handler::{
+    Handler as UnifiedHandler,
+    HandlerConfig as UnifiedHandlerConfig,
+    HandlerStats,
+    HandlerStatsExt,
+    ProtocolHandlerAdapter,
+};
+
+// Deprecated: Use UnifiedHandler instead
+#[deprecated(since = "0.1.0", note = "Use UnifiedHandler instead")]
+pub use crate::protocol::ProtocolHandler;
 
 pub mod connection;
 pub mod connection_pool;

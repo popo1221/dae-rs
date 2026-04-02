@@ -96,8 +96,22 @@ impl std::fmt::Display for ProtocolType {
 pub mod handler;
 pub use handler::ProtocolRegistry;
 
-// Simple Handler trait (Zed-inspired)
+// Handler trait implementations (Zed-inspired)
+//
+// # Unified Handler Architecture
+//
+// The `simple_handler` module provides the Handler trait - a simpler alternative
+// to ProtocolHandler that works directly with Connections.
+//
+// The `unified_handler` module provides a single unified Handler trait
+// that all protocol handlers should eventually implement.
+//
+// For backward compatibility, existing ProtocolHandler implementations
+// can use ProtocolHandlerAdapter from unified_handler.
 pub mod simple_handler;
+pub mod unified_handler;
+
+// Re-export Handler from simple_handler for backward compatibility
 pub use simple_handler::{Handler, HandlerConfig, HandlerStats, HandlerStatsExt};
 
 // Protocol submodules for future expansion
