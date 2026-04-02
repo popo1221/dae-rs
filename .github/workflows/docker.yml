@@ -78,8 +78,6 @@ jobs:
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
           platforms: ${{ env.PLATFORMS }}
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
           build-args: |
             BUILD_DATE=${{ env.BUILD_DATE }}
             VCS_REF=${{ github.sha }}
