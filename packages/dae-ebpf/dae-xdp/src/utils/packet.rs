@@ -97,7 +97,7 @@ impl VlanHdr {
     /// Get the actual EtherType after VLAN tag (network byte order)
     #[allow(dead_code)]
     pub fn inner_ether_type(&self) -> u16 {
-        u16::from_be(self.tci) & 0xFFFF
+        u16::from_be(self.tci)
     }
 
     /// Get VLAN ID from TCI
