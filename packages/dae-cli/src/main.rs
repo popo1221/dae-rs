@@ -17,7 +17,7 @@ use dae_proxy::{
     control::{connect_and_send, ControlServer},
     shadowsocks::{SsCipherType, SsServerConfig},
     trojan_protocol::{TrojanServerConfig, TrojanTlsConfig},
-    vless::{VlessRealityConfig, VlessServerConfig, VlessTlsConfig},
+    vless::{VlessServerConfig, VlessTlsConfig},
     vmess::{VmessSecurity, VmessServerConfig},
     Proxy, ProxyConfig,
 };
@@ -117,11 +117,11 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             run_proxy(config, daemon, pid_file, control_socket).await?;
         }
         Commands::Status { socket } => {
-            let response = connect_and_send(&socket, "status".into()).await?;
+            let response = connect_and_send(&socket, "status").await?;
             println!("{response}");
         }
         Commands::Reload { socket } => {
-            let response = connect_and_send(&socket, "reload".into()).await?;
+            let response = connect_and_send(&socket, "reload").await?;
             println!("{response}");
         }
         Commands::Test { node, socket } => {
@@ -130,13 +130,13 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             println!("{response}");
         }
         Commands::Shutdown { socket } => {
-            let response = connect_and_send(&socket, "shutdown".into()).await?;
+            let response = connect_and_send(&socket, "shutdown").await?;
             println!("{response}");
         }
         Commands::Validate { config } => match Config::from_file(config.to_str().unwrap_or("")) {
             Ok(cfg) => match cfg.validate() {
                 Ok(_) => {
-                    println!("✓ Configuration '{:?}' is valid", config);
+                    println!("✓ Configuration '{config:?}' is valid");
                     println!(
                         "  Listen: {} (SOCKS5), {} (HTTP)",
                         cfg.proxy.socks5_listen, cfg.proxy.http_listen
