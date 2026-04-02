@@ -12,11 +12,11 @@ dae-rs 是一个高性能透明代理，采用模块化 Rust 代码架构。
 ```
 dae-rs/
 ├── packages/
-│   ├── dae-cli/           # CLI 入口和 REST API
-│   ├── dae-api/       # 独立 REST API 模块
+│   ├── dae-cli/           # CLI 入口（简洁设计）
+│   ├── dae-api/           # 独立 REST API 模块
 │   ├── dae-core/          # 核心引擎（基础类型）
 │   ├── dae-config/        # 配置解析
-│   ├── dae-proxy/        # 代理核心（最大最复杂）
+│   ├── dae-proxy/         # 代理核心（最大最复杂）
 │   └── dae-ebpf/          # eBPF 相关
 │       ├── dae-xdp/       # XDP eBPF 程序
 │       ├── dae-ebpf/      # 用户空间 eBPF 加载器
@@ -413,3 +413,69 @@ cargo build --features api
 | GET | /api/stats | 统计信息 |
 | GET | /health | 健康检查 |
 
+
+---
+
+## 十四、简化后的 CLI 设计
+
+### 14.1 设计原则
+
+- **配置驱动** - 所有协议配置在 TOML 文件中，CLI 只负责加载和运行
+- **简洁命令** - 6 个核心子命令，覆盖所有运维场景
+- **零协议 flags** - 移除所有协议特定的 CLI 参数（--shadowsocks, --vless 等）
+
+### 14.2 CLI 命令
+
+```bash
+dae run --config config.toml    # 运行代理（主要命令）
+dae status                       # 查看状态
+dae validate --config config.toml  # 验证配置
+dae reload                       # 热重载
+dae shutdown                     # 停止代理
+dae test --node <name>          # 测试节点
+```
+
+### 14.3 配置文件结构
+
+```toml
+[proxy]
+socks5_listen = "127.0.0.1:1080"
+http_listen = "127.0.0.1:8080"
+ebpf_interface = "eth0"
+ebpf_enabled = true
+tcp_timeout = 60
+udp_timeout = 30
+
+[[nodes]]
+name = "my-server"
+type = "shadowsocks"
+server = "1.2.3.4"
+port = 8388
+method = "chacha20-ietf-poly1305"
+password = "my-password"
+
+[[nodes]]
+name = "trojan"
+type = "trojan"
+server = "5.6.7.8"
+port = 443
+trojan_password = "password"
+
+[rules]
+config_file = "/etc/dae/rules.toml"
+```
+
+### 14.4 代码统计
+
+| 指标 | 优化前 | 优化后 |
+|------|--------|--------|
+| CLI 代码行数 | ~875 | ~280 |
+| 协议相关 flags | 30+ | 0 |
+| 子命令数 | 8+ | 6 |
+
+### 14.5 优势
+
+1. **配置即文档** - TOML 配置比 CLI flags 更易读和维护
+2. **版本一致** - 配置可版本控制，基础设施即代码
+3. **简化测试** - 无需记住复杂的 flag 组合
+4. **减小二进制** - 移除解析复杂 CLI 参数的代码
