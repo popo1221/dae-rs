@@ -51,10 +51,12 @@ impl Default for QuicConfig {
 
 /// Congestion control algorithms supported by QUIC
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Default)]
 pub enum CongestionControl {
     /// CUBIC (Linux default)
     Cubic,
     /// BBR (TCP BBR)
+    #[default]
     Bbr,
     /// Reno
     Reno,
@@ -62,11 +64,6 @@ pub enum CongestionControl {
     NewReno,
 }
 
-impl Default for CongestionControl {
-    fn default() -> Self {
-        CongestionControl::Bbr
-    }
-}
 
 /// QUIC connection state
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]

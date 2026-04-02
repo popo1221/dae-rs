@@ -258,9 +258,9 @@ impl JuicityAddress {
 impl std::fmt::Display for JuicityAddress {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            JuicityAddress::Ipv4(ip, port) => write!(f, "{}:{}", ip, port),
-            JuicityAddress::Domain(domain, port) => write!(f, "{}:{}", domain, port),
-            JuicityAddress::Ipv6(ip, port) => write!(f, "[{}]:{}", ip, port),
+            JuicityAddress::Ipv4(ip, port) => write!(f, "{ip}:{port}"),
+            JuicityAddress::Domain(domain, port) => write!(f, "{domain}:{port}"),
+            JuicityAddress::Ipv6(ip, port) => write!(f, "[{ip}]:{port}"),
         }
     }
 }

@@ -8,6 +8,7 @@ use crate::rule_engine::RuleAction;
 
 /// MAC address type (6 bytes)
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+#[derive(Default)]
 pub struct MacAddr([u8; 6]);
 
 impl MacAddr {
@@ -95,11 +96,6 @@ impl fmt::Display for MacAddr {
     }
 }
 
-impl Default for MacAddr {
-    fn default() -> Self {
-        Self([0x00; 6])
-    }
-}
 
 /// MAC address rule for matching traffic by device MAC address
 #[derive(Debug, Clone)]
@@ -141,7 +137,7 @@ impl MacRule {
         };
 
         let mac = MacAddr::parse(mac_str)?;
-        let mac_mask = mask_str.map(MacAddr::parse).flatten();
+        let mac_mask = mask_str.and_then(MacAddr::parse);
         Some(Self { mac, mac_mask, action })
     }
 }
@@ -190,10 +186,10 @@ impl MacRuleSet {
     pub fn match_mac(&self, mac: &MacAddr) -> RuleAction {
         for rule in &self.rules {
             if let Some(true) = super::matcher::match_mac_with_mask_opt(mac, &rule.mac, &rule.mac_mask) {
-                return rule.action.clone();
+                return rule.action;
             }
         }
-        self.default_action.clone()
+        self.default_action
     }
 
     /// Get number of rules

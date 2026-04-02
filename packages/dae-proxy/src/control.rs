@@ -225,11 +225,11 @@ impl ControlServer {
         // Send response
         let response_str = match &response {
             ControlResponse::Ok(msg) => msg.clone(),
-            ControlResponse::Error(msg) => format!("ERROR: {}\n", msg),
+            ControlResponse::Error(msg) => format!("ERROR: {msg}\n"),
             ControlResponse::Stats(stats) => format!("{}\n", serde_json::to_string(stats).unwrap_or_default()),
             ControlResponse::Status(status) => format!("{}\n", serde_json::to_string(status).unwrap_or_default()),
             ControlResponse::TestResult(result) => format!("{}\n", serde_json::to_string(result).unwrap_or_default()),
-            ControlResponse::Version(ver) => format!("dae-rs {}\n", ver),
+            ControlResponse::Version(ver) => format!("dae-rs {ver}\n"),
         };
 
         stream.write_all(response_str.as_bytes()).await?;
@@ -302,7 +302,7 @@ impl ControlServer {
             }
             _ => {
                 warn!("Unknown control command: {}", cmd);
-                ControlResponse::Error(format!("Unknown command: {}. Use 'help' for available commands.", cmd))
+                ControlResponse::Error(format!("Unknown command: {cmd}. Use 'help' for available commands."))
             }
         }
     }
@@ -325,7 +325,7 @@ fn node_count() -> usize {
 pub async fn connect_and_send(socket_path: &str, command: &str) -> std::io::Result<String> {
     let mut stream = UnixStream::connect(socket_path).await?;
     
-    stream.write_all(format!("{}\n", command).as_bytes()).await?;
+    stream.write_all(format!("{command}\n").as_bytes()).await?;
     stream.flush().await?;
 
     let mut response = String::new();

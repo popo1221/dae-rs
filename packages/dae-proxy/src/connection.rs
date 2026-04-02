@@ -10,8 +10,10 @@ use tokio::time::{Duration, Interval};
 
 /// Connection state
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Default)]
 pub enum ConnectionState {
     /// New connection, not yet established
+    #[default]
     New,
     /// Connection is active and transferring data
     Active,
@@ -21,24 +23,16 @@ pub enum ConnectionState {
     Closed,
 }
 
-impl Default for ConnectionState {
-    fn default() -> Self {
-        ConnectionState::New
-    }
-}
 
 /// Protocol type for the connection
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Default)]
 pub enum Protocol {
+    #[default]
     Tcp,
     Udp,
 }
 
-impl Default for Protocol {
-    fn default() -> Self {
-        Protocol::Tcp
-    }
-}
 
 /// A tracked connection with state and timing
 pub struct Connection {

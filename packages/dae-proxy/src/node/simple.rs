@@ -273,7 +273,7 @@ impl NodeManager for SimpleNodeManager {
         ).await;
         
         nodes.into_iter()
-            .zip(availability.into_iter())
+            .zip(availability)
             .filter(|(_, available)| *available)
             .map(|(node, _)| node)
             .collect()

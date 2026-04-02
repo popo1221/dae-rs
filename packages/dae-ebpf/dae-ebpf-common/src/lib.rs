@@ -6,6 +6,12 @@
 
 #![no_std]
 
+// Allow strict clippy lints for eBPF code patterns
+#![allow(clippy::field_reassign_with_default)]
+#![allow(clippy::manual_memcpy)]
+#![allow(clippy::vec_init_then_push)]
+#![allow(clippy::needless_range_loop)]
+
 pub mod config;
 pub mod direct;
 pub mod routing;

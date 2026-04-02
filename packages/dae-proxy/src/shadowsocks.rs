@@ -17,8 +17,10 @@ use tracing::{debug, error, info};
 
 /// Shadowsocks AEAD cipher type
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Default)]
 pub enum SsCipherType {
     /// chacha20-ietf-poly1305
+    #[default]
     Chacha20IetfPoly1305,
     /// aes-256-gcm
     Aes256Gcm,
@@ -26,11 +28,6 @@ pub enum SsCipherType {
     Aes128Gcm,
 }
 
-impl Default for SsCipherType {
-    fn default() -> Self {
-        SsCipherType::Chacha20IetfPoly1305
-    }
-}
 
 impl std::fmt::Display for SsCipherType {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
@@ -118,8 +115,8 @@ pub enum TargetAddress {
 impl std::fmt::Display for TargetAddress {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            TargetAddress::Ip(ip) => write!(f, "{}", ip),
-            TargetAddress::Domain(domain, _) => write!(f, "{}", domain),
+            TargetAddress::Ip(ip) => write!(f, "{ip}"),
+            TargetAddress::Domain(domain, _) => write!(f, "{domain}"),
         }
     }
 }

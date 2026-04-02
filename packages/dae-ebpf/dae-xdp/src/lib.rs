@@ -6,6 +6,9 @@
 #![no_std]
 #![deny(warnings)]
 
+// Allow strict clippy lints for eBPF code patterns
+#![allow(clippy::field_reassign_with_default)]
+
 use aya_ebpf::bindings::xdp_action::{XDP_ABORTED, XDP_DROP, XDP_PASS};
 use aya_ebpf::macros::map;
 use aya_ebpf::maps::lpm_trie::Key;
@@ -118,5 +121,5 @@ fn lookup_routing(dst_ip: u32) -> Option<RoutingEntry> {
     
     // Try /0 (catch-all)
     let key = Key::new(0, 0);
-    ROUTING.get(&key).map(|r| *r)
+    ROUTING.get(&key).copied()
 }

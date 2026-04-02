@@ -214,7 +214,7 @@ impl JuicityHandler {
         // Version
         let version = header[2];
         if version != 0x01 {
-            return Err(JuicityError::Protocol(format!("Unsupported version: {}", version)));
+            return Err(JuicityError::Protocol(format!("Unsupported version: {version}")));
         }
 
         // Token (32 bytes)

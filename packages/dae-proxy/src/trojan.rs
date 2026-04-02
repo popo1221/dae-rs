@@ -131,9 +131,9 @@ pub enum TrojanTargetAddress {
 impl std::fmt::Display for TrojanTargetAddress {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            TrojanTargetAddress::Ipv4(ip) => write!(f, "{}", ip),
-            TrojanTargetAddress::Domain(domain, _) => write!(f, "{}", domain),
-            TrojanTargetAddress::Ipv6(ip) => write!(f, "{}", ip),
+            TrojanTargetAddress::Ipv4(ip) => write!(f, "{ip}"),
+            TrojanTargetAddress::Domain(domain, _) => write!(f, "{domain}"),
+            TrojanTargetAddress::Ipv6(ip) => write!(f, "{ip}"),
         }
     }
 }
@@ -310,7 +310,7 @@ impl TrojanHandler {
         // Read CRLF (2 bytes)
         let mut crlf_buf = [0u8; 2];
         client.read_exact(&mut crlf_buf).await?;
-        if &crlf_buf != Self::CRLF {
+        if crlf_buf != Self::CRLF {
             error!("Invalid Trojan header: missing CRLF after password");
             return Err(std::io::Error::new(
                 std::io::ErrorKind::InvalidData,
@@ -399,7 +399,7 @@ impl TrojanHandler {
                 // Read final CRLF (2 bytes)
                 let mut crlf_buf = [0u8; 2];
                 client.read_exact(&mut crlf_buf).await?;
-                if &crlf_buf != Self::CRLF {
+                if crlf_buf != Self::CRLF {
                     return Err(std::io::Error::new(
                         std::io::ErrorKind::InvalidData,
                         "invalid Trojan header: missing CRLF after address"
@@ -407,8 +407,8 @@ impl TrojanHandler {
                 }
 
                 let address_str = match &address {
-                    TrojanTargetAddress::Domain(d, _) => format!("{}:{}", d, port),
-                    _ => format!("{}:{}", address, port),
+                    TrojanTargetAddress::Domain(d, _) => format!("{d}:{port}"),
+                    _ => format!("{address}:{port}"),
                 };
 
                 // Select backend using round-robin
@@ -494,11 +494,8 @@ impl TrojanHandler {
             server_socket.send_to(payload, &server_addr).await?;
 
             let mut response_buf = vec![0u8; MAX_UDP_SIZE];
-            match tokio::time::timeout(self.config.udp_timeout, server_socket.recv_from(&mut response_buf)).await {
-                Ok(Ok((m, _))) => {
-                    client.send_to(&response_buf[..m], &client_addr).await?;
-                }
-                _ => {}
+            if let Ok(Ok((m, _))) = tokio::time::timeout(self.config.udp_timeout, server_socket.recv_from(&mut response_buf)).await {
+                client.send_to(&response_buf[..m], &client_addr).await?;
             }
         }
     }

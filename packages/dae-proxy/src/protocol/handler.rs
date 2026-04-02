@@ -200,7 +200,7 @@ mod tests {
         let mut registry = ProtocolRegistry::new();
         registry.register(ProtocolType::Socks5, TestHandler { name: "test" });
         
-        let debug_str = format!("{:?}", registry);
+        let debug_str = format!("{registry:?}");
         assert!(debug_str.contains("ProtocolRegistry"));
     }
 }

@@ -83,7 +83,7 @@ impl HealthChecker {
     /// Check health of multiple nodes concurrently
     pub async fn check_nodes(nodes: &[Arc<dyn Node>]) -> Vec<HealthCheckResult> {
         let futures: Vec<_> = nodes.iter()
-            .map(|node| Self::check_node(node))
+            .map(Self::check_node)
             .collect();
         
         futures::future::join_all(futures).await

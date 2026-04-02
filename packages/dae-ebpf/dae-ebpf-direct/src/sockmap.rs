@@ -44,7 +44,7 @@ impl SockmapRedirect {
     /// Accept a connection from the proxy socket
     #[allow(dead_code)]
     pub fn accept_connection(&self) -> Result<std::net::TcpStream, EbpfError> {
-        Err(EbpfError::Sockmap("Not implemented".to_string()).into())
+        Err(EbpfError::Sockmap("Not implemented".to_string()))
     }
 
     /// Check if sockmap redirect is active

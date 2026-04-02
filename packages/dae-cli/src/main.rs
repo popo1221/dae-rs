@@ -1,4 +1,5 @@
 //! dae-rs CLI entry point
+#![allow(clippy::large_size_difference_in_match)]
 //!
 //! High-performance transparent proxy in Rust with eBPF integration
 
@@ -336,7 +337,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                         Some(cfg)
                     }
                     Err(e) => {
-                        eprintln!("Warning: Failed to load config file {}: {}", config_path, e);
+                        eprintln!("Warning: Failed to load config file {config_path}: {e}");
                         None
                     }
                 }
@@ -639,10 +640,10 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         Some(Commands::Status { socket }) => {
             match connect_and_send(&socket, "status").await {
                 Ok(response) => {
-                    println!("{}", response);
+                    println!("{response}");
                 }
                 Err(e) => {
-                    eprintln!("Error connecting to control socket: {}", e);
+                    eprintln!("Error connecting to control socket: {e}");
                     eprintln!("Is the daemon running?");
                     std::process::exit(1);
                 }
@@ -651,23 +652,23 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         Some(Commands::Reload { socket }) => {
             match connect_and_send(&socket, "reload").await {
                 Ok(response) => {
-                    println!("{}", response);
+                    println!("{response}");
                 }
                 Err(e) => {
-                    eprintln!("Error connecting to control socket: {}", e);
+                    eprintln!("Error connecting to control socket: {e}");
                     eprintln!("Is the daemon running?");
                     std::process::exit(1);
                 }
             }
         }
         Some(Commands::Test { node, socket }) => {
-            let command = format!("test {}", node);
+            let command = format!("test {node}");
             match connect_and_send(&socket, &command).await {
                 Ok(response) => {
-                    println!("{}", response);
+                    println!("{response}");
                 }
                 Err(e) => {
-                    eprintln!("Error connecting to control socket: {}", e);
+                    eprintln!("Error connecting to control socket: {e}");
                     eprintln!("Is the daemon running?");
                     std::process::exit(1);
                 }
@@ -676,10 +677,10 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         Some(Commands::Shutdown { socket }) => {
             match connect_and_send(&socket, "shutdown").await {
                 Ok(response) => {
-                    println!("{}", response);
+                    println!("{response}");
                 }
                 Err(e) => {
-                    eprintln!("Error connecting to control socket: {}", e);
+                    eprintln!("Error connecting to control socket: {e}");
                     eprintln!("Is the daemon running?");
                     std::process::exit(1);
                 }
@@ -690,23 +691,23 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                 Ok(cfg) => {
                     match cfg.validate() {
                         Ok(_) => {
-                            println!("Configuration file '{}' is valid", config);
+                            println!("Configuration file '{config}' is valid");
                             println!("  SOCKS5 listen: {}", cfg.proxy.socks5_listen);
                             println!("  HTTP listen: {}", cfg.proxy.http_listen);
                             println!("  eBPF interface: {}", cfg.proxy.ebpf_interface);
                             println!("  Nodes configured: {}", cfg.nodes.len());
                             if let Some(ref rules_file) = cfg.rules.config_file {
-                                println!("  Rules file: {}", rules_file);
+                                println!("  Rules file: {rules_file}");
                             }
                         }
                         Err(e) => {
-                            eprintln!("Configuration validation failed: {}", e);
+                            eprintln!("Configuration validation failed: {e}");
                             std::process::exit(1);
                         }
                     }
                 }
                 Err(e) => {
-                    eprintln!("Failed to parse configuration: {}", e);
+                    eprintln!("Failed to parse configuration: {e}");
                     std::process::exit(1);
                 }
             }
@@ -715,7 +716,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             tracing::info!("Starting REST API server on port {}", port);
             let server = ApiServer::new(port).await;
             if let Err(e) = server.start().await {
-                eprintln!("API server error: {}", e);
+                eprintln!("API server error: {e}");
                 std::process::exit(1);
             }
         }
@@ -745,7 +746,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                     
                     let rule_engine = new_rule_engine(RuleEngineConfig::default());
                     if let Err(e) = rule_engine.load_rules(&config).await {
-                        eprintln!("Failed to load rules: {}", e);
+                        eprintln!("Failed to load rules: {e}");
                         std::process::exit(1);
                     }
                     
@@ -766,7 +767,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                     if verbose {
                         println!("\nRule Groups:");
                         for name in rule_engine.get_rule_groups().await.iter() {
-                            println!("  - {}", name);
+                            println!("  - {name}");
                         }
                     }
                 }
@@ -779,7 +780,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                     let content = match fs::read_to_string(&config) {
                         Ok(c) => c,
                         Err(e) => {
-                            eprintln!("Failed to read rules config: {}", e);
+                            eprintln!("Failed to read rules config: {e}");
                             std::process::exit(1);
                         }
                     };
@@ -789,12 +790,12 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                             println!("Rules configuration is valid!");
                             println!("  Rule Groups: {}", cfg.rule_groups.len());
                             let total_rules: usize = cfg.rule_groups.iter().map(|g| g.rules.len()).sum();
-                            println!("  Total Rules: {}", total_rules);
+                            println!("  Total Rules: {total_rules}");
                         }
                         Err((_, errors)) => {
                             eprintln!("Rules configuration has errors:");
                             for error in errors.iter() {
-                                eprintln!("  - {}", error);
+                                eprintln!("  - {error}");
                             }
                             std::process::exit(1);
                         }

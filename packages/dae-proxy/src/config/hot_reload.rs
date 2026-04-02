@@ -27,6 +27,7 @@ pub enum HotReloadError {
 
 /// Configuration change event
 #[derive(Debug, Clone)]
+#[allow(clippy::large_enum_variant)]
 pub enum ConfigEvent {
     /// Configuration was successfully reloaded
     Reloaded(Config),
@@ -290,15 +291,15 @@ impl HotReload {
     /// Load configuration from file
     fn load_config(path: &PathBuf) -> std::result::Result<Config, HotReloadError> {
         let content = std::fs::read_to_string(path)
-            .map_err(|e| HotReloadError::Parse(format!("Failed to read config file: {}", e)))?;
+            .map_err(|e| HotReloadError::Parse(format!("Failed to read config file: {e}")))?;
 
         let config: Config = toml::from_str(&content)
-            .map_err(|e| HotReloadError::Parse(format!("Failed to parse config: {}", e)))?;
+            .map_err(|e| HotReloadError::Parse(format!("Failed to parse config: {e}")))?;
 
         // Validate the configuration
         config
             .validate()
-            .map_err(|e| HotReloadError::Config(e))?;
+            .map_err(HotReloadError::Config)?;
 
         Ok(config)
     }
@@ -404,9 +405,9 @@ mod tests {
             rules: dae_config::RulesConfig::default(),
             logging: dae_config::LoggingConfig::default(),
         });
-        assert!(format!("{:?}", event).contains("Reloaded"));
+        assert!(format!("{event:?}").contains("Reloaded"));
 
         let event = ConfigEvent::Error("test error".to_string());
-        assert!(format!("{:?}", event).contains("Error"));
+        assert!(format!("{event:?}").contains("Error"));
     }
 }

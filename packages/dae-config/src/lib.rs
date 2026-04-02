@@ -55,7 +55,7 @@ impl std::str::FromStr for NodeType {
             "vless" => Ok(NodeType::Vless),
             "vmess" => Ok(NodeType::Vmess),
             "trojan" => Ok(NodeType::Trojan),
-            _ => Err(format!("Unknown node type: {}", s)),
+            _ => Err(format!("Unknown node type: {s}")),
         }
     }
 }
@@ -63,19 +63,16 @@ impl std::str::FromStr for NodeType {
 /// Log level enumeration
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Deserialize)]
 #[serde(rename_all = "lowercase")]
+#[derive(Default)]
 pub enum LogLevel {
     Trace,
     Debug,
+    #[default]
     Info,
     Warn,
     Error,
 }
 
-impl Default for LogLevel {
-    fn default() -> Self {
-        LogLevel::Info
-    }
-}
 
 impl std::fmt::Display for LogLevel {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
@@ -152,6 +149,7 @@ impl Default for ProxyConfig {
 
 /// Rules configuration
 #[derive(Debug, Clone, Deserialize)]
+#[derive(Default)]
 pub struct RulesConfig {
     /// External rules config file
     #[serde(default)]
@@ -161,14 +159,6 @@ pub struct RulesConfig {
     pub rule_groups: Vec<RuleGroupConfig>,
 }
 
-impl Default for RulesConfig {
-    fn default() -> Self {
-        Self {
-            config_file: None,
-            rule_groups: Vec::new(),
-        }
-    }
-}
 
 /// Logging configuration
 #[derive(Debug, Clone, Deserialize)]
@@ -594,7 +584,7 @@ impl Config {
     }
 
     /// Load configuration from TOML string (auto-detect format)
-    pub fn from_str(content: &str) -> Result<Self, Box<dyn std::error::Error>> {
+    pub fn from_toml_str(content: &str) -> Result<Self, Box<dyn std::error::Error>> {
         // Try new format first
         if let Ok(config) = toml::from_str::<Config>(content) {
             return Ok(config);
@@ -759,17 +749,17 @@ impl Config {
                 // Try parsing as SocketAddrV4/V6 or with default port
                 if addr.contains(':') {
                     return Err(ConfigError::InvalidAddress(format!(
-                        "{}: invalid socket address format", addr
+                        "{addr}: invalid socket address format"
                     )));
                 }
                 // Try as hostname:port
                 if !addr.contains(':') {
                     Err(ConfigError::InvalidAddress(format!(
-                        "{}: missing port (expected format: host:port)", addr
+                        "{addr}: missing port (expected format: host:port)"
                     )))
                 } else {
                     Err(ConfigError::InvalidAddress(format!(
-                        "{}: invalid address format", addr
+                        "{addr}: invalid address format"
                     )))
                 }
             }

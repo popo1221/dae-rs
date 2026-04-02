@@ -136,9 +136,9 @@ pub enum VlessTargetAddress {
 impl std::fmt::Display for VlessTargetAddress {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            VlessTargetAddress::Ipv4(ip) => write!(f, "{}", ip),
-            VlessTargetAddress::Domain(domain, _) => write!(f, "{}", domain),
-            VlessTargetAddress::Ipv6(ip) => write!(f, "{}", ip),
+            VlessTargetAddress::Ipv4(ip) => write!(f, "{ip}"),
+            VlessTargetAddress::Domain(domain, _) => write!(f, "{domain}"),
+            VlessTargetAddress::Ipv6(ip) => write!(f, "{ip}"),
         }
     }
 }
@@ -438,11 +438,8 @@ impl VlessHandler {
             server_socket.send_to(payload, &server_addr).await?;
 
             let mut response_buf = vec![0u8; MAX_UDP_SIZE];
-            match tokio::time::timeout(self.config.udp_timeout, server_socket.recv_from(&mut response_buf)).await {
-                Ok(Ok((m, _))) => {
-                    client.send_to(&response_buf[..m], &client_addr).await?;
-                }
-                _ => {}
+            if let Ok(Ok((m, _))) = tokio::time::timeout(self.config.udp_timeout, server_socket.recv_from(&mut response_buf)).await {
+                client.send_to(&response_buf[..m], &client_addr).await?;
             }
         }
     }

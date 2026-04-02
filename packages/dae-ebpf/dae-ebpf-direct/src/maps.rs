@@ -8,6 +8,7 @@ use crate::{ConnectionKey, EbpfError};
 /// Direct routing map entry
 #[derive(Debug, Clone, Copy)]
 #[repr(C)]
+#[derive(Default)]
 pub struct DirectRouteMapEntry {
     /// Rule type (0=IPv4 CIDR, 1=IPv6 CIDR, 2=Domain Suffix, 3=Port)
     pub rule_type: u8,
@@ -27,24 +28,11 @@ pub struct DirectRouteMapEntry {
     _reserved2: [u8; 7],
 }
 
-impl Default for DirectRouteMapEntry {
-    fn default() -> Self {
-        Self {
-            rule_type: 0,
-            ip_version: 0,
-            prefix_len: 0,
-            _reserved: 0,
-            data: [0; 2],
-            domain: [0; 16],
-            action: 0,
-            _reserved2: [0; 7],
-        }
-    }
-}
 
 /// Connection tracking map entry
 #[derive(Debug, Clone, Copy)]
 #[repr(C)]
+#[derive(Default)]
 pub struct ConnectionMapEntry {
     /// Source IP
     pub src_ip: u32,
@@ -70,23 +58,6 @@ pub struct ConnectionMapEntry {
     pub last_active: u64,
 }
 
-impl Default for ConnectionMapEntry {
-    fn default() -> Self {
-        Self {
-            src_ip: 0,
-            dst_ip: 0,
-            src_port: 0,
-            dst_port: 0,
-            protocol: 0,
-            pid: 0,
-            state: 0,
-            flags: 0,
-            _reserved: [0; 2],
-            created_at: 0,
-            last_active: 0,
-        }
-    }
-}
 
 /// eBPF Maps manager for direct mode
 ///

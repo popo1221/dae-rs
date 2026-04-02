@@ -84,7 +84,7 @@ impl TcpProxy {
         let std_listener: std::net::TcpListener = socket.into();
         std_listener.set_nonblocking(true)?;
         
-        Ok(TcpListener::from_std(std_listener)?)
+        TcpListener::from_std(std_listener)
     }
 
     /// Connect to remote with timeout

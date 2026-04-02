@@ -73,13 +73,13 @@ pub enum RuleValidationError {
 impl std::fmt::Display for RuleValidationError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            RuleValidationError::InvalidRuleType(t) => write!(f, "Invalid rule type: {}", t),
-            RuleValidationError::InvalidRuleValue(v) => write!(f, "Invalid rule value: {}", v),
+            RuleValidationError::InvalidRuleType(t) => write!(f, "Invalid rule type: {t}"),
+            RuleValidationError::InvalidRuleValue(v) => write!(f, "Invalid rule value: {v}"),
             RuleValidationError::EmptyValue => write!(f, "Empty rule value"),
-            RuleValidationError::InvalidAction(a) => write!(f, "Invalid action: {}", a),
-            RuleValidationError::InvalidGeoIp(c) => write!(f, "Invalid GeoIP country code: {}", c),
-            RuleValidationError::InvalidDnsType(t) => write!(f, "Invalid DNS query type: {}", t),
-            RuleValidationError::InvalidCidr(c) => write!(f, "Invalid CIDR notation: {}", c),
+            RuleValidationError::InvalidAction(a) => write!(f, "Invalid action: {a}"),
+            RuleValidationError::InvalidGeoIp(c) => write!(f, "Invalid GeoIP country code: {c}"),
+            RuleValidationError::InvalidDnsType(t) => write!(f, "Invalid DNS query type: {t}"),
+            RuleValidationError::InvalidCidr(c) => write!(f, "Invalid CIDR notation: {c}"),
         }
     }
 }
@@ -127,7 +127,7 @@ pub fn validate_rule(rule: &RuleConfigItem) -> Result<(), RuleValidationError> {
                 .split(',')
                 .map(|t| validate_dns_type(t.trim()))
                 .collect();
-            types.map(|_| ()).map_err(|e| e)
+            types.map(|_| ())
         }
         _ => Err(RuleValidationError::InvalidRuleType(rule.rule_type.clone())),
     }?;
@@ -173,6 +173,7 @@ pub fn validate_config(config: &RuleConfig) -> Vec<RuleValidationError> {
 
 /// Parse and validate rules from TOML content
 pub fn parse_and_validate(content: &str) -> Result<RuleConfig, (RuleConfig, Vec<RuleValidationError>)> {
+    #[allow(clippy::vec_init_then_push)]
     let config: RuleConfig = toml::from_str(content)
         .map_err(|e| {
             // Return empty config with parse error

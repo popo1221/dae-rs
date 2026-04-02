@@ -33,8 +33,7 @@ impl EbpfLoader {
         let path = Path::new(xdp_object);
         if !path.exists() {
             anyhow::bail!(
-                "XDP object file not found: {}. Build the dae-xdp crate first.",
-                xdp_object
+                "XDP object file not found: {xdp_object}. Build the dae-xdp crate first."
             );
         }
 

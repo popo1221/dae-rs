@@ -276,7 +276,7 @@ impl ProcessRuleEntry {
         for i in 0..len {
             let byte = bytes[i];
             // Convert to lowercase ASCII if in range
-            entry.process_name[i] = if byte >= b'A' && byte <= b'Z' {
+            entry.process_name[i] = if byte.is_ascii_uppercase() {
                 byte + 32
             } else {
                 byte

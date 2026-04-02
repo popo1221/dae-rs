@@ -27,7 +27,7 @@ impl ProcessResolver {
     ///
     /// Returns the process name (up to TASK_COMM_LEN characters).
     pub fn get_process_name(pid: u32) -> Option<String> {
-        let path = format!("/proc/{}/comm", pid);
+        let path = format!("/proc/{pid}/comm");
         read_file_first_line(&path)
     }
 
@@ -35,7 +35,7 @@ impl ProcessResolver {
     ///
     /// Returns the symlink target of the executable.
     pub fn get_process_path(pid: u32) -> Option<PathBuf> {
-        let path = format!("/proc/{}/exe", pid);
+        let path = format!("/proc/{pid}/exe");
         std::fs::read_link(&path).ok()
     }
 
@@ -43,7 +43,7 @@ impl ProcessResolver {
     ///
     /// Returns the command line arguments as a vector of strings.
     pub fn get_process_cmdline(pid: u32) -> Option<Vec<String>> {
-        let path = format!("/proc/{}/cmdline", pid);
+        let path = format!("/proc/{pid}/cmdline");
         let file = File::open(&path).ok()?;
         let reader = BufReader::new(file);
         let mut args = Vec::new();
@@ -102,7 +102,7 @@ impl ProcessResolver {
 
     /// Check if a PID exists
     pub fn pid_exists(pid: u32) -> bool {
-        let path = format!("/proc/{}/comm", pid);
+        let path = format!("/proc/{pid}/comm");
         std::path::Path::new(&path).exists()
     }
 }
@@ -148,7 +148,7 @@ mod tests {
         let path = ProcessResolver::get_process_path(pid);
         // Path might be None if the executable was deleted
         // or if we don't have permission
-        println!("Current process path: {:?}", path);
+        println!("Current process path: {path:?}");
     }
 
     #[test]
@@ -171,7 +171,7 @@ mod tests {
         if let Some(info) = info {
             assert_eq!(info.pid, pid);
             assert!(!info.name.is_empty());
-            println!("Process info: {:?}", info);
+            println!("Process info: {info:?}");
         }
     }
 

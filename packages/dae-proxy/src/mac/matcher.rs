@@ -180,6 +180,6 @@ mod tests {
     #[test]
     fn test_mac_addr_display() {
         let mac = MacAddr::parse("AA:BB:CC:DD:EE:FF").unwrap();
-        assert_eq!(format!("{}", mac), "AA:BB:CC:DD:EE:FF");
+        assert_eq!(format!("{mac}"), "AA:BB:CC:DD:EE:FF");
     }
 }

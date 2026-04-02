@@ -227,8 +227,8 @@ impl RuleEngine {
             maxminddb::Reader::open_readfile(&db_path_clone)
         })
         .await
-        .map_err(|e| format!("Failed to load GeoIP database: {}", e))?
-        .map_err(|e| format!("Failed to open GeoIP database: {}", e))?;
+        .map_err(|e| format!("Failed to load GeoIP database: {e}"))?
+        .map_err(|e| format!("Failed to open GeoIP database: {e}"))?;
 
         let mut geoip = self.geoip_reader.write().await;
         *geoip = Some(reader);
@@ -241,7 +241,7 @@ impl RuleEngine {
     pub async fn load_rules(&self, path: &str) -> Result<(), String> {
         let content = tokio::fs::read_to_string(path)
             .await
-            .map_err(|e| format!("Failed to read rules file: {}", e))?;
+            .map_err(|e| format!("Failed to read rules file: {e}"))?;
 
         self.parse_and_load_rules(&content).await
     }
@@ -251,7 +251,7 @@ impl RuleEngine {
         use dae_config::rules::RuleConfig;
 
         let config: RuleConfig = toml::from_str(content)
-            .map_err(|e| format!("Failed to parse rules TOML: {}", e))?;
+            .map_err(|e| format!("Failed to parse rules TOML: {e}"))?;
 
         let mut rule_groups = Vec::new();
 

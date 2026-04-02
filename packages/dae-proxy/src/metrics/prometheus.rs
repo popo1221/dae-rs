@@ -152,7 +152,7 @@ async fn metrics_handler(State(state): State<MetricsState>) -> Response<Body> {
             response
         }
         Err(e) => {
-            let mut response = Response::new(Body::from(format!("Encoder error: {}", e)));
+            let mut response = Response::new(Body::from(format!("Encoder error: {e}")));
             *response.status_mut() = StatusCode::INTERNAL_SERVER_ERROR;
             response
         }
@@ -165,8 +165,8 @@ async fn health_handler() -> StatusCode {
 }
 
 /// Global metrics server handle for standalone use
-static METRICS_SERVER: std::sync::LazyLock<std::sync::RwLock<Option<MetricsServer>>> =
-    std::sync::LazyLock::new(|| std::sync::RwLock::new(None));
+static METRICS_SERVER: std::sync::RwLock<Option<MetricsServer>> =
+    std::sync::RwLock::new(None);
 
 /// Start the global metrics server
 pub async fn start_metrics_server(port: u16) -> Result<(), MetricsError> {

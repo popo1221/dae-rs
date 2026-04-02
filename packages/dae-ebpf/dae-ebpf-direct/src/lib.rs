@@ -6,6 +6,9 @@
 
 #![deny(warnings)]
 
+// Allow strict clippy lints for eBPF code patterns
+#![allow(clippy::field_reassign_with_default)]
+
 pub mod maps;
 pub mod programs;
 pub mod sockmap;

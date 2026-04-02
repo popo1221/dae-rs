@@ -107,9 +107,8 @@ impl IpCidrRule {
     /// Create a new IP CIDR rule
     pub fn new(cidr: &str) -> Result<Self, String> {
         // Parse CIDR notation
-        let (prefix, is_exclude) = if cidr.starts_with('!') {
+        let (prefix, is_exclude) = if let Some(cidr) = cidr.strip_prefix('!') {
             // Exclusion rule
-            let cidr = &cidr[1..];
             (parse_cidr(cidr)?, true)
         } else {
             (parse_cidr(cidr)?, false)
@@ -146,7 +145,7 @@ fn parse_cidr(s: &str) -> Result<IpNet, String> {
             ipnet::IpNet::V4(net) => IpNet::V4(net),
             ipnet::IpNet::V6(net) => IpNet::V6(net),
         })
-        .map_err(|e| format!("Invalid CIDR '{}': {}", s, e))
+        .map_err(|e| format!("Invalid CIDR '{s}': {e}"))
 }
 
 /// A GeoIP-based rule
@@ -281,7 +280,7 @@ impl DnsTypeRule {
     pub fn new(types: &[&str]) -> Result<Self, String> {
         let query_types: Result<Vec<_>, _> = types
             .iter()
-            .map(|s| DnsQueryType::from_str(s).ok_or_else(|| format!("Unknown DNS query type: {}", s)))
+            .map(|s| DnsQueryType::from_str(s).ok_or_else(|| format!("Unknown DNS query type: {s}")))
             .collect();
 
         Ok(Self {
@@ -340,7 +339,7 @@ impl Rule {
                 }
                 Rule::Domain(DomainRule::new(&val))
             }
-            "domain-keyword" => Rule::Domain(DomainRule::new(&format!("keyword:{}", value))),
+            "domain-keyword" => Rule::Domain(DomainRule::new(&format!("keyword:{value}"))),
             "ipcidr" | "ip-cidr" | "cidr" => Rule::IpCidr(IpCidrRule::new(value)?),
             "geoip" | "geo-ip" => Rule::GeoIp(GeoIpRule::new(value)),
             "process" | "process-name" => Rule::Process(ProcessRule::new(value)),
@@ -348,7 +347,7 @@ impl Rule {
                 let types: Vec<&str> = value.split(',').map(|s| s.trim()).collect();
                 Rule::DnsType(DnsTypeRule::new(&types)?)
             }
-            _ => return Err(format!("Unknown rule type: {}", rule_type_str)),
+            _ => return Err(format!("Unknown rule type: {rule_type_str}")),
         };
 
         Ok(RuleWithAction { rule, action, priority })

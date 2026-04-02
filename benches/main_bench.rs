@@ -20,7 +20,7 @@ fn create_rule_with_actions(count: usize) -> Vec<RuleWithAction> {
     let mut rules = Vec::new();
     
     for i in 0..count {
-        let rule = Rule::Domain(DomainRule::new(&format!("example{}.com", i)));
+        let rule = Rule::Domain(DomainRule::new(&format!("example{i}.com")));
         rules.push(RuleWithAction {
             rule,
             action: RuleMatchAction::Pass,
@@ -77,7 +77,7 @@ fn http_connect_benchmark(c: &mut Criterion) {
         group.bench_with_input(BenchmarkId::from_parameter(header_count), header_count, |b, &count| {
             b.iter(|| {
                 let headers: Vec<(String, String)> = (0..count)
-                    .map(|i| (format!("header-{}", i), format!("value-{}", i)))
+                    .map(|i| (format!("header-{i}"), format!("value-{i}")))
                     .collect();
                 black_box(&headers);
             });

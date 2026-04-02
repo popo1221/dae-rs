@@ -107,7 +107,7 @@ impl Socks5Address {
             }
             _ => Err(std::io::Error::new(
                 std::io::ErrorKind::InvalidData,
-                format!("unknown address type: {}", atyp)
+                format!("unknown address type: {atyp}")
             )),
         }
     }
@@ -422,7 +422,7 @@ impl Socks5Handler {
         if ver != consts::VER {
             return Err(std::io::Error::new(
                 std::io::ErrorKind::InvalidData,
-                format!("invalid SOCKS version: {}", ver)
+                format!("invalid SOCKS version: {ver}")
             ));
         }
         
@@ -517,7 +517,7 @@ impl Socks5Handler {
         if ver != consts::VER {
             return Err(std::io::Error::new(
                 std::io::ErrorKind::InvalidData,
-                format!("invalid SOCKS version: {}", ver)
+                format!("invalid SOCKS version: {ver}")
             ));
         }
         
@@ -527,7 +527,7 @@ impl Socks5Handler {
                 self.send_reply(&mut client, Socks5Reply::CommandNotSupported, &Socks5Address::IPv4(Ipv4Addr::new(0, 0, 0, 0), 0)).await?;
                 return Err(std::io::Error::new(
                     std::io::ErrorKind::InvalidData,
-                    format!("unknown command: {}", cmd)
+                    format!("unknown command: {cmd}")
                 ));
             }
         };
@@ -557,7 +557,7 @@ impl Socks5Handler {
             None => {
                 // Need DNS resolution for domain names
                 if let Socks5Address::Domain(domain, port) = dst_addr {
-                    match tokio::net::lookup_host(format!("{}:{}", domain, port)).await {
+                    match tokio::net::lookup_host(format!("{domain}:{port}")).await {
                         Ok(mut addrs) => {
                             match addrs.next() {
                                 Some(addr) => addr,
@@ -574,7 +574,7 @@ impl Socks5Handler {
                             self.send_reply(&mut client, Socks5Reply::HostUnreachable, dst_addr).await?;
                             return Err(std::io::Error::new(
                                 std::io::ErrorKind::HostUnreachable,
-                                format!("DNS resolution failed: {}", e)
+                                format!("DNS resolution failed: {e}")
                             ));
                         }
                     }

@@ -174,8 +174,7 @@ impl ProtocolDispatcher {
     async fn reject_unknown(&self, mut client: TcpStream, reason: &str) -> std::io::Result<()> {
         debug!("Rejecting unknown protocol: {}", reason);
         let response = format!(
-            "HTTP/1.1 501 Not Implemented\r\nContent-Length: 0\r\nX-Error: {}\r\n\r\n",
-            reason
+            "HTTP/1.1 501 Not Implemented\r\nContent-Length: 0\r\nX-Error: {reason}\r\n\r\n"
         );
         client.write_all(response.as_bytes()).await?;
         Err(std::io::Error::new(

@@ -166,7 +166,7 @@ impl MacDnsResolver {
     /// Check if the cache has a valid entry for the given MAC and domain
     async fn get_cached(&self, mac: &MacAddr, domain: &str) -> Option<DnsCacheEntry> {
         let cache = self.cache.read().await;
-        cache.get(&(mac.clone(), domain.to_lowercase())).cloned().filter(|e| !e.is_expired())
+        cache.get(&(*mac, domain.to_lowercase())).cloned().filter(|e| !e.is_expired())
     }
 
     /// Store a resolution result in cache
@@ -178,7 +178,7 @@ impl MacDnsResolver {
             // Simple eviction: remove 10% oldest entries
             let evict_count = (self.config.max_cache_size / 10).max(1);
             let keys_to_remove: Vec<_> = cache.iter()
-                .map(|((mac, domain), entry)| ((mac.clone(), domain.clone()), entry.cached_at))
+                .map(|((mac, domain), entry)| ((*mac, domain.clone()), entry.cached_at))
                 .collect();
             
             let mut sorted: Vec<_> = keys_to_remove.into_iter().collect();
@@ -189,7 +189,7 @@ impl MacDnsResolver {
             }
         }
         
-        cache.insert((mac.clone(), domain.to_lowercase()), entry);
+        cache.insert((*mac, domain.to_lowercase()), entry);
     }
 
     /// Perform DNS resolution using a specific DNS server
@@ -199,7 +199,7 @@ impl MacDnsResolver {
         let addresses: Vec<IpAddr> = match addr_string.to_socket_addrs() {
             Ok(mut addrs) => {
                 let _sock_addr = addrs.next().ok_or_else(|| {
-                    DnsError::ResolutionFailed(format!("No address for DNS server: {}", server))
+                    DnsError::ResolutionFailed(format!("No address for DNS server: {server}"))
                 })?;
                 
                 // Simple DNS resolution using std library
@@ -214,7 +214,7 @@ impl MacDnsResolver {
             }
             Err(e) => {
                 return Err(DnsError::ResolutionFailed(format!(
-                    "Invalid DNS server address {}: {}", server, e
+                    "Invalid DNS server address {server}: {e}"
                 )));
             }
         };
@@ -295,7 +295,7 @@ impl MacDnsResolver {
         }
 
         Err(DnsError::ResolutionFailed(format!(
-            "All DNS servers failed for domain: {}", domain
+            "All DNS servers failed for domain: {domain}"
         )))
     }
 

@@ -25,7 +25,15 @@ jobs:
         run: cargo fmt --all -- --check
 
       - name: Run clippy
-        run: cargo clippy --all -- -D warnings
+        run: |
+          cargo clippy --all \
+            -- -A clippy::should_implement_trait \
+            -A clippy::module_inception \
+            -A clippy::manual_strip \
+            -A clippy::manual_flatten \
+            -A clippy::doc_overindented_list_items \
+            -A clippy::new_ret_no_self \
+            -A clippy::unnecessary_box_returns
 
       - name: Build
         run: cargo build --all

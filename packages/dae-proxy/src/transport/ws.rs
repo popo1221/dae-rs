@@ -75,7 +75,7 @@ impl WsConnection<WsStream> {
     pub async fn write(&mut self, buf: &[u8]) -> std::io::Result<usize> {
         self.stream.send(tokio_tungstenite::tungstenite::Message::Binary(buf.to_vec()))
             .await
-            .map_err(|e| IoError::new(ErrorKind::Other, e.to_string()))?;
+            .map_err(|e| IoError::other(e.to_string()))?;
         Ok(buf.len())
     }
 
@@ -84,14 +84,14 @@ impl WsConnection<WsStream> {
     pub async fn write_text(&mut self, text: &str) -> std::io::Result<usize> {
         self.stream.send(tokio_tungstenite::tungstenite::Message::Text(text.to_string()))
             .await
-            .map_err(|e| IoError::new(ErrorKind::Other, e.to_string()))?;
+            .map_err(|e| IoError::other(e.to_string()))?;
         Ok(text.len())
     }
 
     /// Close the WebSocket connection gracefully
     pub async fn close(mut self) -> std::io::Result<()> {
         let _ = self.stream.send(tokio_tungstenite::tungstenite::Message::Close(None)).await;
-        self.stream.close(None).await.map_err(|e| IoError::new(ErrorKind::Other, e.to_string()))
+        self.stream.close(None).await.map_err(|e| IoError::other(e.to_string()))
     }
 
     /// Get the underlying WebSocket stream
@@ -243,8 +243,7 @@ impl Transport for WsTransport {
 
     async fn dial(&self, _addr: &str) -> std::io::Result<TcpStream> {
         // Note: WebSocket requires special handling, use WsConnector::connect() instead
-        Err(IoError::new(
-            ErrorKind::Other,
+        Err(IoError::other(
             "WebSocket requires special handling, use WsConnector::connect() instead",
         ))
     }

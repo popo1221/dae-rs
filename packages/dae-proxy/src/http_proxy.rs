@@ -288,7 +288,7 @@ impl HttpProxyHandler {
                         client.write_all(consts::HTTP_BAD_GATEWAY).await?;
                         return Err(std::io::Error::new(
                             std::io::ErrorKind::HostUnreachable,
-                            format!("DNS resolution failed: {}", e)
+                            format!("DNS resolution failed: {e}")
                         ));
                     }
                 }

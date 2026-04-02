@@ -38,6 +38,7 @@ pub enum VmessAddressType {
 
 /// VMess security type
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Default)]
 pub enum VmessSecurity {
     /// AES-128-CFB
     Aes128Cfb = 0x01,
@@ -48,16 +49,12 @@ pub enum VmessSecurity {
     /// None
     None = 0x04,
     /// AES-128-GCM with AEAD (VMess-AEAD-2022)
+    #[default]
     Aes128GcmAead = 0x11,
     /// ChaCha20-Poly1305 with AEAD (VMess-AEAD-2022)
     ChaCha20Poly1305Aead = 0x12,
 }
 
-impl Default for VmessSecurity {
-    fn default() -> Self {
-        VmessSecurity::Aes128GcmAead
-    }
-}
 
 impl std::fmt::Display for VmessSecurity {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
@@ -161,9 +158,9 @@ pub enum VmessTargetAddress {
 impl std::fmt::Display for VmessTargetAddress {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            VmessTargetAddress::Ipv4(ip) => write!(f, "{}", ip),
-            VmessTargetAddress::Domain(domain, _) => write!(f, "{}", domain),
-            VmessTargetAddress::Ipv6(ip) => write!(f, "{}", ip),
+            VmessTargetAddress::Ipv4(ip) => write!(f, "{ip}"),
+            VmessTargetAddress::Domain(domain, _) => write!(f, "{domain}"),
+            VmessTargetAddress::Ipv6(ip) => write!(f, "{ip}"),
         }
     }
 }
@@ -410,11 +407,8 @@ impl VmessHandler {
             server_socket.send_to(payload, &server_addr).await?;
 
             let mut response_buf = vec![0u8; MAX_UDP_SIZE];
-            match tokio::time::timeout(self.config.udp_timeout, server_socket.recv_from(&mut response_buf)).await {
-                Ok(Ok((m, _))) => {
-                    client.send_to(&response_buf[..m], &client_addr).await?;
-                }
-                _ => {}
+            if let Ok(Ok((m, _))) = tokio::time::timeout(self.config.udp_timeout, server_socket.recv_from(&mut response_buf)).await {
+                client.send_to(&response_buf[..m], &client_addr).await?;
             }
         }
     }

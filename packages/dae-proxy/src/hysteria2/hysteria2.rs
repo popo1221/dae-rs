@@ -150,7 +150,7 @@ impl Hysteria2Address {
                 let _port = u16::from_be_bytes([data[17], data[18]]);
                 Ok((Hysteria2Address::Ip(ip), 19))
             }
-            _ => Err(Hysteria2Error::InvalidAddress(format!("Unknown address type: {}", addr_type))),
+            _ => Err(Hysteria2Error::InvalidAddress(format!("Unknown address type: {addr_type}"))),
         }
     }
     
@@ -254,7 +254,7 @@ impl Hysteria2Handler {
         
         let frame_type = data[0];
         if frame_type != Hysteria2FrameType::ClientHello as u8 {
-            return Err(Hysteria2Error::Protocol(format!("Expected ClientHello (0x01), got 0x{:02x}", frame_type)));
+            return Err(Hysteria2Error::Protocol(format!("Expected ClientHello (0x01), got 0x{frame_type:02x}")));
         }
         
         if data.len() < 3 {
@@ -263,7 +263,7 @@ impl Hysteria2Handler {
         
         let version = data[1];
         if version != 2 {
-            return Err(Hysteria2Error::Protocol(format!("Unsupported Hysteria2 version: {}", version)));
+            return Err(Hysteria2Error::Protocol(format!("Unsupported Hysteria2 version: {version}")));
         }
         
         let password_len = data[2] as usize;
