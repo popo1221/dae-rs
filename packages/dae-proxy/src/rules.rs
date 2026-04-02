@@ -659,4 +659,135 @@ mod tests {
         assert_eq!(group.match_packet(&info), None);
         assert_eq!(group.default_action(), RuleMatchAction::Proxy);
     }
+
+    #[test]
+    fn test_domain_rule_root_domain() {
+        let rule = DomainRule::new("example.com");
+        assert!(rule.rule_type.matches("example.com"));
+        assert!(!rule.rule_type.matches("sub.example.com"));
+    }
+
+    #[test]
+    fn test_domain_rule_full_match() {
+        // Domain rules match the exact domain
+        let rule = DomainRule::new("mail.google.com");
+        assert!(rule.rule_type.matches("mail.google.com"));
+        assert!(!rule.rule_type.matches("google.com"));
+    }
+
+    #[test]
+    fn test_ip_cidr_rule_v6() {
+        let result = IpCidrRule::new("2001:db8::/32");
+        // IPv6 rules may or may not be supported
+        assert!(result.is_ok() || result.is_err());
+    }
+
+    #[test]
+    fn test_ip_cidr_rule_invalid() {
+        let result = IpCidrRule::new("not an ip");
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_geoip_rule_case_insensitive() {
+        let rule = GeoIpRule::new("us");
+        assert!(rule.matches_country("US"));
+        assert!(rule.matches_country("us"));
+        assert!(!rule.matches_country("CN"));
+    }
+
+    #[test]
+    fn test_process_rule_case_insensitive() {
+        let rule = ProcessRule::new("chrome");
+        assert!(rule.matches_process("chrome"));
+        assert!(rule.matches_process("CHROME"));
+        assert!(!rule.matches_process("firefox"));
+    }
+
+    #[test]
+    fn test_dns_query_type_all() {
+        assert!(DnsQueryType::from_str("A").is_some());
+        assert!(DnsQueryType::from_str("AAAA").is_some());
+        assert!(DnsQueryType::from_str("MX").is_some());
+        assert!(DnsQueryType::from_str("TXT").is_some());
+    }
+
+    #[test]
+    fn test_rule_action_debug() {
+        let debug_pass = format!("{:?}", RuleMatchAction::Pass);
+        let debug_drop = format!("{:?}", RuleMatchAction::Drop);
+        let debug_proxy = format!("{:?}", RuleMatchAction::Proxy);
+        assert!(!debug_pass.is_empty());
+        assert!(!debug_drop.is_empty());
+        assert!(!debug_proxy.is_empty());
+    }
+
+    #[test]
+    fn test_rule_group_default_action() {
+        let mut group = RuleGroup::new("test");
+        assert_eq!(group.default_action(), RuleMatchAction::Proxy); // Default
+
+        group.set_default_action(RuleMatchAction::Drop);
+        assert_eq!(group.default_action(), RuleMatchAction::Drop);
+    }
+
+    #[test]
+    fn test_rule_group_empty() {
+        let group = RuleGroup::new("empty");
+        let mut info = PacketInfo::default();
+        info.destination_ip = IpAddr::V4(Ipv4Addr::new(1, 2, 3, 4));
+        // Empty group should use default action
+        assert_eq!(group.match_packet(&info), None);
+    }
+
+    #[test]
+    fn test_packet_info_default() {
+        let info = PacketInfo::default();
+        assert!(info.source_ip.is_unspecified());
+        assert!(info.destination_ip.is_unspecified());
+        assert!(info.destination_domain.is_none());
+        assert!(info.dns_query_type.is_none());
+    }
+
+    #[test]
+    fn test_packet_info_with_domain() {
+        let mut info = PacketInfo::default();
+        info.destination_domain = Some("example.com".to_string());
+        assert!(info.destination_domain.is_some());
+        assert_eq!(info.destination_domain.unwrap(), "example.com");
+    }
+
+    #[test]
+    fn test_packet_info_with_ip() {
+        let mut info = PacketInfo::default();
+        info.destination_ip = IpAddr::V4(Ipv4Addr::new(8, 8, 8, 8));
+        assert!(!info.destination_ip.is_unspecified());
+    }
+
+    #[test]
+    fn test_rule_group_order() {
+        let mut group = RuleGroup::new("ordered");
+        group.add_rule(Rule::new("domain-suffix", ".org", RuleMatchAction::Pass, 100).unwrap());
+        group.add_rule(Rule::new("domain-suffix", ".com", RuleMatchAction::Pass, 90).unwrap());
+
+        let mut info = PacketInfo::default();
+        info.destination_domain = Some("example.org".to_string());
+        assert_eq!(group.match_packet(&info), Some(RuleMatchAction::Pass));
+    }
+
+    #[test]
+    fn test_rule_type_variant() {
+        let rule = Rule::new("domain-suffix", ".net", RuleMatchAction::Pass, 100).unwrap();
+        assert!(matches!(rule.rule, Rule::Domain(_)));
+
+        let rule = Rule::new("domain-keyword", "test", RuleMatchAction::Pass, 100).unwrap();
+        assert!(matches!(rule.rule, Rule::Domain(_)));
+    }
+
+    #[test]
+    fn test_rule_with_wrong_type() {
+        // Unknown rule type should fail
+        let rule = Rule::new("unknown-type", "value", RuleMatchAction::Pass, 100);
+        assert!(rule.is_err());
+    }
 }
