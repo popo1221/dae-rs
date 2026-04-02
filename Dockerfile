@@ -8,13 +8,13 @@ FROM rust:1.75-alpine3.19 AS builder
 RUN apk add --no-cache \
     clang \
     llvm \
-    libelf-dev \
     elfutils-dev \
     linux-headers \
     musl-dev \
     make \
     git \
-    llvm16-dev
+    openssl-dev \
+    pkgconfig
 
 # Set working directory
 WORKDIR /build
@@ -39,7 +39,7 @@ LABEL description="High-performance transparent proxy in Rust with eBPF"
 RUN apt-get update && apt-get install -y --no-install-recommends \
     ca-certificates \
     libelf1 \
-    libpcap1 \
+    libpcap-dev \
     iptables \
     ipset \
     kmod \
