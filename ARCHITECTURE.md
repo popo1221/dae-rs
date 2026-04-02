@@ -13,6 +13,7 @@ dae-rs 是一个高性能透明代理，采用模块化 Rust 代码架构。
 dae-rs/
 ├── packages/
 │   ├── dae-cli/           # CLI 入口和 REST API
+│   ├── dae-api/       # 独立 REST API 模块
 │   ├── dae-core/          # 核心引擎（基础类型）
 │   ├── dae-config/        # 配置解析
 │   ├── dae-proxy/        # 代理核心（最大最复杂）
@@ -355,3 +356,60 @@ Warnings: 0 ✅
 ---
 
 _文档生成时间: 2026-04-02_
+
+---
+
+## 十三、dae-api 独立模块
+
+### 13.1 概述
+
+从 dae-cli 中拆分的独立 REST API 模块，提供完整的 Web API 接口。
+
+### 13.2 模块结构
+
+```
+packages/dae-api/src/
+├── lib.rs              # 库入口
+├── server.rs           # Axum 服务器
+├── models.rs          # API 数据模型
+├── websocket.rs       # WebSocket 支持
+├── dashboard.html     # 内置 Dashboard
+└── routes/
+    ├── mod.rs         # 路由导出
+    ├── nodes.rs      # 节点管理 API
+    ├── rules.rs       # 规则管理 API
+    ├── config.rs      # 配置 API
+    └── stats.rs       # 统计 API
+```
+
+### 13.3 特性
+
+| 特性 | 说明 |
+|------|------|
+| RESTful API | 完整的 CRUD 操作 |
+| WebSocket | 实时数据推送 |
+| CORS | 跨域支持 |
+| Prometheus | 指标导出 |
+
+### 13.4 使用方式
+
+```bash
+# 构建带 API 的 CLI
+cargo build --features api
+
+# API 默认不集成，减小二进制大小
+```
+
+### 13.5 API 端点
+
+| 方法 | 路径 | 说明 |
+|------|------|------|
+| GET | /api/nodes | 节点列表 |
+| GET | /api/nodes/{id} | 节点详情 |
+| POST | /api/nodes/test | 测试节点 |
+| GET | /api/rules | 规则列表 |
+| GET | /api/config | 当前配置 |
+| PUT | /api/config | 更新配置 |
+| GET | /api/stats | 统计信息 |
+| GET | /health | 健康检查 |
+
