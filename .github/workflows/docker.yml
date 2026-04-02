@@ -18,8 +18,8 @@ env:
   # Use Docker Buildx for multi-platform builds
   IMAGE_NAME: ${{ github.repository }}
   REGISTRY: ghcr.io
-  # Multi-arch support
-  PLATFORMS: linux/amd64,linux/arm64
+  # Single arch for now - can expand to multi-arch later
+  PLATFORMS: linux/amd64
 
 jobs:
   # =========================================================================
