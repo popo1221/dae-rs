@@ -9,12 +9,10 @@
 //! - Failover between proxy chains
 
 use std::io::ErrorKind;
-use std::sync::Arc;
-use std::time::Duration;
 
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
-use tokio::net::{TcpStream, UdpSocket};
-use tracing::{debug, error, info, warn};
+use tokio::net::TcpStream;
+use tracing::{debug, info, warn};
 
 /// A single proxy node in the chain
 #[derive(Debug, Clone)]
@@ -160,7 +158,7 @@ impl ProxyChain {
 
         // All proxies failed
         Err(last_error.unwrap_or_else(|| {
-            std::io::Error::new(ErrorKind::Other, "proxy chain: all nodes failed")
+            std::io::Error::other("proxy chain: all nodes failed")
         }))
     }
 
@@ -174,7 +172,7 @@ impl ProxyChain {
         match node.node_type {
             ProxyNodeType::Direct => {
                 // Direct connection
-                let addr = format!("{}:{}", target, target_port);
+                let addr = format!("{target}:{target_port}");
                 TcpStream::connect(&addr).await
             }
             ProxyNodeType::Socks5 => self.socks5_connect(node, target, target_port).await,
@@ -260,8 +258,7 @@ impl ProxyChain {
 
         // Send HTTP CONNECT request
         let connect_req = format!(
-            "CONNECT {}:{} HTTP/1.1\r\nHost: {}:{}\r\n",
-            target, target_port, target, target_port
+            "CONNECT {target}:{target_port} HTTP/1.1\r\nHost: {target}:{target_port}\r\n"
         );
 
         stream.write_all(connect_req.as_bytes()).await?;
@@ -275,7 +272,7 @@ impl ProxyChain {
         if !response_str.contains("200") && !response_str.contains("Connection established") {
             return Err(std::io::Error::new(
                 ErrorKind::PermissionDenied,
-                format!("HTTP proxy: connection failed: {}", response_str),
+                format!("HTTP proxy: connection failed: {response_str}"),
             ));
         }
 

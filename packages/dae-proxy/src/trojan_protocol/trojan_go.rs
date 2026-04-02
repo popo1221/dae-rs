@@ -8,8 +8,6 @@
 use std::io::ErrorKind;
 use std::time::Duration;
 
-use tokio::io::{AsyncReadExt, AsyncWriteExt};
-use tokio::net::TcpStream;
 use tokio_tungstenite::{connect_async, tungstenite::protocol::Message};
 use tracing::{debug, error, info, warn};
 
@@ -113,17 +111,19 @@ impl TrojanGoWsHandler {
     }
 
     /// Connect to server with Trojan-go WebSocket transport
-    pub async fn connect(&self, server_addr: &str) -> std::io::Result<TrojanGoWsStream> {
+    pub async fn connect(
+        &self,
+        server_addr: &str,
+    ) -> std::io::Result<TrojanGoWsStream> {
         let url = self.build_url(server_addr)?;
         debug!("Connecting to {} with Trojan-go WebSocket", url);
 
         // Connect WebSocket
-        let (ws_stream, response) = connect_async(&url).await.map_err(|e| {
-            std::io::Error::new(
-                ErrorKind::Other,
-                format!("Trojan-go WebSocket connect error: {}", e),
-            )
-        })?;
+        let (ws_stream, response) = connect_async(&url)
+            .await
+            .map_err(|e| std::io::Error::other(
+                format!("Trojan-go WebSocket connect error: {e}"),
+            ))?;
 
         // Log response status
         let status = response.status().as_u16();
@@ -141,13 +141,10 @@ impl TrojanGoWsHandler {
             &self.config.host
         };
 
-        let port = server_addr
-            .split(':')
-            .nth(1)
-            .unwrap_or(match self.config.mode {
-                TrojanGoMode::WebSocket => "80",
-                TrojanGoMode::WebSocketTLS => "443",
-            });
+        let port = server_addr.split(':').nth(1).unwrap_or(match self.config.mode {
+            TrojanGoMode::WebSocket => "80",
+            TrojanGoMode::WebSocketTLS => "443",
+        });
 
         let path = if self.config.path.is_empty() {
             "/"
@@ -156,10 +153,12 @@ impl TrojanGoWsHandler {
         };
 
         match self.config.mode {
-            TrojanGoMode::WebSocket => Ok(format!("ws://{}:{}{}", host, port, path)),
+            TrojanGoMode::WebSocket => {
+                Ok(format!("ws://{host}:{port}{path}"))
+            }
             TrojanGoMode::WebSocketTLS => {
                 let sni = self.config.tls_sni.as_deref().unwrap_or(host);
-                Ok(format!("wss://{}:{}{}", sni, port, path))
+                Ok(format!("wss://{sni}:{port}{path}"))
             }
         }
     }
@@ -167,16 +166,12 @@ impl TrojanGoWsHandler {
 
 /// Trojan-go WebSocket stream
 pub struct TrojanGoWsStream {
-    ws: tokio_tungstenite::WebSocketStream<
-        tokio_tungstenite::MaybeTlsStream<tokio::net::TcpStream>,
-    >,
+    ws: tokio_tungstenite::WebSocketStream<tokio_tungstenite::MaybeTlsStream<tokio::net::TcpStream>>,
 }
 
 impl TrojanGoWsStream {
     pub fn new(
-        ws: tokio_tungstenite::WebSocketStream<
-            tokio_tungstenite::MaybeTlsStream<tokio::net::TcpStream>,
-        >,
+        ws: tokio_tungstenite::WebSocketStream<tokio_tungstenite::MaybeTlsStream<tokio::net::TcpStream>>,
     ) -> Self {
         Self { ws }
     }
@@ -185,9 +180,9 @@ impl TrojanGoWsStream {
     pub async fn send(&mut self, data: &[u8]) -> std::io::Result<()> {
         // Trojan-go uses binary WebSocket messages
         self.ws
-            .send(Message::Binary(data.to_vec().into()))
+            .send(Message::Binary(data.to_vec()))
             .await
-            .map_err(|e| std::io::Error::new(ErrorKind::Other, format!("send error: {}", e)))?;
+            .map_err(|e| std::io::Error::other(format!("send error: {e}")))?;
         Ok(())
     }
 
@@ -225,33 +220,26 @@ impl TrojanGoWsStream {
                     }
                     Err(e) => {
                         error!("Trojan-go WebSocket error: {}", e);
-                        return Err(std::io::Error::new(
-                            ErrorKind::Other,
-                            format!("recv error: {}", e),
-                        ));
+                        return Err(std::io::Error::other(format!("recv error: {e}")));
                     }
                 }
             } else {
-                return Err(std::io::Error::new(ErrorKind::Other, "stream ended"));
+                return Err(std::io::Error::other("stream ended"));
             }
         }
     }
 
     /// Close the WebSocket connection gracefully
     pub async fn close(&mut self) -> std::io::Result<()> {
-        self.ws
-            .close(None)
-            .await
-            .map_err(|e| std::io::Error::new(ErrorKind::Other, format!("close error: {}", e)))?;
+        self.ws.close(None).await.map_err(|e| {
+            std::io::Error::other(format!("close error: {e}"))
+        })?;
         Ok(())
     }
 
     /// Get underlying WebSocket stream
     #[allow(dead_code)]
-    pub fn into_inner(
-        self,
-    ) -> tokio_tungstenite::WebSocketStream<tokio_tungstenite::MaybeTlsStream<tokio::net::TcpStream>>
-    {
+    pub fn into_inner(self) -> tokio_tungstenite::WebSocketStream<tokio_tungstenite::MaybeTlsStream<tokio::net::TcpStream>> {
         self.ws
     }
 }
@@ -262,14 +250,8 @@ mod tests {
 
     #[test]
     fn test_trojan_go_mode_from_str() {
-        assert_eq!(
-            TrojanGoMode::from_str("websocket"),
-            Some(TrojanGoMode::WebSocket)
-        );
-        assert_eq!(
-            TrojanGoMode::from_str("wss"),
-            Some(TrojanGoMode::WebSocketTLS)
-        );
+        assert_eq!(TrojanGoMode::from_str("websocket"), Some(TrojanGoMode::WebSocket));
+        assert_eq!(TrojanGoMode::from_str("wss"), Some(TrojanGoMode::WebSocketTLS));
         assert_eq!(TrojanGoMode::from_str("unknown"), None);
     }
 

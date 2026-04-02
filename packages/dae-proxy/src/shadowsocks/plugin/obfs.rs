@@ -25,7 +25,7 @@ use std::time::Duration;
 
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use tokio::net::TcpStream;
-use tracing::{debug, error, warn};
+use tracing::{debug, warn};
 
 /// simple-obfs plugin mode
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]

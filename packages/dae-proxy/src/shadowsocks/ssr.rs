@@ -12,12 +12,11 @@
 //! - Password is prefixed with protocol name
 //! - Different handshake sequence
 
-use std::io::ErrorKind;
 use std::time::Duration;
 
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use tokio::net::TcpStream;
-use tracing::{debug, error, info};
+use tracing::{debug, info};
 
 /// SSR protocol types
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -361,12 +360,11 @@ impl SsrObfsHandler {
         let body_len = data.len();
 
         let mut request = format!(
-            "GET {} HTTP/1.1\r\n\
-            Host: {}\r\n\
+            "GET {path} HTTP/1.1\r\n\
+            Host: {host}\r\n\
             User-Agent: Mozilla/5.0\r\n\
-            Content-Length: {}\r\n\
-           \r\n",
-            path, host, body_len
+            Content-Length: {body_len}\r\n\
+           \r\n"
         )
         .into_bytes();
 

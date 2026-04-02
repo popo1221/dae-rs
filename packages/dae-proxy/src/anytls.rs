@@ -5,12 +5,10 @@
 //!
 //! Protocol spec: https://github.com/anytls/anytls-go
 
-use std::io::ErrorKind;
 use std::time::Duration;
 
-use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use tokio::net::TcpStream;
-use tracing::{debug, error, info};
+use tracing::{debug, info};
 
 /// AnyTLS client configuration
 #[derive(Debug, Clone)]
