@@ -1,15 +1,21 @@
-//! Shadowsocks AEAD protocol handler
+//! Shadowsocks AEAD protocol handler with plugin support
 //!
 //! Implements Shadowsocks AEAD protocol support.
 //! Supports AEAD ciphers: chacha20-ietf-poly1305, aes-256-gcm, aes-128-gcm
 //! Implements OTA (One-Time Auth) compatibility mode.
 //!
+//! Supports obfuscation plugins:
+//! - simple-obfs (HTTP and TLS obfuscation)
+//! - v2ray-plugin (WebSocket-based obfuscation)
+//!
 //! Protocol flow:
-//! Client -> dae-rs (Shadowsocks client) -> remote Shadowsocks server -> target
+//! Client -> [obfs/plugin] -> [Shadowsocks AEAD] -> Server
 
 use std::net::{IpAddr, Ipv4Addr, Ipv6Addr, SocketAddr};
 use std::sync::Arc;
 use std::time::Duration;
+
+pub mod plugin;
 
 use tokio::io::AsyncReadExt;
 use tokio::net::{TcpListener, TcpStream, UdpSocket};
