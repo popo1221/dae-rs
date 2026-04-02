@@ -9,8 +9,8 @@ use axum::{
 use std::sync::Arc;
 use tokio::sync::RwLock;
 
-use crate::api::models::{HealthResponse, StatsResponse};
-use crate::api::AppState;
+use crate::models::{HealthResponse, StatsResponse};
+use crate::AppState;
 
 /// Get proxy statistics
 ///

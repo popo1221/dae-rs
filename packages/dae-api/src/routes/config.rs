@@ -10,8 +10,8 @@ use axum::{
 use std::sync::Arc;
 use tokio::sync::RwLock;
 
-use crate::api::models::{ConfigResponse, ErrorResponse};
-use crate::api::AppState;
+use crate::models::{ConfigResponse, ErrorResponse};
+use crate::AppState;
 
 /// Get current configuration
 ///

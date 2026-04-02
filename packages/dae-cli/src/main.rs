@@ -9,18 +9,21 @@ use dae_proxy::{
     shadowsocks::{SsCipherType, SsServerConfig},
     vless::{VlessServerConfig, VlessTlsConfig},
     vmess::{VmessServerConfig, VmessSecurity},
-    trojan::{TrojanServerConfig, TrojanTlsConfig},
+    trojan_protocol::{TrojanServerConfig, TrojanTlsConfig},
     rule_engine::{RuleEngineConfig, new_rule_engine},
     control::{ControlServer, ControlState, connect_and_send},
 };
 use dae_core::Engine;
 use dae_config::Config;
-use dae_cli::api::ApiServer;
 use std::path::PathBuf;
 use std::sync::Arc;
 use std::time::Duration;
 use tokio::signal;
 use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
+
+// API module - only available when api feature is enabled
+#[cfg(feature = "api")]
+use dae_api::ApiServer;
 
 #[derive(Parser, Debug)]
 #[command(name = "dae")]
@@ -238,15 +241,6 @@ enum Commands {
     Rules {
         #[command(subcommand)]
         command: RulesCommands,
-    },
-    /// Start REST API server
-    Api {
-        /// Port to listen on
-        #[arg(long, default_value = "8080")]
-        port: u16,
-        /// Host to bind to
-        #[arg(long, default_value = "0.0.0.0")]
-        host: String,
     },
 }
 
@@ -710,14 +704,6 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                     eprintln!("Failed to parse configuration: {e}");
                     std::process::exit(1);
                 }
-            }
-        }
-        Some(Commands::Api { port, host: _host }) => {
-            tracing::info!("Starting REST API server on port {}", port);
-            let server = ApiServer::new(port).await;
-            if let Err(e) = server.start().await {
-                eprintln!("API server error: {e}");
-                std::process::exit(1);
             }
         }
         Some(Commands::RunEngine { config }) => {

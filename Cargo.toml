@@ -5,6 +5,7 @@ members = [
     "packages/dae-cli",
     "packages/dae-config",
     "packages/dae-proxy",
+    "packages/dae-api",
     "packages/dae-ebpf/dae-ebpf-common",
     "packages/dae-ebpf/dae-xdp",
     "packages/dae-ebpf/dae-ebpf",

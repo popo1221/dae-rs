@@ -9,8 +9,8 @@ use axum::{
 use std::sync::Arc;
 use tokio::sync::RwLock;
 
-use crate::api::models::RuleResponse;
-use crate::api::AppState;
+use crate::models::RuleResponse;
+use crate::AppState;
 
 /// List all rules
 ///

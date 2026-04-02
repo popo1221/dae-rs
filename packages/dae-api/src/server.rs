@@ -16,8 +16,8 @@ use tower_http::cors::{CorsLayer, Any};
 use tower_http::trace::TraceLayer;
 use tracing::info;
 
-use crate::api::routes::{nodes, rules, config, stats};
-use crate::api::models::{NodeResponse, NodeStatus, RuleResponse, ConfigResponse, StatsResponse, ErrorResponse};
+use crate::routes::{nodes, rules, config, stats};
+use crate::models::{NodeResponse, NodeStatus, RuleResponse, ConfigResponse, StatsResponse, ErrorResponse};
 
 /// Application state shared across route handlers
 #[derive(Debug, Clone)]
