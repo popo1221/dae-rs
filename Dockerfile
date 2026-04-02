@@ -40,7 +40,7 @@ LABEL description="High-performance transparent proxy in Rust with eBPF"
 RUN apt-get update && apt-get install -y --no-install-recommends \
     ca-certificates \
     libelf1 \
-    libpcap1 \
+    libpcap-dev \
     && rm -rf /var/lib/apt/lists/*
 
 # Create non-root user for dae
