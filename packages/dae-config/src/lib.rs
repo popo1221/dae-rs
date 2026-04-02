@@ -5,6 +5,7 @@ use std::path::Path;
 use thiserror::Error;
 
 pub mod rules;
+pub mod subscription;
 pub use rules::{RuleConfig, RuleConfigItem, RuleGroupConfig};
 
 /// Configuration validation errors
