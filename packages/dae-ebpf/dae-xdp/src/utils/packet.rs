@@ -34,8 +34,8 @@ pub struct EthHdr {
 #[derive(Clone, Copy, Debug)]
 #[repr(C)]
 pub struct VlanHdr {
-    pub tpid: u16,  // Tag Protocol Identifier (0x8100)
-    pub tci: u16,   // Tag Control Information (VLAN ID, PCP, DEI)
+    pub tpid: u16, // Tag Protocol Identifier (0x8100)
+    pub tci: u16,  // Tag Control Information (VLAN ID, PCP, DEI)
 }
 
 impl EthHdr {
@@ -87,9 +87,7 @@ impl VlanHdr {
         let data = ctx.data();
         let data_end = ctx.data_end();
 
-        let ptr = unsafe {
-            (data as *const u8).add(eth_offset) as *const VlanHdr
-        };
+        let ptr = unsafe { (data as *const u8).add(eth_offset) as *const VlanHdr };
         if ptr as usize + core::mem::size_of::<VlanHdr>() > data_end {
             return None;
         }

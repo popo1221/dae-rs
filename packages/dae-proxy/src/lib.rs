@@ -49,15 +49,15 @@ pub use crate::control::{
 };
 
 // Logging module exports
-pub use crate::logging::{
-    connect_to_log_stream, handle_control_log_command, process_log_command, LogCommand,
-    LogLevel, LogMessage, LogService, LogState, parse_level_response,
-};
 pub use crate::core::{Context, Error, Result};
 pub use crate::juicity::codec::{JuicityAddress, JuicityCodec, JuicityCommand, JuicityFrame};
 pub use crate::juicity::{
     CongestionControl, JuicityClient, JuicityConfig, JuicityConnection, JuicityError,
     JuicityHandler, JuicityServer,
+};
+pub use crate::logging::{
+    connect_to_log_stream, handle_control_log_command, parse_level_response, process_log_command,
+    LogCommand, LogLevel, LogMessage, LogService, LogState,
 };
 pub use crate::node::{
     Node,

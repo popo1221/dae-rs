@@ -137,15 +137,14 @@ impl LogMessage {
             Some(fields) => {
                 format!(
                     "{} {} [{}] {} {}",
-                    self.timestamp,
-                    self.level,
-                    target,
-                    self.message,
-                    fields
+                    self.timestamp, self.level, target, self.message, fields
                 )
             }
             None => {
-                format!("{} {} [{}] {}", self.timestamp, self.level, target, self.message)
+                format!(
+                    "{} {} [{}] {}",
+                    self.timestamp, self.level, target, self.message
+                )
             }
         }
     }
@@ -166,10 +165,7 @@ fn chrono_lite_timestamp() -> String {
     let minutes = (secs / 60) % 60;
     let seconds = secs % 60;
     let millis = now.subsec_millis();
-    format!(
-        "{:02}:{:02}:{:02}.{:03}",
-        hours, minutes, seconds, millis
-    )
+    format!("{:02}:{:02}:{:02}.{:03}", hours, minutes, seconds, millis)
 }
 
 /// Shared log state
@@ -376,10 +372,7 @@ pub enum LogCommand {
 }
 
 /// Process a log command and return response
-pub async fn process_log_command(
-    state: &Arc<LogState>,
-    command: LogCommand,
-) -> String {
+pub async fn process_log_command(state: &Arc<LogState>, command: LogCommand) -> String {
     match command {
         LogCommand::GetLevel => {
             let level = state.get_min_level().await;
@@ -389,21 +382,17 @@ pub async fn process_log_command(
             state.set_min_level(level).await;
             format!("Log level set to {}\n", level)
         }
-        LogCommand::Help => {
-            r#"Available log commands:
+        LogCommand::Help => r#"Available log commands:
   level          Get current log level
   level <level>  Set log level (trace, debug, info, warn, error)
   help           Show this help message
-"#.to_string()
-        }
+"#
+        .to_string(),
     }
 }
 
 /// Add log level commands to control API
-pub async fn handle_control_log_command(
-    state: &Arc<LogState>,
-    cmd: &str,
-) -> Option<String> {
+pub async fn handle_control_log_command(state: &Arc<LogState>, cmd: &str) -> Option<String> {
     let parts: Vec<&str> = cmd.split_whitespace().collect();
     let command = parts.first().map(|s| s.to_lowercase()).unwrap_or_default();
 
@@ -420,9 +409,7 @@ pub async fn handle_control_log_command(
                 Some(process_log_command(state, LogCommand::GetLevel).await)
             }
         }
-        "log" => {
-            Some(process_log_command(state, LogCommand::Help).await)
-        }
+        "log" => Some(process_log_command(state, LogCommand::Help).await),
         _ => None,
     }
 }

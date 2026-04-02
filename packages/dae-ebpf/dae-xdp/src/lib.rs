@@ -14,7 +14,9 @@ use aya_ebpf::maps::lpm_trie::Key;
 use aya_ebpf::maps::{Array, HashMap, LpmTrie, PerCpuArray};
 use aya_ebpf::programs::XdpContext;
 
-use dae_ebpf_common::{action, state, ConfigEntry, RoutingEntry, SessionEntry, SessionKey, StatsEntry};
+use dae_ebpf_common::{
+    action, state, ConfigEntry, RoutingEntry, SessionEntry, SessionKey, StatsEntry,
+};
 
 mod utils;
 
@@ -78,8 +80,10 @@ fn xdp_prog(ctx: &mut XdpContext) -> Result<u32, ()> {
         // Inner EtherType is in lower 16 bits of TCI
         let actual_ethertype = inner_ethertype;
         // After EthHdr (14 bytes) + VlanHdr (4 bytes) = 18 bytes
-        (core::mem::size_of::<EthHdr>() + core::mem::size_of::<VlanHdr>(),
-         actual_ethertype == ethertype::IPV4)
+        (
+            core::mem::size_of::<EthHdr>() + core::mem::size_of::<VlanHdr>(),
+            actual_ethertype == ethertype::IPV4,
+        )
     } else {
         // No VLAN tag
         (core::mem::size_of::<EthHdr>(), eth.is_ipv4())

@@ -424,12 +424,8 @@ impl Rule {
             "fullcone" | "full-cone" | "fullcone(enabled)" => {
                 Rule::Capability(CapabilityRule::new("fullcone", value)?)
             }
-            "udp" | "udp(enabled)" => {
-                Rule::Capability(CapabilityRule::new("udp", value)?)
-            }
-            "v2ray" | "v2ray(compatible)" => {
-                Rule::Capability(CapabilityRule::new("v2ray", value)?)
-            }
+            "udp" | "udp(enabled)" => Rule::Capability(CapabilityRule::new("udp", value)?),
+            "v2ray" | "v2ray(compatible)" => Rule::Capability(CapabilityRule::new("v2ray", value)?),
             _ => return Err(format!("Unknown rule type: {rule_type_str}")),
         };
 
