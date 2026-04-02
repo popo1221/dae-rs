@@ -549,4 +549,76 @@ mod tests {
         let bytes = addr.to_bytes();
         assert_eq!(bytes, vec![0x01, 192, 168, 1, 1]);
     }
+
+    #[test]
+    fn test_cipher_type_all_variants() {
+        // Only these ciphers are supported
+        assert!(SsCipherType::from_str("aes-128-gcm").is_some());
+        assert!(SsCipherType::from_str("aes-256-gcm").is_some());
+        assert!(SsCipherType::from_str("chacha20-ietf-poly1305").is_some());
+        // These are NOT supported
+        assert!(SsCipherType::from_str("aes-128-cfb").is_none());
+        assert!(SsCipherType::from_str("aes-256-cfb").is_none());
+        assert!(SsCipherType::from_str("invalid").is_none());
+    }
+
+    #[test]
+    fn test_cipher_type_to_string() {
+        assert_eq!(SsCipherType::Aes128Gcm.to_string(), "aes-128-gcm");
+        assert_eq!(SsCipherType::Aes256Gcm.to_string(), "aes-256-gcm");
+        assert_eq!(SsCipherType::Chacha20IetfPoly1305.to_string(), "chacha20-ietf-poly1305");
+    }
+
+    #[test]
+    fn test_target_address_ipv6() {
+        let payload = [
+            0x04, // ATYP_IPV6
+            0x20, 0x01, 0x0d, 0xb8, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+            0x00, 0x01, 0x00, 0x50, // [2001:db8::1]:80
+        ];
+        let result = TargetAddress::parse_from_aead(&payload);
+        assert!(result.is_some());
+    }
+
+    #[test]
+    fn test_target_address_invalid() {
+        let payload = [0xFF, 0x00]; // Invalid type
+        let result = TargetAddress::parse_from_aead(&payload);
+        assert!(result.is_none());
+    }
+
+    #[test]
+    fn test_target_address_truncated() {
+        let payload = [0x01, 192]; // Too short for IPv4
+        let result = TargetAddress::parse_from_aead(&payload);
+        assert!(result.is_none());
+    }
+
+    #[test]
+    fn test_target_address_domain_length_mismatch() {
+        // Domain length says 11 but only 3 bytes follow
+        let payload = [0x03, 0x0b, 0x65, 0x78, 0x61]; // "exa" only
+        let result = TargetAddress::parse_from_aead(&payload);
+        assert!(result.is_none());
+    }
+
+    #[test]
+    fn test_ss_client_config_default() {
+        let config = SsClientConfig::default();
+        assert_eq!(config.server.port, 8388);
+    }
+
+    #[test]
+    fn test_ss_client_config_clone() {
+        let config = SsClientConfig::default();
+        let cloned = config.clone();
+        assert_eq!(cloned.server.method, config.server.method);
+    }
+
+    #[test]
+    fn test_target_address_debug() {
+        let addr = TargetAddress::Ip(IpAddr::V4(Ipv4Addr::new(1, 2, 3, 4)));
+        let debug_str = format!("{:?}", addr);
+        assert!(debug_str.contains("Ip"));
+    }
 }

@@ -1028,4 +1028,95 @@ mod tests {
         let result = hmac_sha256(key, data);
         assert_eq!(result.len(), 32);
     }
+
+    #[test]
+    fn test_vless_command_variants() {
+        assert_eq!(VlessCommand::from_u8(0x01), Some(VlessCommand::Tcp));
+        assert_eq!(VlessCommand::from_u8(0x02), Some(VlessCommand::Udp));
+        assert_eq!(VlessCommand::from_u8(0x03), Some(VlessCommand::XtlsVision));
+        assert!(VlessCommand::from_u8(0x00).is_none());
+        assert!(VlessCommand::from_u8(0x05).is_none());
+    }
+
+    #[test]
+    fn test_vless_address_type_variants() {
+        assert_eq!(VlessAddressType::from_u8(0x01), Some(VlessAddressType::Ipv4));
+        assert_eq!(VlessAddressType::from_u8(0x02), Some(VlessAddressType::Domain));
+        assert_eq!(VlessAddressType::from_u8(0x03), Some(VlessAddressType::Ipv6));
+        assert!(VlessAddressType::from_u8(0x00).is_none());
+        assert!(VlessAddressType::from_u8(0x04).is_none());
+    }
+
+    #[test]
+    fn test_vless_target_address_ipv6() {
+        let payload = [
+            0x03, // Ipv6
+            0x20, 0x01, 0x0d, 0xb8, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+            0x00, 0x01, 0x00, 0x50, // [2001:db8::1]:80
+        ];
+        let result = VlessTargetAddress::parse_from_bytes(&payload);
+        assert!(result.is_some());
+    }
+
+    #[test]
+    fn test_vless_target_address_invalid_type() {
+        let payload = [0xFF, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00];
+        let result = VlessTargetAddress::parse_from_bytes(&payload);
+        assert!(result.is_none());
+    }
+
+    #[test]
+    fn test_vless_target_address_truncated() {
+        let payload = [0x01, 192, 168]; // Too short for IPv4
+        let result = VlessTargetAddress::parse_from_bytes(&payload);
+        assert!(result.is_none());
+    }
+
+    #[test]
+    fn test_validate_uuid_valid() {
+        let uuid = [1u8; 16];
+        assert!(VlessHandler::validate_uuid(&uuid));
+    }
+
+    #[test]
+    fn test_validate_uuid_empty() {
+        assert!(!VlessHandler::validate_uuid(&[]));
+    }
+
+    #[test]
+    fn test_validate_uuid_wrong_length() {
+        let short_uuid = [1u8; 15];
+        let long_uuid = [1u8; 17];
+        assert!(!VlessHandler::validate_uuid(&short_uuid));
+        assert!(!VlessHandler::validate_uuid(&long_uuid));
+    }
+
+    #[test]
+    fn test_reality_config_short_id() {
+        let private_key = [0u8; 32];
+        let public_key = [1u8; 32];
+        let short_id = [0xAB, 0xCD, 0xEF, 0x12, 0x34, 0x56, 0x78, 0x9A];
+        let config = VlessRealityConfig::new(&private_key, &public_key, &short_id, "example.com");
+        assert_eq!(config.destination, "example.com");
+    }
+
+    #[test]
+    fn test_hmac_sha256_different_inputs() {
+        let key1 = b"key1";
+        let key2 = b"key2";
+        let data = b"same_data";
+        let result1 = hmac_sha256(key1, data);
+        let result2 = hmac_sha256(key2, data);
+        // Different keys should produce different results
+        assert_ne!(result1.as_slice(), result2.as_slice());
+    }
+
+    #[test]
+    fn test_hmac_sha256_deterministic() {
+        let key = b"test_key";
+        let data = b"test_data";
+        let result1 = hmac_sha256(key, data);
+        let result2 = hmac_sha256(key, data);
+        assert_eq!(result1, result2);
+    }
 }

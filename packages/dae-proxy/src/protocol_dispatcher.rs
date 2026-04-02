@@ -296,4 +296,71 @@ mod tests {
             DetectedProtocol::Unknown
         );
     }
+
+    #[test]
+    fn test_detect_http_head() {
+        assert_eq!(
+            DetectedProtocol::detect(b"HEAD / HTTP/1.1"),
+            DetectedProtocol::HttpOther
+        );
+    }
+
+    #[test]
+    fn test_detect_http_options() {
+        assert_eq!(
+            DetectedProtocol::detect(b"OPTIONS / HTTP/1.1"),
+            DetectedProtocol::HttpOther
+        );
+    }
+
+    #[test]
+    fn test_detect_http_delete() {
+        assert_eq!(
+            DetectedProtocol::detect(b"DELETE /api HTTP/1.1"),
+            DetectedProtocol::HttpOther
+        );
+    }
+
+    #[test]
+    fn test_detect_http_put() {
+        assert_eq!(
+            DetectedProtocol::detect(b"PUT /file HTTP/1.1"),
+            DetectedProtocol::HttpOther
+        );
+    }
+
+    #[test]
+    fn test_detect_http_patch() {
+        assert_eq!(
+            DetectedProtocol::detect(b"PATCH /api HTTP/1.1"),
+            DetectedProtocol::HttpOther
+        );
+    }
+
+    #[test]
+    fn test_detect_empty_data() {
+        assert_eq!(DetectedProtocol::detect(&[]), DetectedProtocol::Unknown);
+    }
+
+    #[test]
+    fn test_detect_socks5_variants() {
+        assert_eq!(DetectedProtocol::detect(&[0x05, 0x00]), DetectedProtocol::Socks5);
+        assert_eq!(DetectedProtocol::detect(&[0x05, 0xFF, 0x00]), DetectedProtocol::Socks5);
+    }
+
+    #[test]
+    fn test_detect_http_connect_with_port() {
+        assert_eq!(
+            DetectedProtocol::detect(b"CONNECT api.example.com:8443 HTTP/1.1"),
+            DetectedProtocol::HttpConnect
+        );
+    }
+
+    #[test]
+    fn test_detect_http_get_with_path() {
+        assert_eq!(
+            DetectedProtocol::detect(b"GET /api/v1/users HTTP/1.1"),
+            DetectedProtocol::HttpOther
+        );
+    }
 }
