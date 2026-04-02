@@ -81,6 +81,8 @@ pub struct ProxyConfig {
     pub trojan_listen: Option<SocketAddr>,
     /// Trojan server configuration (None to disable)
     pub trojan_server: Option<TrojanServerConfig>,
+    /// Trojan backend servers from config file (fallback if trojan_server not set)
+    pub trojan_backends: Vec<TrojanServerConfig>,
 }
 
 impl Default for ProxyConfig {
@@ -103,6 +105,7 @@ impl Default for ProxyConfig {
             vmess_server: None,
             trojan_listen: None,
             trojan_server: None,
+            trojan_backends: Vec::new(),
         }
     }
 }

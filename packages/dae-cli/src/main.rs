@@ -330,7 +330,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             control_socket,
         }) => {
             // Try to load config file if specified
-            let config = if let Some(ref config_path) = args.config {
+            let loaded_config = if let Some(ref config_path) = args.config {
                 match Config::from_file(config_path) {
                     Ok(cfg) => {
                         tracing::info!("Loaded configuration from {}", config_path);
@@ -343,6 +343,30 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                 }
             } else {
                 None
+            };
+            
+            // Extract Trojan nodes from config file
+            let trojan_backends = if let Some(ref config) = loaded_config {
+                use dae_config::NodeType;
+                config.nodes.iter()
+                    .filter(|n| n.node_type == NodeType::Trojan)
+                    .map(|n| TrojanServerConfig {
+                        addr: n.server.clone(),
+                        port: n.port,
+                        password: n.trojan_password.clone().unwrap_or_default(),
+                        tls: TrojanTlsConfig {
+                            enabled: n.tls.unwrap_or(true),
+                            version: "1.3".to_string(),
+                            alpn: vec!["h2".to_string(), "http/1.1".to_string()],
+                            server_name: n.tls_server_name.clone(),
+                            cert_file: None,
+                            key_file: None,
+                            insecure: false,
+                        },
+                    })
+                    .collect()
+            } else {
+                Vec::new()
             };
 
             tracing::info!("Starting dae-rs proxy daemon...");
@@ -524,6 +548,31 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             } else {
                 proxy_config.trojan_listen = None;
                 proxy_config.trojan_server = None;
+            }
+            
+            // If no CLI Trojan config but config file has Trojan nodes, use first backend
+            if proxy_config.trojan_server.is_none() && !trojan_backends.is_empty() {
+                proxy_config.trojan_backends = trojan_backends.clone();
+                // Use first backend from config file
+                let first_backend = &trojan_backends[0];
+                // Enable Trojan if not enabled via CLI (use default listen address)
+                if proxy_config.trojan_listen.is_none() {
+                    proxy_config.trojan_listen = Some(std::net::SocketAddr::from(([127, 0, 0, 1], 1080)));
+                }
+                // Find listen address (use socks5 if set, otherwise default)
+                let listen_addr = proxy_config.trojan_listen.unwrap_or_else(|| {
+                    std::net::SocketAddr::from(([127, 0, 0, 1], 1080))
+                });
+                proxy_config.trojan_server = Some(TrojanServerConfig {
+                    addr: first_backend.addr.clone(),
+                    port: first_backend.port,
+                    password: first_backend.password.clone(),
+                    tls: first_backend.tls.clone(),
+                });
+                tracing::info!("Trojan enabled (from config): listen={}, server={}:{} ({} backends available)",
+                    listen_addr, first_backend.addr, first_backend.port, trojan_backends.len());
+            } else {
+                proxy_config.trojan_backends = trojan_backends;
             }
 
             // Log config
