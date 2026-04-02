@@ -22,16 +22,12 @@ use std::net::{IpAddr, Ipv4Addr, Ipv6Addr, SocketAddr};
 use std::sync::Arc;
 use std::time::Duration;
 
-use async_trait::async_trait;
 use std::io::ErrorKind;
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
-use tokio::net::{TcpListener, TcpStream, UdpSocket};
-use tracing::{debug, error, info, warn};
+use tokio::net::{TcpListener, TcpStream};
+use tracing::{debug, error, info};
 
-use crate::connection::Connection;
 use crate::protocol::{Handler, HandlerConfig};
-use crate::proxy::ProxyError;
-use crate::transport::TlsConfig;
 
 /// VLESS protocol version
 const VLESS_VERSION: u8 = 0x01;
@@ -228,7 +224,7 @@ impl VlessTargetAddress {
         }
 
         let atyp = payload[0];
-        match atyp as u8 {
+        match atyp {
             0x01 => {
                 // IPv4: 1 byte type + 4 bytes IP + 2 bytes port
                 if payload.len() < 7 {
@@ -449,7 +445,7 @@ impl VlessHandler {
     /// 4. Server responds with encrypted header containing the real destination
     async fn handle_reality_vision(
         self: &Arc<Self>,
-        mut client: TcpStream,
+        client: TcpStream,
         _header_buf: &[u8],
     ) -> std::io::Result<()> {
         let reality_config = self.config.server.reality.as_ref().ok_or_else(|| {
@@ -547,7 +543,7 @@ impl VlessHandler {
         request: &[u8; 48],
         destination: &str,
     ) -> std::io::Result<Vec<u8>> {
-        use std::io::Write;
+        
 
         let mut client_hello = Vec::new();
 
