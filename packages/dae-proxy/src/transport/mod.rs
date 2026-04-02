@@ -40,11 +40,13 @@ pub trait Transport: Send + Sync + Debug {
 // Re-export all transport types
 pub mod grpc;
 pub mod httpupgrade;
+pub mod meek;
 pub mod tcp;
 pub mod tls;
 pub mod ws;
 
 pub use grpc::{GrpcConfig, GrpcTransport};
+pub use meek::{MeekConfig, MeekTactic, MeekTransport};
 pub use tcp::TcpTransport;
 pub use tls::{RealityConfig, TlsConfig, TlsTransport};
 pub use ws::{WsConfig, WsConnector, WsStream, WsTransport};
