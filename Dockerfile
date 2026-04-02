@@ -19,11 +19,12 @@ RUN apk add --no-cache \
 # Set working directory
 WORKDIR /build
 
-# Copy workspace files
+# Copy all workspace members needed for dae-cli
 COPY Cargo.toml Cargo.lock* ./
 COPY packages/ ./packages/
+COPY benches/ ./benches/
 
-# Build the project
+# Build only dae-cli package
 RUN cargo build --release --package dae-cli
 
 # ===================================================================
