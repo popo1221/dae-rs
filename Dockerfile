@@ -31,7 +31,7 @@ COPY . .
 RUN cargo build --release --package dae-cli
 
 # Install binary
-RUN cp target/release/dae /usr/local/bin/dae && chmod +x /usr/local/bin/dae
+RUN cp target/release/dae-cli /usr/local/bin/dae && chmod +x /usr/local/bin/dae
 
 # Create directories
 RUN mkdir -p /etc/dae /var/log/dae /var/lib/dae && \

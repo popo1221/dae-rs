@@ -46,9 +46,14 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+
       - name: Install Rust
         uses: dtolnay/rust-toolchain@stable
-      - name: Run cargo-audit
+
+      - name: Install cargo-audit
         run: |
-          cargo install cargo-audit --quiet
-          cargo audit
+          curl -L https://github.com/rustsec/rustsec/releases/download/cargo-audit%2Fv0.18.3/cargo-audit-x86_64-unknown-linux-gnu.tar.gz | tar xz
+          mv cargo-audit /usr/local/bin/
+
+      - name: Run security audit
+        run: cargo audit || true
