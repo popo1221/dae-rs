@@ -9,6 +9,11 @@ tokio = { version = "1", features = ["full"] }
 dae-proxy = { path = "../packages/dae-proxy" }
 
 [[bench]]
-name = "main"
+name = "main_bench"
 harness = false
-path = "src/main.rs"
+path = "main_bench.rs"
+
+[[bench]]
+name = "proxy_benchmarks_bench"
+harness = false
+path = "proxy_benchmarks_bench.rs"
