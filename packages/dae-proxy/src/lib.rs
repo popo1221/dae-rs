@@ -118,6 +118,7 @@ pub mod hysteria2;
 pub mod juicity;
 pub mod logging;
 pub mod mac;
+pub mod naiveproxy;
 pub mod nat;
 pub mod node;
 pub mod process;
