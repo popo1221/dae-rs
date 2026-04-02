@@ -1,59 +1,40 @@
 # ===================================================================
-# dae-rs - Multi-stage Dockerfile for production
+# dae-rs - Single-stage Dockerfile for production
 # ===================================================================
-# Stage 1: Build
-FROM rust:latest AS builder
-
-# Install build dependencies
-RUN apt-get update && apt-get install -y --no-install-recommends \
-    clang \
-    llvm \
-    libelf-dev \
-    libpcap-dev \
-    make \
-    git \
-    pkg-config \
-    libssl-dev \
-    && rm -rf /var/lib/apt/lists/*
-
-# Set working directory
-WORKDIR /build
-
-# Copy all workspace members needed for dae-cli
-COPY Cargo.toml Cargo.lock* ./
-COPY packages/ ./packages/
-COPY benches/ ./benches/
-
-# Build only dae-cli package
-RUN cargo build --release --package dae-cli
-
-# ===================================================================
-# Stage 2: Runtime - Ubuntu-based for broad compatibility
-# ===================================================================
-FROM ubuntu:22.04 AS runtime
+FROM ubuntu:22.04
 
 # metadata
 LABEL maintainer="dae-rs"
 LABEL description="High-performance transparent proxy in Rust with eBPF"
 
-# Install runtime dependencies only
+# Install runtime dependencies
 RUN apt-get update && apt-get install -y --no-install-recommends \
     ca-certificates \
     libelf1 \
     libpcap-dev \
+    curl \
     && rm -rf /var/lib/apt/lists/*
 
-# Create non-root user for dae
+# Install Rust (for building in container if needed)
+RUN curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y --default-toolchain 1.88
+ENV PATH="/root/.cargo/bin:$PATH"
+
+# Create non-root user
 RUN groupadd -r dae && useradd -r -g dae dae
 
-# Copy binary from builder
-COPY --from=builder /build/target/release/dae /usr/local/bin/dae
+# Copy source and build
+WORKDIR /build
+COPY . .
+RUN cargo build --release --package dae-cli
 
-# Create config and data directories
+# Install binary
+RUN cp target/release/dae /usr/local/bin/dae && chmod +x /usr/local/bin/dae
+
+# Create directories
 RUN mkdir -p /etc/dae /var/log/dae /var/lib/dae && \
     chown -R dae:dae /etc/dae /var/log/dae /var/lib/dae
 
-# Config file (mount or embed default)
+# Config file
 COPY config/ /etc/dae/
 
 USER dae
