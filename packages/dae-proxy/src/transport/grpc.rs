@@ -1,9 +1,9 @@
 //! gRPC transport implementation (placeholder)
 
+use super::Transport;
 use async_trait::async_trait;
 use std::fmt::Debug;
 use tokio::net::TcpStream;
-use super::Transport;
 
 /// gRPC transport configuration
 #[derive(Debug, Clone)]

@@ -16,8 +16,7 @@ use tokio::net::{TcpListener, TcpStream, UdpSocket};
 use tracing::{debug, error, info};
 
 /// Shadowsocks AEAD cipher type
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-#[derive(Default)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub enum SsCipherType {
     /// chacha20-ietf-poly1305
     #[default]
@@ -27,7 +26,6 @@ pub enum SsCipherType {
     /// aes-128-gcm
     Aes128Gcm,
 }
-
 
 impl std::fmt::Display for SsCipherType {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
@@ -43,7 +41,9 @@ impl SsCipherType {
     /// Parse cipher type from string
     pub fn from_str(s: &str) -> Option<Self> {
         match s.to_lowercase().as_str() {
-            "chacha20-ietf-poly1305" | "chacha20poly1305" => Some(SsCipherType::Chacha20IetfPoly1305),
+            "chacha20-ietf-poly1305" | "chacha20poly1305" => {
+                Some(SsCipherType::Chacha20IetfPoly1305)
+            }
             "aes-256-gcm" | "aes256gcm" => Some(SsCipherType::Aes256Gcm),
             "aes-128-gcm" | "aes128gcm" => Some(SsCipherType::Aes128Gcm),
             _ => None,
@@ -128,7 +128,7 @@ impl TargetAddress {
         if payload.is_empty() {
             return None;
         }
-        
+
         let atyp = payload[0];
         match atyp {
             0x01 => {
@@ -136,7 +136,9 @@ impl TargetAddress {
                 if payload.len() < 7 {
                     return None;
                 }
-                let ip = IpAddr::V4(Ipv4Addr::new(payload[1], payload[2], payload[3], payload[4]));
+                let ip = IpAddr::V4(Ipv4Addr::new(
+                    payload[1], payload[2], payload[3], payload[4],
+                ));
                 let port = u16::from_be_bytes([payload[5], payload[6]]);
                 Some((TargetAddress::Ip(ip), port))
             }
@@ -149,8 +151,8 @@ impl TargetAddress {
                 if payload.len() < 4 + domain_len {
                     return None;
                 }
-                let domain = String::from_utf8(payload[2..2+domain_len].to_vec()).ok()?;
-                let port = u16::from_be_bytes([payload[2+domain_len], payload[3+domain_len]]);
+                let domain = String::from_utf8(payload[2..2 + domain_len].to_vec()).ok()?;
+                let port = u16::from_be_bytes([payload[2 + domain_len], payload[3 + domain_len]]);
                 Some((TargetAddress::Domain(domain, port), port))
             }
             0x04 => {
@@ -174,7 +176,7 @@ impl TargetAddress {
             _ => None,
         }
     }
-    
+
     /// Get the address portion (without port) as bytes for Shadowsocks protocol
     pub fn to_bytes(&self) -> Vec<u8> {
         match self {
@@ -197,7 +199,7 @@ impl TargetAddress {
             }
         }
     }
-    
+
     /// Format address for display
     pub fn address_string(&self) -> String {
         match self {
@@ -217,7 +219,7 @@ impl ShadowsocksHandler {
     pub fn new(config: SsClientConfig) -> Self {
         Self { config }
     }
-    
+
     /// Create with default configuration
     #[allow(dead_code)]
     pub fn new_default() -> Self {
@@ -225,33 +227,33 @@ impl ShadowsocksHandler {
             config: SsClientConfig::default(),
         }
     }
-    
+
     /// Get the listen address
     #[allow(dead_code)]
     pub fn listen_addr(&self) -> SocketAddr {
         self.config.listen_addr
     }
-    
+
     /// Handle a Shadowsocks connection
     pub async fn handle(self: Arc<Self>, mut client: TcpStream) -> std::io::Result<()> {
         let client_addr = client.peer_addr()?;
-        
+
         // Read the Shadowsocks AEAD header
         // Format: [1 byte type][payload]
         // For AEAD: first packet contains target address encrypted
         let mut header_buf = vec![0u8; 1];
         client.read_exact(&mut header_buf).await?;
-        
+
         // For AEAD, we need to read the length prefix and encrypted payload
         // Length prefix is typically 2 bytes for AEAD
         let mut len_buf = [0u8; 2];
         client.read_exact(&mut len_buf).await?;
         let payload_len = u16::from_be_bytes(len_buf) as usize;
-        
+
         // Read encrypted payload (contains target address)
         let mut encrypted_payload = vec![0u8; payload_len];
         client.read_exact(&mut encrypted_payload).await?;
-        
+
         // Parse target address from payload
         // In a real implementation, we would decrypt the payload first
         // For now, we try to parse assuming plaintext (for testing/non-encrypted mode)
@@ -264,17 +266,20 @@ impl ShadowsocksHandler {
                 error!("Failed to parse Shadowsocks target address");
                 return Err(std::io::Error::new(
                     std::io::ErrorKind::InvalidData,
-                    "invalid Shadowsocks AEAD payload"
+                    "invalid Shadowsocks AEAD payload",
                 ));
             }
         };
-        
-        info!("Shadowsocks TCP: {} -> {}:{}", client_addr, target_addr, target_port);
-        
+
+        info!(
+            "Shadowsocks TCP: {} -> {}:{}",
+            client_addr, target_addr, target_port
+        );
+
         // Connect to the Shadowsocks server
         let remote_addr = format!("{}:{}", self.config.server.addr, self.config.server.port);
         let timeout = self.config.tcp_timeout;
-        
+
         let remote = match tokio::time::timeout(timeout, TcpStream::connect(&remote_addr)).await {
             Ok(Ok(s)) => s,
             Ok(Err(e)) => {
@@ -283,66 +288,74 @@ impl ShadowsocksHandler {
             Err(_) => {
                 return Err(std::io::Error::new(
                     std::io::ErrorKind::TimedOut,
-                    "connection to Shadowsocks server timed out"
+                    "connection to Shadowsocks server timed out",
                 ));
             }
         };
-        
+
         debug!("Connected to Shadowsocks server {}", remote_addr);
-        
+
         // Relay data between client and remote
         self.relay(client, remote).await
     }
-    
+
     /// Relay data between client and Shadowsocks server
     async fn relay(&self, client: TcpStream, remote: TcpStream) -> std::io::Result<()> {
         let (mut cr, mut cw) = tokio::io::split(client);
         let (mut rr, mut rw) = tokio::io::split(remote);
-        
+
         let client_to_remote = tokio::io::copy(&mut cr, &mut rw);
         let remote_to_client = tokio::io::copy(&mut rr, &mut cw);
-        
+
         tokio::try_join!(client_to_remote, remote_to_client)?;
         Ok(())
     }
-    
+
     /// Handle UDP traffic
     #[allow(dead_code)]
     pub async fn handle_udp(self: Arc<Self>, client: UdpSocket) -> std::io::Result<()> {
         // Maximum UDP packet size for Shadowsocks
         const MAX_UDP_SIZE: usize = 65535;
         let mut buf = vec![0u8; MAX_UDP_SIZE];
-        
+
         loop {
             let (n, client_addr) = client.recv_from(&mut buf).await?;
-            
+
             if n < 3 {
                 continue;
             }
-            
+
             // Parse Shadowsocks UDP packet
             let atyp = buf[0];
             let (target_addr, target_port, payload_offset) = match atyp {
                 0x01 => {
                     // IPv4
-                    if n < 7 { continue; }
+                    if n < 7 {
+                        continue;
+                    }
                     let ip = IpAddr::V4(Ipv4Addr::new(buf[1], buf[2], buf[3], buf[4]));
                     let port = u16::from_be_bytes([buf[5], buf[6]]);
                     (TargetAddress::Ip(ip), port, 7)
                 }
                 0x03 => {
                     // Domain
-                    if n < 4 { continue; }
+                    if n < 4 {
+                        continue;
+                    }
                     let domain_len = buf[1] as usize;
-                    if n < 4 + domain_len { continue; }
-                    let domain = String::from_utf8(buf[2..2+domain_len].to_vec())
-                        .unwrap_or_default();
-                    let port = u16::from_be_bytes([buf[2+domain_len], buf[3+domain_len]]);
+                    if n < 4 + domain_len {
+                        continue;
+                    }
+                    let domain =
+                        String::from_utf8(buf[2..2 + domain_len].to_vec()).unwrap_or_default();
+                    let port = u16::from_be_bytes([buf[2 + domain_len], buf[3 + domain_len]]);
                     (TargetAddress::Domain(domain, port), port, 4 + domain_len)
                 }
                 0x04 => {
                     // IPv6
-                    if n < 18 { continue; }
+                    if n < 18 {
+                        continue;
+                    }
                     let ip = IpAddr::V6(Ipv6Addr::new(
                         u16::from_be_bytes([buf[1], buf[2]]),
                         u16::from_be_bytes([buf[3], buf[4]]),
@@ -358,18 +371,29 @@ impl ShadowsocksHandler {
                 }
                 _ => continue,
             };
-            
+
             let payload = &buf[payload_offset..n];
-            
-            debug!("Shadowsocks UDP: {} -> {}:{} ({} bytes)", client_addr, target_addr, target_port, payload.len());
-            
+
+            debug!(
+                "Shadowsocks UDP: {} -> {}:{} ({} bytes)",
+                client_addr,
+                target_addr,
+                target_port,
+                payload.len()
+            );
+
             // Forward to Shadowsocks server and back
             let server_addr = format!("{}:{}", self.config.server.addr, self.config.server.port);
             let server_socket = UdpSocket::bind("0.0.0.0:0").await?;
             server_socket.send_to(payload, &server_addr).await?;
-            
+
             let mut response_buf = vec![0u8; MAX_UDP_SIZE];
-            match tokio::time::timeout(self.config.udp_timeout, server_socket.recv_from(&mut response_buf)).await {
+            match tokio::time::timeout(
+                self.config.udp_timeout,
+                server_socket.recv_from(&mut response_buf),
+            )
+            .await
+            {
                 Ok(Ok((m, _))) => {
                     client.send_to(&response_buf[..m], &client_addr).await?;
                 }
@@ -399,7 +423,7 @@ impl ShadowsocksServer {
             listen_addr: addr,
         })
     }
-    
+
     /// Create with custom configuration
     pub async fn with_config(config: SsClientConfig) -> std::io::Result<Self> {
         let listen_addr = config.listen_addr;
@@ -411,11 +435,11 @@ impl ShadowsocksServer {
             listen_addr,
         })
     }
-    
+
     /// Start the Shadowsocks server
     pub async fn start(self: Arc<Self>) -> std::io::Result<()> {
         info!("Shadowsocks server listening on {}", self.listen_addr);
-        
+
         loop {
             match self.listener.accept().await {
                 Ok((client, addr)) => {
@@ -437,7 +461,7 @@ impl ShadowsocksServer {
 #[cfg(test)]
 mod tests {
     use super::*;
-    
+
     #[test]
     fn test_cipher_type_from_str() {
         assert_eq!(
@@ -452,19 +476,19 @@ mod tests {
             SsCipherType::from_str("aes-128-gcm"),
             Some(SsCipherType::Aes128Gcm)
         );
-        assert_eq!(
-            SsCipherType::from_str("invalid"),
-            None
-        );
+        assert_eq!(SsCipherType::from_str("invalid"), None);
     }
-    
+
     #[test]
     fn test_cipher_type_display() {
-        assert_eq!(SsCipherType::Chacha20IetfPoly1305.to_string(), "chacha20-ietf-poly1305");
+        assert_eq!(
+            SsCipherType::Chacha20IetfPoly1305.to_string(),
+            "chacha20-ietf-poly1305"
+        );
         assert_eq!(SsCipherType::Aes256Gcm.to_string(), "aes-256-gcm");
         assert_eq!(SsCipherType::Aes128Gcm.to_string(), "aes-128-gcm");
     }
-    
+
     #[test]
     fn test_default_config() {
         let config = SsClientConfig::default();
@@ -472,11 +496,11 @@ mod tests {
         assert_eq!(config.server.port, 8388);
         assert_eq!(config.server.method, SsCipherType::Chacha20IetfPoly1305);
     }
-    
+
     #[test]
     fn test_target_address_parse_ipv4() {
         let payload = [
-            0x01, 192, 168, 1, 1, 0x1F, 0x90  // 192.168.1.1:8080
+            0x01, 192, 168, 1, 1, 0x1F, 0x90, // 192.168.1.1:8080
         ];
         let result = TargetAddress::parse_from_aead(&payload);
         assert!(result.is_some());
@@ -489,16 +513,16 @@ mod tests {
         }
         assert_eq!(port, 8080);
     }
-    
+
     #[test]
     fn test_target_address_parse_domain() {
         // Domain format: ATYP(1) + LEN(1) + DOMAIN(LEN) + PORT(2)
         // example.com = 11 bytes
         let payload = [
-            0x03,       // ATYP_DOMAIN
-            0x0b,       // domain length = 11
-            b'e', b'x', b'a', b'm', b'p', b'l', b'e', b'.', b'c', b'o', b'm',  // "example.com"
-            0x00, 0x50  // port = 80
+            0x03, // ATYP_DOMAIN
+            0x0b, // domain length = 11
+            b'e', b'x', b'a', b'm', b'p', b'l', b'e', b'.', b'c', b'o', b'm', // "example.com"
+            0x00, 0x50, // port = 80
         ];
         let result = TargetAddress::parse_from_aead(&payload);
         assert!(result.is_some());
@@ -511,7 +535,7 @@ mod tests {
         }
         assert_eq!(port, 80);
     }
-    
+
     #[test]
     fn test_target_address_to_bytes_ipv4() {
         let addr = TargetAddress::Ip(IpAddr::V4(Ipv4Addr::new(192, 168, 1, 1)));

@@ -3,9 +3,7 @@
 //! This module provides the rule matching engine that runs in user-space
 //! and makes final routing decisions based on domain/IP/GeoIP rules.
 
-use crate::rules::{
-    Rule, RuleGroup, RuleMatchAction,
-};
+use crate::rules::{Rule, RuleGroup, RuleMatchAction};
 use std::net::IpAddr;
 use std::path::Path;
 use std::sync::Arc;
@@ -62,13 +60,7 @@ impl Default for PacketInfo {
 
 impl PacketInfo {
     /// Create a new packet info
-    pub fn new(
-        src_ip: IpAddr,
-        dst_ip: IpAddr,
-        src_port: u16,
-        dst_port: u16,
-        proto: u8,
-    ) -> Self {
+    pub fn new(src_ip: IpAddr, dst_ip: IpAddr, src_port: u16, dst_port: u16, proto: u8) -> Self {
         Self {
             source_ip: src_ip,
             destination_ip: dst_ip,
@@ -82,10 +74,10 @@ impl PacketInfo {
     /// Create from 4-tuple
     pub fn from_tuple(src_ip: u32, dst_ip: u32, src_port: u16, dst_port: u16, proto: u8) -> Self {
         use std::net::Ipv4Addr;
-        
+
         let source_ip: IpAddr = Ipv4Addr::from(src_ip).into();
         let destination_ip: IpAddr = Ipv4Addr::from(dst_ip).into();
-        
+
         Self::new(source_ip, destination_ip, src_port, dst_port, proto)
     }
 
@@ -213,22 +205,27 @@ impl RuleEngine {
 
     /// Initialize GeoIP database
     async fn init_geoip(&self) -> Result<(), String> {
-        let db_path = self.config.geoip_db_path.as_ref()
+        let db_path = self
+            .config
+            .geoip_db_path
+            .as_ref()
             .ok_or_else(|| "GeoIP database path not configured".to_string())?;
 
         if !Path::new(db_path).exists() {
-            warn!("GeoIP database not found at {}, GeoIP rules will not work", db_path);
+            warn!(
+                "GeoIP database not found at {}, GeoIP rules will not work",
+                db_path
+            );
             return Ok(());
         }
 
         // Load database in blocking task
         let db_path_clone = db_path.clone();
-        let reader = tokio::task::spawn_blocking(move || {
-            maxminddb::Reader::open_readfile(&db_path_clone)
-        })
-        .await
-        .map_err(|e| format!("Failed to load GeoIP database: {e}"))?
-        .map_err(|e| format!("Failed to open GeoIP database: {e}"))?;
+        let reader =
+            tokio::task::spawn_blocking(move || maxminddb::Reader::open_readfile(&db_path_clone))
+                .await
+                .map_err(|e| format!("Failed to load GeoIP database: {e}"))?
+                .map_err(|e| format!("Failed to open GeoIP database: {e}"))?;
 
         let mut geoip = self.geoip_reader.write().await;
         *geoip = Some(reader);
@@ -250,8 +247,8 @@ impl RuleEngine {
     pub async fn parse_and_load_rules(&self, content: &str) -> Result<(), String> {
         use dae_config::rules::RuleConfig;
 
-        let config: RuleConfig = toml::from_str(content)
-            .map_err(|e| format!("Failed to parse rules TOML: {e}"))?;
+        let config: RuleConfig =
+            toml::from_str(content).map_err(|e| format!("Failed to parse rules TOML: {e}"))?;
 
         let mut rule_groups = Vec::new();
 
@@ -316,7 +313,10 @@ impl RuleEngine {
 
         for group in groups.iter() {
             if let Some(action) = group.match_packet(&info) {
-                debug!("Packet matched rule in group '{}': {:?}", group.name, action);
+                debug!(
+                    "Packet matched rule in group '{}': {:?}",
+                    group.name, action
+                );
                 return action.to_action();
             }
         }
@@ -347,7 +347,7 @@ impl RuleEngine {
                 // through traits. For country data, we need to use the proper
                 // deserialization. For now, return None and let the caller
                 // handle missing GeoIP data gracefully.
-                // 
+                //
                 // A full implementation would require knowing the exact database
                 // schema and using the appropriate field access.
                 debug!("GeoIP lookup succeeded but country extraction not implemented for this database type");
@@ -444,14 +444,14 @@ default_action = "proxy"
         // Create a packet with domain that matches the suffix rule
         let mut info = PacketInfo::default();
         info.destination_domain = Some("example.test".to_string());
-        
+
         let action = engine.match_packet(&info).await;
         assert_eq!(action, RuleAction::Pass); // Domain suffix rule matches
-        
+
         // Test with non-matching domain - should use engine default (Proxy)
         let mut info = PacketInfo::default();
         info.destination_domain = Some("example.com".to_string());
-        
+
         let action = engine.match_packet(&info).await;
         assert_eq!(action, RuleAction::Proxy); // No rule matches, uses default
     }
@@ -475,8 +475,8 @@ default_action = "proxy"
     fn test_packet_info_creation() {
         // Note: IP addresses in network byte order (big-endian)
         let info = PacketInfo::from_tuple(
-            u32::from_be_bytes([127, 0, 0, 1]),  // 127.0.0.1
-            u32::from_be_bytes([8, 8, 8, 8]),     // 8.8.8.8
+            u32::from_be_bytes([127, 0, 0, 1]), // 127.0.0.1
+            u32::from_be_bytes([8, 8, 8, 8]),   // 8.8.8.8
             12345,
             80,
             6,

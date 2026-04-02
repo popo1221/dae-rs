@@ -1,9 +1,9 @@
 //! TCP transport implementation (default)
 
+use super::Transport;
 use async_trait::async_trait;
 use std::fmt::Debug;
 use tokio::net::TcpStream;
-use super::Transport;
 
 /// TCP transport (default implementation)
 #[derive(Debug, Default)]

@@ -19,10 +19,9 @@ use std::net::{IpAddr, Ipv4Addr, Ipv6Addr, SocketAddr};
 use std::sync::Arc;
 use std::time::Duration;
 
-use tokio::net::{TcpListener, TcpStream};
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
+use tokio::net::{TcpListener, TcpStream};
 use tracing::{error, info, warn};
-
 
 /// Hysteria2 configuration for server mode
 #[derive(Debug, Clone)]
@@ -62,16 +61,16 @@ impl Default for Hysteria2Config {
 pub enum Hysteria2Error {
     #[error("Authentication failed: {0}")]
     AuthFailed(String),
-    
+
     #[error("Protocol error: {0}")]
     Protocol(String),
-    
+
     #[error("QUIC error: {0}")]
     Quic(String),
-    
+
     #[error("IO error: {0}")]
     Io(#[from] std::io::Error),
-    
+
     #[error("Invalid address: {0}")]
     InvalidAddress(String),
 }
@@ -107,13 +106,15 @@ impl Hysteria2Address {
         if data.is_empty() {
             return Err(Hysteria2Error::InvalidAddress("Empty data".to_string()));
         }
-        
+
         let addr_type = data[0];
         match addr_type {
             0x01 => {
                 // IPv4
                 if data.len() < 7 {
-                    return Err(Hysteria2Error::InvalidAddress("IPv4 requires 7 bytes".to_string()));
+                    return Err(Hysteria2Error::InvalidAddress(
+                        "IPv4 requires 7 bytes".to_string(),
+                    ));
                 }
                 let ip = IpAddr::V4(Ipv4Addr::new(data[1], data[2], data[3], data[4]));
                 let _port = u16::from_be_bytes([data[5], data[6]]);
@@ -122,11 +123,15 @@ impl Hysteria2Address {
             0x02 => {
                 // Domain
                 if data.len() < 2 {
-                    return Err(Hysteria2Error::InvalidAddress("Domain requires length byte".to_string()));
+                    return Err(Hysteria2Error::InvalidAddress(
+                        "Domain requires length byte".to_string(),
+                    ));
                 }
                 let domain_len = data[1] as usize;
                 if data.len() < 2 + domain_len + 2 {
-                    return Err(Hysteria2Error::InvalidAddress("Domain data too short".to_string()));
+                    return Err(Hysteria2Error::InvalidAddress(
+                        "Domain data too short".to_string(),
+                    ));
                 }
                 let domain = String::from_utf8_lossy(&data[2..2 + domain_len]).to_string();
                 let port = u16::from_be_bytes([data[2 + domain_len], data[2 + domain_len + 1]]);
@@ -135,7 +140,9 @@ impl Hysteria2Address {
             0x03 => {
                 // IPv6
                 if data.len() < 19 {
-                    return Err(Hysteria2Error::InvalidAddress("IPv6 requires 19 bytes".to_string()));
+                    return Err(Hysteria2Error::InvalidAddress(
+                        "IPv6 requires 19 bytes".to_string(),
+                    ));
                 }
                 let ip = IpAddr::V6(Ipv6Addr::new(
                     u16::from_be_bytes([data[1], data[2]]),
@@ -150,10 +157,12 @@ impl Hysteria2Address {
                 let _port = u16::from_be_bytes([data[17], data[18]]);
                 Ok((Hysteria2Address::Ip(ip), 19))
             }
-            _ => Err(Hysteria2Error::InvalidAddress(format!("Unknown address type: {addr_type}"))),
+            _ => Err(Hysteria2Error::InvalidAddress(format!(
+                "Unknown address type: {addr_type}"
+            ))),
         }
     }
-    
+
     /// Encode address to bytes
     pub fn encode(&self) -> Vec<u8> {
         let mut buf = Vec::new();
@@ -213,24 +222,26 @@ impl Hysteria2Handler {
     pub fn new(config: Hysteria2Config) -> Self {
         Self { config }
     }
-    
+
     /// Handle an incoming Hysteria2 client connection
     pub async fn handle(&self, mut stream: TcpStream) -> Result<(), Hysteria2Error> {
         // Read client hello
         let mut hello_buf = [0u8; 1024];
         let n = stream.read(&mut hello_buf).await?;
         if n == 0 {
-            return Err(Hysteria2Error::Protocol("Connection closed during hello".to_string()));
+            return Err(Hysteria2Error::Protocol(
+                "Connection closed during hello".to_string(),
+            ));
         }
-        
+
         // Parse client hello
         let client_hello = self.parse_client_hello(&hello_buf[..n])?;
-        
+
         // Validate password
         if client_hello.password != self.config.password {
             return Err(Hysteria2Error::AuthFailed("Invalid password".to_string()));
         }
-        
+
         // Send server hello
         let server_hello = Hysteria2ServerHello {
             version: 2,
@@ -238,41 +249,50 @@ impl Hysteria2Handler {
             session_id: rand::random(),
         };
         self.send_server_hello(&mut stream, &server_hello).await?;
-        
+
         // Handle the UDP relay
         if self.config.udp_enabled {
-            self.handle_udp_relay(stream, client_hello.local_addr).await?;
+            self.handle_udp_relay(stream, client_hello.local_addr)
+                .await?;
         }
-        
+
         Ok(())
     }
-    
+
     fn parse_client_hello(&self, data: &[u8]) -> Result<Hysteria2ClientHello, Hysteria2Error> {
         if data.is_empty() {
             return Err(Hysteria2Error::Protocol("Empty hello data".to_string()));
         }
-        
+
         let frame_type = data[0];
         if frame_type != Hysteria2FrameType::ClientHello as u8 {
-            return Err(Hysteria2Error::Protocol(format!("Expected ClientHello (0x01), got 0x{frame_type:02x}")));
+            return Err(Hysteria2Error::Protocol(format!(
+                "Expected ClientHello (0x01), got 0x{frame_type:02x}"
+            )));
         }
-        
+
         if data.len() < 3 {
-            return Err(Hysteria2Error::Protocol("ClientHello too short".to_string()));
+            return Err(Hysteria2Error::Protocol(
+                "ClientHello too short".to_string(),
+            ));
         }
-        
+
         let version = data[1];
         if version != 2 {
-            return Err(Hysteria2Error::Protocol(format!("Unsupported Hysteria2 version: {version}")));
+            return Err(Hysteria2Error::Protocol(format!(
+                "Unsupported Hysteria2 version: {version}"
+            )));
         }
-        
+
         let password_len = data[2] as usize;
         if data.len() < 3 + password_len {
-            return Err(Hysteria2Error::Protocol("Password data too short".to_string()));
+            return Err(Hysteria2Error::Protocol(
+                "Password data too short".to_string(),
+            ));
         }
-        
+
         let password = String::from_utf8_lossy(&data[3..3 + password_len]).to_string();
-        
+
         let local_addr = if data.len() > 3 + password_len {
             let (_, _size) = Hysteria2Address::parse(&data[3 + password_len..])?;
             // For now, skip local_addr parsing - it requires more complex handling
@@ -280,26 +300,34 @@ impl Hysteria2Handler {
         } else {
             None
         };
-        
+
         Ok(Hysteria2ClientHello {
             version,
             password,
             local_addr,
         })
     }
-    
-    async fn send_server_hello(&self, stream: &mut TcpStream, hello: &Hysteria2ServerHello) -> Result<(), Hysteria2Error> {
+
+    async fn send_server_hello(
+        &self,
+        stream: &mut TcpStream,
+        hello: &Hysteria2ServerHello,
+    ) -> Result<(), Hysteria2Error> {
         let mut buf = Vec::new();
         buf.push(Hysteria2FrameType::ServerHello as u8);
         buf.push(hello.version);
         buf.push(if hello.auth_ok { 0x01 } else { 0x00 });
         buf.extend_from_slice(&hello.session_id.to_be_bytes());
-        
+
         stream.write_all(&buf).await?;
         Ok(())
     }
-    
-    async fn handle_udp_relay(&self, _stream: TcpStream, _local_addr: Option<Hysteria2Address>) -> Result<(), Hysteria2Error> {
+
+    async fn handle_udp_relay(
+        &self,
+        _stream: TcpStream,
+        _local_addr: Option<Hysteria2Address>,
+    ) -> Result<(), Hysteria2Error> {
         // UDP relay implementation would go here
         // This involves setting up UDP hole punching and relay
         warn!("UDP relay not yet fully implemented - requires QUIC integration");
@@ -318,21 +346,21 @@ impl Hysteria2Server {
     pub async fn new(config: Hysteria2Config) -> Result<Self, Hysteria2Error> {
         let listener = TcpListener::bind(config.listen_addr).await?;
         info!("Hysteria2 server listening on {}", config.listen_addr);
-        
+
         Ok(Self {
             config,
             listener: Some(listener),
         })
     }
-    
+
     /// Start the server
     pub async fn serve(self) -> Result<(), Hysteria2Error> {
-        let listener = self.listener.ok_or_else(|| {
-            Hysteria2Error::Protocol("Server already started".to_string())
-        })?;
-        
+        let listener = self
+            .listener
+            .ok_or_else(|| Hysteria2Error::Protocol("Server already started".to_string()))?;
+
         let handler = Arc::new(Hysteria2Handler::new(self.config));
-        
+
         loop {
             match listener.accept().await {
                 Ok((stream, addr)) => {
@@ -377,14 +405,14 @@ mod tests {
     fn test_parse_client_hello() {
         let config = Hysteria2Config::default();
         let handler = Hysteria2Handler::new(config);
-        
+
         // Build a minimal client hello
         let mut data = Vec::new();
         data.push(0x01); // ClientHello frame type
         data.push(0x02); // Version 2
-        data.push(4);    // Password length
+        data.push(4); // Password length
         data.extend_from_slice(b"test");
-        
+
         let result = handler.parse_client_hello(&data);
         assert!(result.is_ok());
         let hello = result.unwrap();
@@ -396,14 +424,14 @@ mod tests {
     fn test_invalid_password_length() {
         let config = Hysteria2Config::default();
         let handler = Hysteria2Handler::new(config);
-        
+
         // Password length claims 10 but only 3 bytes provided
         let mut data = Vec::new();
         data.push(0x01); // ClientHello frame type
         data.push(0x02); // Version 2
-        data.push(10);   // Password length (lie)
+        data.push(10); // Password length (lie)
         data.extend_from_slice(b"test");
-        
+
         let result = handler.parse_client_hello(&data);
         assert!(result.is_err());
     }

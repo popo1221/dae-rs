@@ -9,8 +9,7 @@ use tokio::sync::RwLock;
 use tokio::time::{Duration, Interval};
 
 /// Connection state
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-#[derive(Default)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub enum ConnectionState {
     /// New connection, not yet established
     #[default]
@@ -23,16 +22,13 @@ pub enum ConnectionState {
     Closed,
 }
 
-
 /// Protocol type for the connection
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-#[derive(Default)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub enum Protocol {
     #[default]
     Tcp,
     Udp,
 }
-
 
 /// A tracked connection with state and timing
 pub struct Connection {

@@ -123,7 +123,8 @@ pub fn validate_rule(rule: &RuleConfigItem) -> Result<(), RuleValidationError> {
         }
         "dnstype" | "dns-type" | "dns" => {
             // Validate DNS query types
-            let types: Result<Vec<_>, _> = rule.value
+            let types: Result<Vec<_>, _> = rule
+                .value
                 .split(',')
                 .map(|t| validate_dns_type(t.trim()))
                 .collect();
@@ -172,14 +173,21 @@ pub fn validate_config(config: &RuleConfig) -> Vec<RuleValidationError> {
 }
 
 /// Parse and validate rules from TOML content
-pub fn parse_and_validate(content: &str) -> Result<RuleConfig, (RuleConfig, Vec<RuleValidationError>)> {
+pub fn parse_and_validate(
+    content: &str,
+) -> Result<RuleConfig, (RuleConfig, Vec<RuleValidationError>)> {
     #[allow(clippy::vec_init_then_push)]
     let config: RuleConfig = toml::from_str(content)
         .map_err(|e| {
             // Return empty config with parse error
             let mut errors = Vec::new();
             errors.push(RuleValidationError::InvalidRuleValue(e.to_string()));
-            (RuleConfig { rule_groups: vec![] }, errors)
+            (
+                RuleConfig {
+                    rule_groups: vec![],
+                },
+                errors,
+            )
         })
         .ok()
         .unwrap();

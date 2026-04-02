@@ -7,11 +7,11 @@ use crate::connection_pool::{new_connection_pool, SharedConnectionPool};
 use crate::ebpf_integration::{EbpfMaps, EbpfRoutingHandle, EbpfSessionHandle, EbpfStatsHandle};
 use crate::protocol_dispatcher::{CombinedProxyServer, ProtocolDispatcherConfig};
 use crate::shadowsocks::ShadowsocksServer;
-use crate::vless::{VlessServer, VlessServerConfig, VlessClientConfig};
-use crate::vmess::{VmessServer, VmessServerConfig};
-use crate::trojan_protocol::{TrojanServer, TrojanServerConfig, TrojanClientConfig};
 use crate::tcp::{TcpProxy, TcpProxyConfig};
+use crate::trojan_protocol::{TrojanClientConfig, TrojanServer, TrojanServerConfig};
 use crate::udp::{UdpProxy, UdpProxyConfig};
+use crate::vless::{VlessClientConfig, VlessServer, VlessServerConfig};
+use crate::vmess::{VmessServer, VmessServerConfig};
 use std::net::SocketAddr;
 use std::path::PathBuf;
 use std::sync::Arc;
@@ -192,16 +192,10 @@ impl Proxy {
         );
 
         // Create TCP proxy
-        let tcp_proxy = Arc::new(TcpProxy::new(
-            config.tcp.clone(),
-            connection_pool.clone(),
-        ));
+        let tcp_proxy = Arc::new(TcpProxy::new(config.tcp.clone(), connection_pool.clone()));
 
         // Create UDP proxy
-        let udp_proxy = Arc::new(UdpProxy::new(
-            config.udp.clone(),
-            connection_pool.clone(),
-        ));
+        let udp_proxy = Arc::new(UdpProxy::new(config.udp.clone(), connection_pool.clone()));
 
         // Create shutdown channel
         let (shutdown_tx, _) = broadcast::channel(1);
@@ -240,7 +234,9 @@ impl Proxy {
     }
 
     /// Create combined SOCKS5/HTTP proxy server
-    async fn create_combined_server(config: &ProxyConfig) -> std::io::Result<Option<Arc<CombinedProxyServer>>> {
+    async fn create_combined_server(
+        config: &ProxyConfig,
+    ) -> std::io::Result<Option<Arc<CombinedProxyServer>>> {
         let dispatcher_config = ProtocolDispatcherConfig {
             socks5_addr: config.socks5_listen,
             http_addr: config.http_listen,
@@ -256,7 +252,9 @@ impl Proxy {
     }
 
     /// Create Shadowsocks server if configured
-    async fn create_shadowsocks_server(config: &ProxyConfig) -> std::io::Result<Option<Arc<ShadowsocksServer>>> {
+    async fn create_shadowsocks_server(
+        config: &ProxyConfig,
+    ) -> std::io::Result<Option<Arc<ShadowsocksServer>>> {
         if config.ss_listen.is_none() || config.ss_server.is_none() {
             return Ok(None);
         }
@@ -276,7 +274,9 @@ impl Proxy {
     }
 
     /// Create VLESS server if configured
-    async fn create_vless_server(config: &ProxyConfig) -> std::io::Result<Option<Arc<VlessServer>>> {
+    async fn create_vless_server(
+        config: &ProxyConfig,
+    ) -> std::io::Result<Option<Arc<VlessServer>>> {
         if config.vless_listen.is_none() || config.vless_server.is_none() {
             return Ok(None);
         }
@@ -296,7 +296,9 @@ impl Proxy {
     }
 
     /// Create VMess server if configured
-    async fn create_vmess_server(config: &ProxyConfig) -> std::io::Result<Option<Arc<VmessServer>>> {
+    async fn create_vmess_server(
+        config: &ProxyConfig,
+    ) -> std::io::Result<Option<Arc<VmessServer>>> {
         if config.vmess_listen.is_none() || config.vmess_server.is_none() {
             return Ok(None);
         }
@@ -316,7 +318,9 @@ impl Proxy {
     }
 
     /// Create Trojan server if configured
-    async fn create_trojan_server(config: &ProxyConfig) -> std::io::Result<Option<Arc<TrojanServer>>> {
+    async fn create_trojan_server(
+        config: &ProxyConfig,
+    ) -> std::io::Result<Option<Arc<TrojanServer>>> {
         if config.trojan_listen.is_none() || config.trojan_server.is_none() {
             return Ok(None);
         }
@@ -333,8 +337,12 @@ impl Proxy {
 
         // Use multiple backends if available
         let server = if !config.trojan_backends.is_empty() {
-            info!("Creating Trojan server with {} backends", config.trojan_backends.len());
-            TrojanServer::with_backends(trojan_client_config, config.trojan_backends.clone()).await?
+            info!(
+                "Creating Trojan server with {} backends",
+                config.trojan_backends.len()
+            );
+            TrojanServer::with_backends(trojan_client_config, config.trojan_backends.clone())
+                .await?
         } else {
             TrojanServer::with_config(trojan_client_config).await?
         };
@@ -401,8 +409,10 @@ impl Proxy {
             if let Some(ss_listen) = self.config.ss_listen {
                 info!("Starting Shadowsocks server on {}", ss_listen);
                 if let Some(ref ss_config) = self.config.ss_server {
-                    info!("  -> {}:{} (method: {}, ota: {})",
-                        ss_config.addr, ss_config.port, ss_config.method, ss_config.ota);
+                    info!(
+                        "  -> {}:{} (method: {}, ota: {})",
+                        ss_config.addr, ss_config.port, ss_config.method, ss_config.ota
+                    );
                 }
             }
             let srv = ss_server.clone();
@@ -417,8 +427,10 @@ impl Proxy {
             if let Some(vless_listen) = self.config.vless_listen {
                 info!("Starting VLESS server on {}", vless_listen);
                 if let Some(ref vless_config) = self.config.vless_server {
-                    info!("  -> {}:{} (uuid: {})",
-                        vless_config.addr, vless_config.port, vless_config.uuid);
+                    info!(
+                        "  -> {}:{} (uuid: {})",
+                        vless_config.addr, vless_config.port, vless_config.uuid
+                    );
                 }
             }
             let srv = vless_server.clone();
@@ -433,8 +445,13 @@ impl Proxy {
             if let Some(vmess_listen) = self.config.vmess_listen {
                 info!("Starting VMess server on {}", vmess_listen);
                 if let Some(ref vmess_config) = self.config.vmess_server {
-                    info!("  -> {}:{} (user_id: {}, security: {})",
-                        vmess_config.addr, vmess_config.port, vmess_config.user_id, vmess_config.security);
+                    info!(
+                        "  -> {}:{} (user_id: {}, security: {})",
+                        vmess_config.addr,
+                        vmess_config.port,
+                        vmess_config.user_id,
+                        vmess_config.security
+                    );
                 }
             }
             let srv = vmess_server.clone();
@@ -449,8 +466,10 @@ impl Proxy {
             if let Some(trojan_listen) = self.config.trojan_listen {
                 info!("Starting Trojan server on {}", trojan_listen);
                 if let Some(ref trojan_config) = self.config.trojan_server {
-                    info!("  -> {}:{} (password: [hidden])",
-                        trojan_config.addr, trojan_config.port);
+                    info!(
+                        "  -> {}:{} (password: [hidden])",
+                        trojan_config.addr, trojan_config.port
+                    );
                 }
             }
             let srv = trojan_server.clone();
@@ -466,7 +485,7 @@ impl Proxy {
         let _ = self.shutdown_tx.subscribe().recv().await;
 
         info!("Proxy shutdown initiated");
-        
+
         // Signal tasks to stop
         {
             let mut running = self.running.write().await;
@@ -522,9 +541,7 @@ pub async fn create_proxy() -> std::io::Result<Arc<Proxy>> {
 pub async fn run_with_signals(proxy: Arc<Proxy>) -> std::io::Result<()> {
     // Spawn proxy task
     let proxy_clone = proxy.clone();
-    let proxy_handle = tokio::spawn(async move {
-        proxy_clone.start().await
-    });
+    let proxy_handle = tokio::spawn(async move { proxy_clone.start().await });
 
     // Wait for shutdown signal
     tokio::select! {

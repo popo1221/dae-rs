@@ -3,8 +3,8 @@
 //! Provides MAC vendor lookup based on the first 3 bytes (OUI) of a MAC address.
 //! OUI is the manufacturer identifier assigned by IEEE.
 
-use std::collections::HashMap;
 use std::collections::hash_map::Entry;
+use std::collections::HashMap;
 
 use super::MacAddr;
 
@@ -114,7 +114,16 @@ impl OuiDatabase {
         let data_str = include_str!("oui_data.rs");
         for line in data_str.lines() {
             let line = line.trim();
-            if line.is_empty() || line.starts_with("//") || line.starts_with("const") || line.starts_with("static") || line.starts_with("use") || line.starts_with("#[") || line.starts_with("mod") || line.starts_with("pub") || line.starts_with("fn") {
+            if line.is_empty()
+                || line.starts_with("//")
+                || line.starts_with("const")
+                || line.starts_with("static")
+                || line.starts_with("use")
+                || line.starts_with("#[")
+                || line.starts_with("mod")
+                || line.starts_with("pub")
+                || line.starts_with("fn")
+            {
                 continue;
             }
 
@@ -123,7 +132,10 @@ impl OuiDatabase {
                 if let Some((oui_part, name_part)) = rest.split_once(',') {
                     if let Some(oui_end) = oui_part.find(')') {
                         let oui_str = &oui_part[..oui_end];
-                        let name = name_part.trim_matches('"').trim_matches(',').trim_end_matches(')');
+                        let name = name_part
+                            .trim_matches('"')
+                            .trim_matches(',')
+                            .trim_end_matches(')');
 
                         if let Some(oui) = parse_oui_tuple(oui_str) {
                             db.insert(oui, name);
@@ -328,14 +340,18 @@ fn load_fallback_ouis(db: &mut OuiDatabase) {
     ];
 
     // Fix the typos in the fallback data and load it
-    let fixed: Vec<([u8; 3], &'static str)> = fallback.iter().copied().map(|(mut oui, name)| {
-        // Fix byte formatting issues: #[0x00:0x00, 0xF0] -> [0x00, 0x00, 0xF0]
-        // #[0x00:0x00, 0xF0] was written wrong, correct is [0x00, 0x00, 0xF0]
-        if oui == [0x00, 0x00, 0xF0] {
-            oui = [0x00, 0x00, 0xF0];
-        }
-        (oui, name)
-    }).collect();
+    let fixed: Vec<([u8; 3], &'static str)> = fallback
+        .iter()
+        .copied()
+        .map(|(mut oui, name)| {
+            // Fix byte formatting issues: #[0x00:0x00, 0xF0] -> [0x00, 0x00, 0xF0]
+            // #[0x00:0x00, 0xF0] was written wrong, correct is [0x00, 0x00, 0xF0]
+            if oui == [0x00, 0x00, 0xF0] {
+                oui = [0x00, 0x00, 0xF0];
+            }
+            (oui, name)
+        })
+        .collect();
 
     for (oui, name) in fixed {
         db.insert(oui, name);

@@ -12,15 +12,15 @@ use std::net::{IpAddr, Ipv4Addr, SocketAddr};
 use std::sync::Arc;
 use std::time::Duration;
 
-use tokio::net::{TcpStream, UdpSocket};
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
+use tokio::net::{TcpStream, UdpSocket};
 use tracing::{debug, error, info, warn};
 
 use crate::core::{Context, Result as ProxyResult};
 use crate::protocol::ProtocolHandler;
 use async_trait::async_trait;
 
-use super::codec::{JuicityCodec, JuicityFrame, JuicityCommand, JuicityAddress};
+use super::codec::{JuicityAddress, JuicityCodec, JuicityCommand, JuicityFrame};
 
 /// Juicity protocol error types
 #[derive(Debug, thiserror::Error)]
@@ -214,12 +214,14 @@ impl JuicityHandler {
         // Version
         let version = header[2];
         if version != 0x01 {
-            return Err(JuicityError::Protocol(format!("Unsupported version: {version}")));
+            return Err(JuicityError::Protocol(format!(
+                "Unsupported version: {version}"
+            )));
         }
 
         // Token (32 bytes)
-        let token = String::from_utf8(header[3..35].to_vec())
-            .map_err(|_| JuicityError::InvalidToken)?;
+        let token =
+            String::from_utf8(header[3..35].to_vec()).map_err(|_| JuicityError::InvalidToken)?;
 
         if !self.validate_token(&token) {
             return Err(JuicityError::InvalidToken);
@@ -246,10 +248,8 @@ impl JuicityHandler {
     async fn relay_tcp(&self, client: TcpStream) -> Result<(), JuicityError> {
         let remote_addr = format!("{}:{}", self.config.server_addr, self.config.server_port);
 
-        let remote = tokio::time::timeout(
-            self.config.timeout,
-            TcpStream::connect(&remote_addr)
-        ).await??;
+        let remote =
+            tokio::time::timeout(self.config.timeout, TcpStream::connect(&remote_addr)).await??;
 
         let (mut cr, mut cw) = tokio::io::split(client);
         let (mut rr, mut rw) = tokio::io::split(remote);
@@ -272,17 +272,18 @@ impl JuicityHandler {
         info!("Juicity UDP handler listening on {}", local_addr);
 
         loop {
-            let (n, client_addr) = match tokio::time::timeout(self.config.timeout, socket.recv_from(&mut buf)).await {
-                Ok(Ok(result)) => result,
-                Ok(Err(e)) => {
-                    warn!("UDP recv error: {}", e);
-                    continue;
-                }
-                Err(_) => {
-                    // Timeout, continue to next iteration
-                    continue;
-                }
-            };
+            let (n, client_addr) =
+                match tokio::time::timeout(self.config.timeout, socket.recv_from(&mut buf)).await {
+                    Ok(Ok(result)) => result,
+                    Ok(Err(e)) => {
+                        warn!("UDP recv error: {}", e);
+                        continue;
+                    }
+                    Err(_) => {
+                        // Timeout, continue to next iteration
+                        continue;
+                    }
+                };
 
             if n == 0 {
                 continue;
@@ -297,22 +298,31 @@ impl JuicityHandler {
                 }
             };
 
-            debug!("Juicity UDP: {} cmd={:?} conn_id={} from {}",
-                client_addr, frame.command, frame.connection_id, client_addr);
+            debug!(
+                "Juicity UDP: {} cmd={:?} conn_id={} from {}",
+                client_addr, frame.command, frame.connection_id, client_addr
+            );
 
             match frame.command {
                 JuicityCommand::Open => {
                     // Handle new connection request
                     if let Some(addr) = frame.address {
                         let port = addr.port();
-                        info!("Juicity Open: conn_id={} -> {}:{}", frame.connection_id, addr, port);
+                        info!(
+                            "Juicity Open: conn_id={} -> {}:{}",
+                            frame.connection_id, addr, port
+                        );
                         // In a full implementation, would connect to target and relay
                     }
                 }
                 JuicityCommand::Send => {
                     // Handle data send
-                    debug!("Juicity Send: conn_id={} seq={} size={}",
-                        frame.connection_id, frame.sequence, frame.payload.len());
+                    debug!(
+                        "Juicity Send: conn_id={} seq={} size={}",
+                        frame.connection_id,
+                        frame.sequence,
+                        frame.payload.len()
+                    );
                 }
                 JuicityCommand::Close => {
                     // Handle connection close
@@ -412,7 +422,10 @@ impl JuicityClient {
 
     /// Connect to a remote Juicity server (placeholder)
     #[allow(dead_code)]
-    pub async fn connect(&self, _target: JuicityAddress) -> Result<JuicityConnection, JuicityError> {
+    pub async fn connect(
+        &self,
+        _target: JuicityAddress,
+    ) -> Result<JuicityConnection, JuicityError> {
         let remote_addr = format!("{}:{}", self.config.server_addr, self.config.server_port);
         info!("Connecting to Juicity server at {}", remote_addr);
 
@@ -482,10 +495,22 @@ mod tests {
 
     #[test]
     fn test_congestion_control_from_str() {
-        assert_eq!(CongestionControl::from_str("bbr"), Some(CongestionControl::Bbr));
-        assert_eq!(CongestionControl::from_str("BBR"), Some(CongestionControl::Bbr));
-        assert_eq!(CongestionControl::from_str("cubic"), Some(CongestionControl::Cubic));
-        assert_eq!(CongestionControl::from_str("reno"), Some(CongestionControl::Reno));
+        assert_eq!(
+            CongestionControl::from_str("bbr"),
+            Some(CongestionControl::Bbr)
+        );
+        assert_eq!(
+            CongestionControl::from_str("BBR"),
+            Some(CongestionControl::Bbr)
+        );
+        assert_eq!(
+            CongestionControl::from_str("cubic"),
+            Some(CongestionControl::Cubic)
+        );
+        assert_eq!(
+            CongestionControl::from_str("reno"),
+            Some(CongestionControl::Reno)
+        );
         assert_eq!(CongestionControl::from_str("unknown"), None);
     }
 

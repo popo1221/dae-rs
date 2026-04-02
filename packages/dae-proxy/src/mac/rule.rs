@@ -7,8 +7,7 @@ use std::fmt;
 use crate::rule_engine::RuleAction;
 
 /// MAC address type (6 bytes)
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
-#[derive(Default)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Default)]
 pub struct MacAddr([u8; 6]);
 
 impl MacAddr {
@@ -96,7 +95,6 @@ impl fmt::Display for MacAddr {
     }
 }
 
-
 /// MAC address rule for matching traffic by device MAC address
 #[derive(Debug, Clone)]
 pub struct MacRule {
@@ -138,7 +136,11 @@ impl MacRule {
 
         let mac = MacAddr::parse(mac_str)?;
         let mac_mask = mask_str.and_then(MacAddr::parse);
-        Some(Self { mac, mac_mask, action })
+        Some(Self {
+            mac,
+            mac_mask,
+            action,
+        })
     }
 }
 
@@ -185,7 +187,9 @@ impl MacRuleSet {
     /// Returns the action of the first matching rule, or default_action
     pub fn match_mac(&self, mac: &MacAddr) -> RuleAction {
         for rule in &self.rules {
-            if let Some(true) = super::matcher::match_mac_with_mask_opt(mac, &rule.mac, &rule.mac_mask) {
+            if let Some(true) =
+                super::matcher::match_mac_with_mask_opt(mac, &rule.mac, &rule.mac_mask)
+            {
                 return rule.action;
             }
         }

@@ -37,8 +37,7 @@ pub enum VmessAddressType {
 }
 
 /// VMess security type
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-#[derive(Default)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub enum VmessSecurity {
     /// AES-128-CFB
     Aes128Cfb = 0x01,
@@ -54,7 +53,6 @@ pub enum VmessSecurity {
     /// ChaCha20-Poly1305 with AEAD (VMess-AEAD-2022)
     ChaCha20Poly1305Aead = 0x12,
 }
-
 
 impl std::fmt::Display for VmessSecurity {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
@@ -78,7 +76,9 @@ impl VmessSecurity {
             "chacha20-poly1305" | "chacha20poly1305" => Some(VmessSecurity::ChaCha20Poly1305),
             "none" | "auto" => Some(VmessSecurity::None),
             "aes-128-gcm-aead" | "aes128gcmaead" => Some(VmessSecurity::Aes128GcmAead),
-            "chacha20-poly1305-aead" | "chacha20poly1305aead" => Some(VmessSecurity::ChaCha20Poly1305Aead),
+            "chacha20-poly1305-aead" | "chacha20poly1305aead" => {
+                Some(VmessSecurity::ChaCha20Poly1305Aead)
+            }
             _ => None,
         }
     }
@@ -179,7 +179,9 @@ impl VmessTargetAddress {
                 if payload.len() < 7 {
                     return None;
                 }
-                let ip = IpAddr::V4(Ipv4Addr::new(payload[1], payload[2], payload[3], payload[4]));
+                let ip = IpAddr::V4(Ipv4Addr::new(
+                    payload[1], payload[2], payload[3], payload[4],
+                ));
                 let port = u16::from_be_bytes([payload[5], payload[6]]);
                 Some((VmessTargetAddress::Ipv4(ip), port))
             }
@@ -192,8 +194,8 @@ impl VmessTargetAddress {
                 if payload.len() < 4 + domain_len {
                     return None;
                 }
-                let domain = String::from_utf8(payload[2..2+domain_len].to_vec()).ok()?;
-                let port = u16::from_be_bytes([payload[2+domain_len], payload[3+domain_len]]);
+                let domain = String::from_utf8(payload[2..2 + domain_len].to_vec()).ok()?;
+                let port = u16::from_be_bytes([payload[2 + domain_len], payload[3 + domain_len]]);
                 Some((VmessTargetAddress::Domain(domain, port), port))
             }
             0x03 => {
@@ -334,14 +336,15 @@ impl VmessHandler {
                 error!("Failed to parse VMess target address");
                 return Err(std::io::Error::new(
                     std::io::ErrorKind::InvalidData,
-                    "invalid VMess payload"
+                    "invalid VMess payload",
                 ));
             }
         };
 
-        info!("VMess TCP: {} -> {}:{} (via {}:{})",
-            client_addr, target_addr, target_port,
-            self.config.server.addr, self.config.server.port);
+        info!(
+            "VMess TCP: {} -> {}:{} (via {}:{})",
+            client_addr, target_addr, target_port, self.config.server.addr, self.config.server.port
+        );
 
         // Connect to VMess server
         let remote_addr = format!("{}:{}", self.config.server.addr, self.config.server.port);
@@ -353,7 +356,7 @@ impl VmessHandler {
             Err(_) => {
                 return Err(std::io::Error::new(
                     std::io::ErrorKind::TimedOut,
-                    "connection to VMess server timed out"
+                    "connection to VMess server timed out",
                 ));
             }
         };
@@ -398,8 +401,13 @@ impl VmessHandler {
 
             let payload = &buf[payload_offset..n];
 
-            debug!("VMess UDP: {} -> {}:{} ({} bytes)",
-                client_addr, target_addr, target_port, payload.len());
+            debug!(
+                "VMess UDP: {} -> {}:{} ({} bytes)",
+                client_addr,
+                target_addr,
+                target_port,
+                payload.len()
+            );
 
             // Forward to VMess server and back
             let server_addr = format!("{}:{}", self.config.server.addr, self.config.server.port);
@@ -407,7 +415,12 @@ impl VmessHandler {
             server_socket.send_to(payload, &server_addr).await?;
 
             let mut response_buf = vec![0u8; MAX_UDP_SIZE];
-            if let Ok(Ok((m, _))) = tokio::time::timeout(self.config.udp_timeout, server_socket.recv_from(&mut response_buf)).await {
+            if let Ok(Ok((m, _))) = tokio::time::timeout(
+                self.config.udp_timeout,
+                server_socket.recv_from(&mut response_buf),
+            )
+            .await
+            {
                 client.send_to(&response_buf[..m], &client_addr).await?;
             }
         }
@@ -485,20 +498,17 @@ mod tests {
             VmessSecurity::from_str("aes-128-cfb"),
             Some(VmessSecurity::Aes128Cfb)
         );
-        assert_eq!(
-            VmessSecurity::from_str("auto"),
-            Some(VmessSecurity::None)
-        );
-        assert_eq!(
-            VmessSecurity::from_str("invalid"),
-            None
-        );
+        assert_eq!(VmessSecurity::from_str("auto"), Some(VmessSecurity::None));
+        assert_eq!(VmessSecurity::from_str("invalid"), None);
     }
 
     #[test]
     fn test_security_display() {
         assert_eq!(VmessSecurity::Aes128GcmAead.to_string(), "aes-128-gcm-aead");
-        assert_eq!(VmessSecurity::ChaCha20Poly1305Aead.to_string(), "chacha20-poly1305-aead");
+        assert_eq!(
+            VmessSecurity::ChaCha20Poly1305Aead.to_string(),
+            "chacha20-poly1305-aead"
+        );
         assert_eq!(VmessSecurity::Aes128Cfb.to_string(), "aes-128-cfb");
     }
 
@@ -514,7 +524,7 @@ mod tests {
     #[test]
     fn test_target_address_parse_ipv4() {
         let payload = [
-            0x01, 192, 168, 1, 1, 0x1F, 0x90  // 192.168.1.1:8080
+            0x01, 192, 168, 1, 1, 0x1F, 0x90, // 192.168.1.1:8080
         ];
         let result = VmessTargetAddress::parse_from_bytes(&payload);
         assert!(result.is_some());
@@ -532,10 +542,10 @@ mod tests {
     fn test_target_address_parse_domain() {
         // Domain format: ATYP(1) + LEN(1) + DOMAIN(LEN) + PORT(2)
         let payload = [
-            0x02,       // ATYP_DOMAIN
-            0x0b,       // domain length = 11
-            b'e', b'x', b'a', b'm', b'p', b'l', b'e', b'.', b'c', b'o', b'm',  // "example.com"
-            0x00, 0x50  // port = 80
+            0x02, // ATYP_DOMAIN
+            0x0b, // domain length = 11
+            b'e', b'x', b'a', b'm', b'p', b'l', b'e', b'.', b'c', b'o', b'm', // "example.com"
+            0x00, 0x50, // port = 80
         ];
         let result = VmessTargetAddress::parse_from_bytes(&payload);
         assert!(result.is_some());

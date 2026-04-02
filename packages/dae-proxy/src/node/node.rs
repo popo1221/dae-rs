@@ -15,16 +15,16 @@ pub type NodeId = String;
 pub trait Node: Send + Sync {
     /// Get the node's unique identifier
     fn id(&self) -> &NodeId;
-    
+
     /// Get the node's display name
     fn name(&self) -> &str;
-    
+
     /// Get the protocol name this node uses
     fn protocol(&self) -> &'static str;
-    
+
     /// Ping the node and return latency in milliseconds
     async fn ping(&self) -> Result<u32, NodeError>;
-    
+
     /// Check if the node is currently available
     async fn is_available(&self) -> bool;
 }
@@ -34,10 +34,10 @@ pub trait Node: Send + Sync {
 pub enum NodeError {
     #[error("timeout")]
     Timeout,
-    
+
     #[error("connection failed: {0}")]
     ConnectionFailed(String),
-    
+
     #[error("node unavailable")]
     Unavailable,
 }

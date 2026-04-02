@@ -103,7 +103,9 @@ pub fn set_node_count(status: &str, count: i64) {
 /// Set node latency
 #[inline]
 pub fn set_node_latency(node_id: &str, latency_ms: f64) {
-    NODE_LATENCY_GAUGE.with_label_values(&[node_id]).set(latency_ms);
+    NODE_LATENCY_GAUGE
+        .with_label_values(&[node_id])
+        .set(latency_ms);
 }
 
 /// Set memory usage
@@ -115,5 +117,7 @@ pub fn set_memory_usage(bytes: f64) {
 /// Set eBPF map entries
 #[inline]
 pub fn set_ebpf_map_entries(map_name: &str, entries: i64) {
-    EBPF_MAP_ENTRIES_GAUGE.with_label_values(&[map_name]).set(entries);
+    EBPF_MAP_ENTRIES_GAUGE
+        .with_label_values(&[map_name])
+        .set(entries);
 }

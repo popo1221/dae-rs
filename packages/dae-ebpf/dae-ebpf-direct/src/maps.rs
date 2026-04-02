@@ -28,7 +28,6 @@ pub struct DirectRouteMapEntry {
     _reserved2: [u8; 7],
 }
 
-
 /// Connection tracking map entry
 #[derive(Debug, Clone, Copy)]
 #[repr(C)]
@@ -58,7 +57,6 @@ pub struct ConnectionMapEntry {
     pub last_active: u64,
 }
 
-
 /// eBPF Maps manager for direct mode
 ///
 /// This struct manages all eBPF maps required for the direct eBPF mode,
@@ -74,21 +72,26 @@ pub struct EbpfMaps {
 impl EbpfMaps {
     /// Create a new eBPF Maps manager
     pub fn new() -> Self {
-        Self {
-            _phantom: None,
-        }
+        Self { _phantom: None }
     }
 
     /// Insert a direct route entry
     #[allow(dead_code)]
-    pub fn insert_direct_route(&self, _key: [u8; 8], _entry: DirectRouteMapEntry) -> Result<(), EbpfError> {
+    pub fn insert_direct_route(
+        &self,
+        _key: [u8; 8],
+        _entry: DirectRouteMapEntry,
+    ) -> Result<(), EbpfError> {
         tracing::debug!("insert_direct_route called");
         Ok(())
     }
 
     /// Look up a direct route
     #[allow(dead_code)]
-    pub fn lookup_direct_route(&self, _key: [u8; 8]) -> Result<Option<DirectRouteMapEntry>, EbpfError> {
+    pub fn lookup_direct_route(
+        &self,
+        _key: [u8; 8],
+    ) -> Result<Option<DirectRouteMapEntry>, EbpfError> {
         tracing::debug!("lookup_direct_route called");
         Ok(None)
     }
@@ -102,14 +105,21 @@ impl EbpfMaps {
 
     /// Insert a connection entry
     #[allow(dead_code)]
-    pub fn insert_connection(&self, _key: ConnectionKey, _info: ConnectionMapEntry) -> Result<(), EbpfError> {
+    pub fn insert_connection(
+        &self,
+        _key: ConnectionKey,
+        _info: ConnectionMapEntry,
+    ) -> Result<(), EbpfError> {
         tracing::debug!("insert_connection called");
         Ok(())
     }
 
     /// Look up a connection
     #[allow(dead_code)]
-    pub fn lookup_connection(&self, _key: &ConnectionKey) -> Result<Option<ConnectionMapEntry>, EbpfError> {
+    pub fn lookup_connection(
+        &self,
+        _key: &ConnectionKey,
+    ) -> Result<Option<ConnectionMapEntry>, EbpfError> {
         tracing::debug!("lookup_connection called");
         Ok(None)
     }
@@ -157,7 +167,7 @@ impl DirectRouteMapEntry {
         let mut entry = Self::default();
         entry.rule_type = 2; // Domain Suffix
         entry.action = action;
-        
+
         // Encode domain as u32 array
         let bytes = domain.as_bytes();
         for (i, chunk) in bytes.chunks(4).enumerate().take(16) {
@@ -190,21 +200,19 @@ mod tests {
         let key = ConnectionKey::new(
             0xC0A80101, // 192.168.1.1
             0xC0A80102, // 192.168.1.2
-            8080,
-            80,
-            6, // TCP
+            8080, 80, 6, // TCP
         );
-        
+
         let bytes = key.to_bytes();
         let key2 = ConnectionKey::from_bytes(&bytes);
-        
+
         assert_eq!(key, key2);
     }
 
     #[test]
     fn test_direct_route_ipv4() {
         let entry = DirectRouteMapEntry::new_ipv4_cidr(0xC0A80100, 24, 0);
-        
+
         assert_eq!(entry.rule_type, 0);
         assert_eq!(entry.ip_version, 4);
         assert_eq!(entry.prefix_len, 24);

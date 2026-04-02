@@ -16,54 +16,62 @@
 // Re-export public types for easy access
 pub use crate::connection::{Connection, ConnectionState, Protocol, SharedConnection};
 pub use crate::connection_pool::{ConnectionKey, ConnectionPool, SharedConnectionPool};
-pub use crate::tcp::{TcpProxy, TcpProxyConfig};
-pub use crate::udp::{UdpProxy, UdpProxyConfig};
 pub use crate::ebpf_integration::{
-    EbpfError, EbpfMaps, EbpfRoutingHandle, EbpfSessionHandle, EbpfStatsHandle, Result as EbpfResult,
+    EbpfError, EbpfMaps, EbpfRoutingHandle, EbpfSessionHandle, EbpfStatsHandle,
+    Result as EbpfResult,
 };
-pub use crate::proxy::{Proxy, ProxyConfig, ProxyError};
-pub use crate::socks5::{Socks5Handler, Socks5Server};
 pub use crate::http_proxy::{HttpProxyHandler, HttpProxyServer};
 pub use crate::protocol_dispatcher::{ProtocolDispatcher, ProtocolDispatcherConfig};
+pub use crate::proxy::{Proxy, ProxyConfig, ProxyError};
 pub use crate::shadowsocks::{
-    ShadowsocksHandler, ShadowsocksServer,
-    SsCipherType, SsClientConfig, SsServerConfig,
+    ShadowsocksHandler, ShadowsocksServer, SsCipherType, SsClientConfig, SsServerConfig,
 };
+pub use crate::socks5::{Socks5Handler, Socks5Server};
+pub use crate::tcp::{TcpProxy, TcpProxyConfig};
+pub use crate::udp::{UdpProxy, UdpProxyConfig};
 pub use crate::vless::{
-    VlessHandler, VlessServer,
-    VlessServerConfig, VlessClientConfig, VlessTlsConfig,
-    VlessCommand, VlessAddressType, VlessTargetAddress,
+    VlessAddressType, VlessClientConfig, VlessCommand, VlessHandler, VlessServer,
+    VlessServerConfig, VlessTargetAddress, VlessTlsConfig,
 };
 pub use crate::vmess::{
-    VmessHandler, VmessServer,
-    VmessServerConfig, VmessClientConfig,
-    VmessSecurity, VmessCommand, VmessAddressType, VmessTargetAddress,
+    VmessAddressType, VmessClientConfig, VmessCommand, VmessHandler, VmessSecurity, VmessServer,
+    VmessServerConfig, VmessTargetAddress,
 };
 // Trojan protocol - re-exported from trojan_protocol for backward compatibility
-pub use crate::trojan_protocol::{
-    TrojanHandler, TrojanServer,
-    TrojanServerConfig, TrojanClientConfig, TrojanTlsConfig,
-    TrojanCommand, TrojanAddressType, TrojanTargetAddress,
-};
-pub use crate::juicity::{
-    JuicityHandler, JuicityServer, JuicityClient, JuicityConfig,
-    JuicityError, CongestionControl, JuicityConnection,
-};
-pub use crate::juicity::codec::{
-    JuicityCodec, JuicityFrame, JuicityCommand, JuicityAddress,
-};
-pub use crate::rules::{Rule, RuleGroup, RuleMatchAction, RuleType, DomainRule, IpCidrRule, GeoIpRule, ProcessRule, DnsTypeRule};
-pub use crate::rule_engine::{RuleEngine, RuleEngineConfig, RuleEngineStats, RuleAction, PacketInfo, SharedRuleEngine, new_rule_engine};
-pub use crate::core::{Error, Result, Context};
-pub use crate::node::{
-    Node, NodeId, NodeManager, NodeError, SelectionPolicy, NodeSelector,
-    // Node Store - Zed-inspired naming
-    NodeStoreTrait, NodeHandle, NodeState, NodeManagerConfig,
-};
 pub use crate::control::{
-    ControlServer, ControlState, ControlCommand, ControlResponse,
-    ProxyStatus, ProxyStats, NodeTestResult,
-    connect_and_send, connect_and_get_status,
+    connect_and_get_status, connect_and_send, ControlCommand, ControlResponse, ControlServer,
+    ControlState, NodeTestResult, ProxyStats, ProxyStatus,
+};
+pub use crate::core::{Context, Error, Result};
+pub use crate::juicity::codec::{JuicityAddress, JuicityCodec, JuicityCommand, JuicityFrame};
+pub use crate::juicity::{
+    CongestionControl, JuicityClient, JuicityConfig, JuicityConnection, JuicityError,
+    JuicityHandler, JuicityServer,
+};
+pub use crate::node::{
+    Node,
+    NodeError,
+    NodeHandle,
+    NodeId,
+    NodeManager,
+    NodeManagerConfig,
+    NodeSelector,
+    NodeState,
+    // Node Store - Zed-inspired naming
+    NodeStoreTrait,
+    SelectionPolicy,
+};
+pub use crate::rule_engine::{
+    new_rule_engine, PacketInfo, RuleAction, RuleEngine, RuleEngineConfig, RuleEngineStats,
+    SharedRuleEngine,
+};
+pub use crate::rules::{
+    DnsTypeRule, DomainRule, GeoIpRule, IpCidrRule, ProcessRule, Rule, RuleGroup, RuleMatchAction,
+    RuleType,
+};
+pub use crate::trojan_protocol::{
+    TrojanAddressType, TrojanClientConfig, TrojanCommand, TrojanHandler, TrojanServer,
+    TrojanServerConfig, TrojanTargetAddress, TrojanTlsConfig,
 };
 
 // Protocol layer abstractions
@@ -75,18 +83,12 @@ pub use crate::control::{
 // still available but deprecated in favor of the simpler Handler trait.
 //
 // See [`protocol::unified_handler`] for the unified Handler trait.
-pub use crate::protocol::{
-    ProtocolType,
-    ProtocolRegistry,
-};
+pub use crate::protocol::{ProtocolRegistry, ProtocolType};
 
 // Unified Handler trait (primary interface)
 pub use crate::protocol::unified_handler::{
-    Handler as UnifiedHandler,
-    HandlerConfig as UnifiedHandlerConfig,
-    HandlerStats,
-    HandlerStatsExt,
-    ProtocolHandlerAdapter,
+    Handler as UnifiedHandler, HandlerConfig as UnifiedHandlerConfig, HandlerStats,
+    HandlerStatsExt, ProtocolHandlerAdapter,
 };
 
 // Deprecated: Use UnifiedHandler instead
@@ -95,83 +97,93 @@ pub use crate::protocol::ProtocolHandler;
 
 pub mod connection;
 pub mod connection_pool;
-pub mod ebpf_integration;
-pub mod proxy;
-pub mod tcp;
-pub mod udp;
-pub mod socks5;
-pub mod http_proxy;
-pub mod protocol_dispatcher;
-pub mod shadowsocks;
-pub mod vless;
-pub mod vmess;
-pub mod trojan_protocol; // Module structure following Zed's architecture
-pub mod juicity;
-pub mod rules;
-pub mod rule_engine;
 pub mod control;
-pub mod transport;
 pub mod core;
+pub mod dns;
+pub mod ebpf_integration;
+pub mod http_proxy;
+pub mod hysteria2;
+pub mod juicity;
 pub mod mac;
 pub mod node;
-pub mod protocol;
-pub mod protocol_legacy;
-pub mod dns;
 pub mod process;
-pub mod hysteria2;
+pub mod protocol;
+pub mod protocol_dispatcher;
+pub mod protocol_legacy;
+pub mod proxy;
+pub mod rule_engine;
+pub mod rules;
+pub mod shadowsocks;
+pub mod socks5;
+pub mod tcp;
+pub mod transport;
+pub mod trojan_protocol; // Module structure following Zed's architecture
+pub mod udp;
+pub mod vless;
+pub mod vmess;
 
 // Process rule engine exports
 pub use crate::process::{
-    ProcessMatchRule, ProcessRuleSet, ProcessInfo, ProcessResolver,
-    match_process_name, ProcessRuleSetBuilder, TASK_COMM_LEN,
+    match_process_name, ProcessInfo, ProcessMatchRule, ProcessResolver, ProcessRuleSet,
+    ProcessRuleSetBuilder, TASK_COMM_LEN,
 };
 
 // MAC address rule engine exports
-pub use crate::mac::{
-    MacRule, MacRuleSet, MacAddr, OuiDatabase,
-};
+pub use crate::mac::{MacAddr, MacRule, MacRuleSet, OuiDatabase};
 
 // Hysteria2 protocol exports
-pub use crate::hysteria2::{
-    Hysteria2Handler, Hysteria2Server, Hysteria2Config, Hysteria2Error,
-};
+pub use crate::hysteria2::{Hysteria2Config, Hysteria2Error, Hysteria2Handler, Hysteria2Server};
 
 // DNS module exports
 pub use crate::dns::{
-    MacDnsResolver, MacDnsConfig, MacDnsRule, DnsCacheEntry, DnsResolution, DnsError,
+    DnsCacheEntry, DnsError, DnsResolution, MacDnsConfig, MacDnsResolver, MacDnsRule,
 };
 
 // Re-export transport types
 pub use transport::{
-    Transport, TcpTransport, WsTransport, WsConnector, WsConfig,
-    TlsTransport, TlsConfig, RealityConfig,
-    GrpcTransport, GrpcConfig,
+    GrpcConfig, GrpcTransport, RealityConfig, TcpTransport, TlsConfig, TlsTransport, Transport,
+    WsConfig, WsConnector, WsTransport,
 };
 
 // Configuration module with hot reload support
 pub mod config;
 pub use config::{
-    HotReload, HotReloadError, HotReloadable,
-    ConfigEvent, WatchEvent, WatchEventKind,
+    ConfigEvent, HotReload, HotReloadError, HotReloadable, WatchEvent, WatchEventKind,
 };
 
 // Metrics module with Prometheus export
 pub mod metrics;
 pub use metrics::{
-    MetricsServer,
-    // Counter functions
-    inc_connection, inc_bytes_sent, inc_bytes_received,
-    inc_rule_match, inc_dns_resolution, inc_error, inc_node_latency_test,
+    dec_active_connections,
+    dec_active_tcp_connections,
+    dec_active_udp_connections,
     // Gauge functions
-    inc_active_connections, dec_active_connections,
-    inc_active_tcp_connections, dec_active_tcp_connections,
-    inc_active_udp_connections, dec_active_udp_connections,
-    set_connection_pool_size, set_node_count, set_node_latency,
-    set_memory_usage, set_ebpf_map_entries,
+    inc_active_connections,
+    inc_active_tcp_connections,
+    inc_active_udp_connections,
+    inc_bytes_received,
+    inc_bytes_sent,
+    // Counter functions
+    inc_connection,
+    inc_dns_resolution,
+    inc_error,
+    inc_node_latency_test,
+    inc_rule_match,
     // Histogram functions
-    observe_connection_duration, observe_request_size,
-    observe_response_time, observe_dns_latency,
-    observe_ebpf_latency, observe_rule_match_latency, observe_node_latency,
+    observe_connection_duration,
+    observe_dns_latency,
+    observe_ebpf_latency,
+    observe_node_latency,
+    observe_request_size,
+    observe_response_time,
+    observe_rule_match_latency,
+    set_connection_pool_size,
+    set_ebpf_map_entries,
+    set_memory_usage,
+    set_node_count,
+    set_node_latency,
     // Server
-    start_metrics_server, stop_metrics_server,
+    start_metrics_server,
+    stop_metrics_server,
+    MetricsServer,
 };

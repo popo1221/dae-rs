@@ -3,9 +3,9 @@
 //! This file provides a placeholder for future SOCKS5-specific handler implementations.
 //! The main SOCKS5 logic is in `../../socks5.rs`.
 
-use async_trait::async_trait;
 use crate::core::{Context, Result as ProxyResult};
 use crate::protocol::ProtocolHandler;
+use async_trait::async_trait;
 
 /// SOCKS5 protocol handler
 ///

@@ -3,10 +3,10 @@
 //! This module provides the Context struct that flows through the entire
 //! request processing pipeline.
 
-use crate::node::NodeId;
-use crate::rule_engine::RuleAction;
-use crate::process::ProcessInfo;
 use crate::mac::MacAddr;
+use crate::node::NodeId;
+use crate::process::ProcessInfo;
+use crate::rule_engine::RuleAction;
 use std::net::SocketAddr;
 use std::sync::atomic::{AtomicU64, Ordering};
 
@@ -56,42 +56,45 @@ impl Context {
             process_pid: None,
         }
     }
-    
+
     /// Mark this context for direct connection
     pub fn set_direct(&mut self) {
         self.direct = true;
         self.rule_action = RuleAction::Direct;
     }
-    
+
     /// Mark this context for forced direct connection (Real Direct)
     pub fn set_must_direct(&mut self) {
         self.direct = true;
         self.rule_action = RuleAction::MustDirect;
     }
-    
+
     /// Check if this context should be proxied
     pub fn should_proxy(&self) -> bool {
         !self.direct && self.rule_action == RuleAction::Proxy
     }
-    
+
     /// Check if this context should be dropped
     pub fn should_drop(&self) -> bool {
         self.rule_action == RuleAction::Drop
     }
-    
+
     /// Get process information if available
-    /// 
+    ///
     /// Returns a ProcessInfo struct with PID, name, and optional path/cmdline
     /// if process information was captured for this connection.
     pub fn process_info(&self) -> Option<ProcessInfo> {
         self.process_pid.map(|pid| {
-            let name = self.process_name.clone().unwrap_or_else(|| "unknown".to_string());
+            let name = self
+                .process_name
+                .clone()
+                .unwrap_or_else(|| "unknown".to_string());
             ProcessInfo::new(pid, name)
         })
     }
-    
+
     /// Get MAC address if available
-    /// 
+    ///
     /// Returns the MAC address of the source device if captured.
     pub fn mac_address(&self) -> Option<MacAddr> {
         // Context doesn't currently store MAC address, this would be set by
@@ -110,48 +113,48 @@ mod tests {
     fn test_context_creation() {
         let source = SocketAddr::from((IpAddr::from_str("127.0.0.1").unwrap(), 8080));
         let dest = SocketAddr::from((IpAddr::from_str("192.168.1.1").unwrap(), 80));
-        
+
         let ctx = Context::new(source, dest);
-        
+
         assert_eq!(ctx.source, source);
         assert_eq!(ctx.destination, dest);
         assert_eq!(ctx.rule_action, RuleAction::Proxy);
         assert!(!ctx.direct);
         assert!(ctx.node_id.is_none());
     }
-    
+
     #[test]
     fn test_set_direct() {
         let source = SocketAddr::from((IpAddr::from_str("127.0.0.1").unwrap(), 8080));
         let dest = SocketAddr::from((IpAddr::from_str("192.168.1.1").unwrap(), 80));
-        
+
         let mut ctx = Context::new(source, dest);
         ctx.set_direct();
-        
+
         assert!(ctx.direct);
         assert_eq!(ctx.rule_action, RuleAction::Direct);
     }
-    
+
     #[test]
     fn test_set_must_direct() {
         let source = SocketAddr::from((IpAddr::from_str("127.0.0.1").unwrap(), 8080));
         let dest = SocketAddr::from((IpAddr::from_str("192.168.1.1").unwrap(), 80));
-        
+
         let mut ctx = Context::new(source, dest);
         ctx.set_must_direct();
-        
+
         assert!(ctx.direct);
         assert_eq!(ctx.rule_action, RuleAction::MustDirect);
     }
-    
+
     #[test]
     fn test_request_id_uniqueness() {
         let source = SocketAddr::from((IpAddr::from_str("127.0.0.1").unwrap(), 8080));
         let dest = SocketAddr::from((IpAddr::from_str("192.168.1.1").unwrap(), 80));
-        
+
         let ctx1 = Context::new(source, dest);
         let ctx2 = Context::new(source, dest);
-        
+
         // Request IDs should be unique (though they might not be in fast succession due to atomic)
         // This is a basic check
         assert_ne!(ctx1.request_id, ctx2.request_id);

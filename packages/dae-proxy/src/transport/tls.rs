@@ -7,8 +7,8 @@ use async_trait::async_trait;
 use std::fmt::Debug;
 use std::io::{Error as IoError, ErrorKind};
 use std::net::SocketAddr;
-use tokio::net::TcpStream;
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
+use tokio::net::TcpStream;
 
 use super::Transport;
 
@@ -131,7 +131,7 @@ impl Transport for TlsTransport {
 
     async fn dial(&self, addr: &str) -> std::io::Result<TcpStream> {
         let stream = tokio::net::TcpStream::connect(addr).await?;
-        
+
         if self.config.reality.is_some() {
             // Reality mode - perform Reality handshake
             self.reality_handshake(stream).await
@@ -162,7 +162,10 @@ impl TlsTransport {
     /// 5. Receive ServerHello
     /// 6. Verify response and derive session key
     async fn reality_handshake(&self, mut stream: TcpStream) -> std::io::Result<TcpStream> {
-        let reality = self.config.reality.as_ref()
+        let reality = self
+            .config
+            .reality
+            .as_ref()
             .ok_or_else(|| IoError::new(ErrorKind::InvalidInput, "Reality config required"))?;
 
         // Step 1: Generate X25519 temporary keypair
@@ -174,10 +177,14 @@ impl TlsTransport {
         // Step 2: Compute ECDH shared secret with server's public key
         let server_public_key = reality.public_key.as_slice();
         if server_public_key.len() != 32 {
-            return Err(IoError::new(ErrorKind::InvalidInput, "Invalid server public key length"));
+            return Err(IoError::new(
+                ErrorKind::InvalidInput,
+                "Invalid server public key length",
+            ));
         }
-        
-        let server_point_array: [u8; 32] = server_public_key.try_into()
+
+        let server_point_array: [u8; 32] = server_public_key
+            .try_into()
             .map_err(|_| IoError::new(ErrorKind::InvalidInput, "Invalid public key"))?;
         let server_point = curve25519_dalek::MontgomeryPoint(server_point_array);
         let shared_point = server_point * scalar;
@@ -188,7 +195,7 @@ impl TlsTransport {
         // - 32 bytes: HMAC-SHA256(key, "Reality Souls")
         // - 16 bytes: random bytes (first 8 bytes = short_id, rest = random)
         let mut request = [0u8; 48];
-        
+
         // First 32 bytes: HMAC-SHA256(shared_secret, "Reality Souls")
         let hmac_key = hmac_sha256(&shared_bytes, b"Reality Souls");
         request[..32].copy_from_slice(&hmac_key);
@@ -204,8 +211,9 @@ impl TlsTransport {
         request[40..].copy_from_slice(&random_bytes);
 
         // Step 4: Build and send TLS ClientHello with Reality chrome
-        let client_hello = self.build_reality_client_hello(&client_public_bytes, &request, &reality.destination)?;
-        
+        let client_hello =
+            self.build_reality_client_hello(&client_public_bytes, &request, &reality.destination)?;
+
         // Send ClientHello
         stream.write_all(&client_hello).await?;
         stream.flush().await?;
@@ -225,7 +233,8 @@ impl TlsTransport {
         }
 
         // Extract server public key (bytes 5-36)
-        let _server_pub_key: [u8; 32] = server_response[5..37].try_into()
+        let _server_pub_key: [u8; 32] = server_response[5..37]
+            .try_into()
             .map_err(|_| IoError::new(ErrorKind::InvalidData, "Invalid server public key"))?;
 
         // Verify the response using the new shared secret
@@ -233,7 +242,7 @@ impl TlsTransport {
         let mut verify_data = vec![0u8; 32 + 8];
         verify_data[..32].copy_from_slice(&_server_pub_key);
         verify_data[32..40].copy_from_slice(&reality.short_id);
-        
+
         let _expected_mac = hmac_sha256(&shared_bytes, &verify_data);
 
         // The last 32 bytes of ServerHello contain encrypted header
@@ -251,24 +260,24 @@ impl TlsTransport {
         destination: &str,
     ) -> std::io::Result<Vec<u8>> {
         let mut client_hello = Vec::new();
-        
+
         // Handshake type: ClientHello (1)
         client_hello.push(0x01);
-        
+
         // We need to build a proper TLS ClientHello
         // For now, create a minimal valid ClientHello structure
-        
+
         // ClientVersion TLS 1.3 (0x0303)
         client_hello.push(0x03);
         client_hello.push(0x03);
-        
+
         // Random (32 bytes)
         let random: [u8; 32] = rand::random();
         client_hello.extend_from_slice(&random);
-        
+
         // Session ID (empty for now)
         client_hello.push(0x00);
-        
+
         // Cipher suites - TLS 1.3 suites
         let cipher_suites: Vec<u16> = vec![
             0x1301, // TLS_AES_128_GCM_SHA256
@@ -280,36 +289,36 @@ impl TlsTransport {
             client_hello.push((cs >> 8) as u8);
             client_hello.push((cs & 0xff) as u8);
         }
-        
+
         // Compression methods (null only)
         client_hello.push(0x01);
         client_hello.push(0x00);
-        
+
         // Extensions length placeholder
         let extensions_start = client_hello.len();
         client_hello.push(0x00);
         client_hello.push(0x00);
-        
+
         // Add SNI extension
         self.add_sni_extension(&mut client_hello, destination)?;
-        
+
         // Add ALPN extension
         self.add_alpn_extension(&mut client_hello)?;
-        
+
         // Add Reality chrome extension (key share)
         self.add_reality_chrome_extension(&mut client_hello, client_public, request)?;
-        
+
         // Update extensions length
         let ext_len = client_hello.len() - extensions_start - 2;
         client_hello[extensions_start] = (ext_len >> 8) as u8;
         client_hello[extensions_start + 1] = (ext_len & 0xff) as u8;
-        
+
         // Update handshake length (skip type byte)
         let handshake_len = client_hello.len() - 4;
         client_hello[1] = (handshake_len >> 16) as u8;
         client_hello[2] = (handshake_len >> 8) as u8;
         client_hello[3] = (handshake_len & 0xff) as u8;
-        
+
         Ok(client_hello)
     }
 
@@ -317,31 +326,31 @@ impl TlsTransport {
         // Extension type: server_name (0x0000)
         buffer.push(0x00);
         buffer.push(0x00);
-        
+
         // Extension data length (placeholder)
         let len_pos = buffer.len();
         buffer.push(0x00);
         buffer.push(0x00);
-        
+
         // ServerNameList length
         buffer.push(0x00);
-        
+
         // ServerName type: host_name (0x00)
         buffer.push(0x00);
-        
+
         // ServerName length
         let name_bytes = destination.as_bytes();
         buffer.push((name_bytes.len() >> 8) as u8);
         buffer.push((name_bytes.len() & 0xff) as u8);
-        
+
         // ServerName
         buffer.extend_from_slice(name_bytes);
-        
+
         // Update extension length
         let ext_data_len = buffer.len() - len_pos - 2;
         buffer[len_pos] = (ext_data_len >> 8) as u8;
         buffer[len_pos + 1] = (ext_data_len & 0xff) as u8;
-        
+
         Ok(())
     }
 
@@ -349,34 +358,34 @@ impl TlsTransport {
         // Extension type: application_layer_protocol_negotiation (0x0010)
         buffer.push(0x00);
         buffer.push(0x10);
-        
+
         // Extension data length (placeholder)
         let len_pos = buffer.len();
         buffer.push(0x00);
         buffer.push(0x00);
-        
+
         // Protocol name list length
         let list_start = buffer.len();
         buffer.push(0x00);
         buffer.push(0x00);
-        
+
         for alpn in &self.config.alpn {
             // Protocol length
             buffer.push(alpn.len() as u8);
             // Protocol name
             buffer.extend_from_slice(alpn);
         }
-        
+
         // Update list length
         let list_len = buffer.len() - list_start - 2;
         buffer[list_start] = (list_len >> 8) as u8;
         buffer[list_start + 1] = (list_len & 0xff) as u8;
-        
+
         // Update extension length
         let ext_data_len = buffer.len() - len_pos - 2;
         buffer[len_pos] = (ext_data_len >> 8) as u8;
         buffer[len_pos + 1] = (ext_data_len & 0xff) as u8;
-        
+
         Ok(())
     }
 
@@ -390,25 +399,25 @@ impl TlsTransport {
         // Extension type: 0x5a5a (private use)
         buffer.push(0x5a);
         buffer.push(0x5a);
-        
+
         // Extension data length (placeholder)
         let len_pos = buffer.len();
         buffer.push(0x00);
         buffer.push(0x00);
-        
+
         // Key share entry: X25519
         buffer.push(0x00);
         buffer.push(0x1d); // x25519
         buffer.extend_from_slice(client_public);
-        
+
         // Reality request (48 bytes)
         buffer.extend_from_slice(request);
-        
+
         // Update extension length
         let ext_data_len = buffer.len() - len_pos - 2;
         buffer[len_pos] = (ext_data_len >> 8) as u8;
         buffer[len_pos + 1] = (ext_data_len & 0xff) as u8;
-        
+
         Ok(())
     }
 }
@@ -417,9 +426,8 @@ impl TlsTransport {
 fn hmac_sha256(key: &[u8], data: &[u8]) -> [u8; 32] {
     use hmac::{Hmac, Mac};
     type HmacSha256 = Hmac<sha2::Sha256>;
-    
-    let mac = HmacSha256::new_from_slice(key)
-        .expect("HMAC can take key of any size");
+
+    let mac = HmacSha256::new_from_slice(key).expect("HMAC can take key of any size");
     let result = mac.chain_update(data).finalize();
     result.into_bytes().into()
 }
@@ -439,11 +447,7 @@ mod tests {
     #[test]
     fn test_tls_config_builder() {
         let config = TlsConfig::new("example.com")
-            .with_reality(
-                &[0u8; 32],
-                &[0u8; 8],
-                "destination.com",
-            )
+            .with_reality(&[0u8; 32], &[0u8; 8], "destination.com")
             .with_alpn(vec![b"h2".to_vec()])
             .accept_invalid_cert();
 
@@ -480,8 +484,8 @@ mod tests {
 
     #[test]
     fn test_tls_config_with_alpn() {
-        let config = TlsConfig::new("example.com")
-            .with_alpn(vec![b"h2".to_vec(), b"http/1.1".to_vec()]);
+        let config =
+            TlsConfig::new("example.com").with_alpn(vec![b"h2".to_vec(), b"http/1.1".to_vec()]);
 
         assert_eq!(config.alpn.len(), 2);
     }

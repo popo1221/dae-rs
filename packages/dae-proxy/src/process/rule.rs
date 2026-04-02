@@ -3,8 +3,8 @@
 //! This module provides rule types for matching traffic based on process names.
 //! Rules support glob patterns for flexible matching.
 
+use super::matcher::{match_process_name, ProcessInfo};
 use crate::rule_engine::RuleAction;
-use super::matcher::{ProcessInfo, match_process_name};
 
 /// A single process match rule
 ///
@@ -32,7 +32,7 @@ impl ProcessMatchRule {
         } else {
             (process_name, false)
         };
-        
+
         Self {
             process_name: name.to_string(),
             action,
@@ -43,7 +43,7 @@ impl ProcessMatchRule {
     /// Check if this rule matches the given process name
     pub fn matches(&self, process_name: &str) -> bool {
         let matches = match_process_name(&self.process_name, process_name);
-        
+
         if self.is_exclude {
             !matches
         } else {
@@ -169,25 +169,29 @@ impl ProcessRuleSetBuilder {
 
     /// Add a pass rule
     pub fn pass(mut self, pattern: &str) -> Self {
-        self.rules.push(ProcessMatchRule::new(pattern, RuleAction::Pass));
+        self.rules
+            .push(ProcessMatchRule::new(pattern, RuleAction::Pass));
         self
     }
 
     /// Add a direct rule
     pub fn direct(mut self, pattern: &str) -> Self {
-        self.rules.push(ProcessMatchRule::new(pattern, RuleAction::Direct));
+        self.rules
+            .push(ProcessMatchRule::new(pattern, RuleAction::Direct));
         self
     }
 
     /// Add a proxy rule
     pub fn proxy(mut self, pattern: &str) -> Self {
-        self.rules.push(ProcessMatchRule::new(pattern, RuleAction::Proxy));
+        self.rules
+            .push(ProcessMatchRule::new(pattern, RuleAction::Proxy));
         self
     }
 
     /// Add a drop rule
     pub fn drop(mut self, pattern: &str) -> Self {
-        self.rules.push(ProcessMatchRule::new(pattern, RuleAction::Drop));
+        self.rules
+            .push(ProcessMatchRule::new(pattern, RuleAction::Drop));
         self
     }
 
@@ -220,7 +224,7 @@ mod tests {
     #[test]
     fn test_process_rule_exact_match() {
         let rule = ProcessMatchRule::new("chrome", RuleAction::Proxy);
-        
+
         assert!(rule.matches("chrome"));
         assert!(!rule.matches("chromium"));
         assert!(!rule.matches("firefox"));
@@ -229,18 +233,18 @@ mod tests {
     #[test]
     fn test_process_rule_prefix_match() {
         let rule = ProcessMatchRule::new("chrome*", RuleAction::Proxy);
-        
-        assert!(rule.matches("chrome"));       // exact match
+
+        assert!(rule.matches("chrome")); // exact match
         assert!(rule.matches("chromedriver")); // starts with chrome
         assert!(rule.matches("chrome-stable")); // starts with chrome
-        assert!(!rule.matches("chromium"));     // chromium != chrome* (has 'i' not 'e' after 'chrom')
+        assert!(!rule.matches("chromium")); // chromium != chrome* (has 'i' not 'e' after 'chrom')
         assert!(!rule.matches("firefox"));
     }
 
     #[test]
     fn test_process_rule_exclude() {
         let rule = ProcessMatchRule::new("!chrome", RuleAction::Proxy);
-        
+
         assert!(!rule.matches("chrome"));
         assert!(rule.matches("firefox"));
         assert!(rule.matches("anything"));
@@ -251,7 +255,7 @@ mod tests {
         let mut set = ProcessRuleSet::new();
         set.add("chrome", RuleAction::Proxy);
         set.add("firefox", RuleAction::Pass);
-        
+
         assert_eq!(set.match_process("chrome"), RuleAction::Proxy);
         assert_eq!(set.match_process("firefox"), RuleAction::Pass);
         assert_eq!(set.match_process("unknown"), RuleAction::Pass); // default
@@ -265,7 +269,7 @@ mod tests {
             .drop("torrent*")
             .default_action(RuleAction::Pass)
             .build();
-        
+
         assert_eq!(set.match_process("chrome"), RuleAction::Proxy);
         assert_eq!(set.match_process("ssh"), RuleAction::Direct);
         assert_eq!(set.match_process("torrent"), RuleAction::Drop);
@@ -278,7 +282,7 @@ mod tests {
         let mut set = ProcessRuleSet::new();
         set.add("chrome*", RuleAction::Proxy);
         set.add("chrome", RuleAction::Drop);
-        
+
         // First rule matches first
         assert_eq!(set.match_process("chrome"), RuleAction::Proxy);
         assert_eq!(set.match_process("chrome-stable"), RuleAction::Proxy);
@@ -288,7 +292,7 @@ mod tests {
     fn test_process_rule_set_default() {
         let mut set = ProcessRuleSet::with_default_action(RuleAction::Drop);
         set.add("chrome", RuleAction::Proxy);
-        
+
         assert_eq!(set.match_process("chrome"), RuleAction::Proxy);
         assert_eq!(set.match_process("unknown"), RuleAction::Drop);
     }
@@ -297,7 +301,7 @@ mod tests {
     fn test_process_rule_with_process_info() {
         let rule = ProcessMatchRule::new("chrome", RuleAction::Proxy);
         let info = ProcessInfo::new(1234, "chrome".to_string());
-        
+
         assert!(rule.matches_process_info(&info));
     }
 }

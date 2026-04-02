@@ -12,15 +12,15 @@
 //! - `dae shutdown` - Stop daemon
 
 use clap::{Parser, Subcommand};
-use dae_proxy::{
-    Proxy, ProxyConfig,
-    shadowsocks::{SsCipherType, SsServerConfig},
-    vless::{VlessServerConfig, VlessTlsConfig},
-    vmess::{VmessServerConfig, VmessSecurity},
-    trojan_protocol::{TrojanServerConfig, TrojanTlsConfig},
-    control::{ControlServer, connect_and_send},
-};
 use dae_config::{Config, NodeType};
+use dae_proxy::{
+    control::{connect_and_send, ControlServer},
+    shadowsocks::{SsCipherType, SsServerConfig},
+    trojan_protocol::{TrojanServerConfig, TrojanTlsConfig},
+    vless::{VlessServerConfig, VlessTlsConfig},
+    vmess::{VmessSecurity, VmessServerConfig},
+    Proxy, ProxyConfig,
+};
 use std::net::SocketAddr;
 use std::path::PathBuf;
 use std::str::FromStr;
@@ -31,7 +31,10 @@ use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
 
 #[derive(Parser, Debug)]
 #[command(name = "dae")]
-#[command(version = "0.1.0", about = "dae-rs - High-performance transparent proxy")]
+#[command(
+    version = "0.1.0",
+    about = "dae-rs - High-performance transparent proxy"
+)]
 struct Cli {
     #[command(subcommand)]
     command: Commands,
@@ -97,14 +100,20 @@ enum Commands {
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
     tracing_subscriber::registry()
         .with(tracing_subscriber::fmt::layer())
-        .with(tracing_subscriber::EnvFilter::from_default_env()
-            .add_directive("dae_rs=info".parse()?))
+        .with(
+            tracing_subscriber::EnvFilter::from_default_env().add_directive("dae_rs=info".parse()?),
+        )
         .init();
 
     let cli = Cli::parse();
 
     match cli.command {
-        Commands::Run { config, daemon, pid_file, control_socket } => {
+        Commands::Run {
+            config,
+            daemon,
+            pid_file,
+            control_socket,
+        } => {
             run_proxy(config, daemon, pid_file, control_socket).await?;
         }
         Commands::Status { socket } => {
@@ -124,32 +133,33 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             let response = connect_and_send(&socket, "shutdown".into()).await?;
             println!("{response}");
         }
-        Commands::Validate { config } => {
-            match Config::from_file(config.to_str().unwrap_or("")) {
-                Ok(cfg) => {
-                    match cfg.validate() {
-                        Ok(_) => {
-                            println!("✓ Configuration '{:?}' is valid", config);
-                            println!("  Listen: {} (SOCKS5), {} (HTTP)", 
-                                cfg.proxy.socks5_listen, cfg.proxy.http_listen);
-                            println!("  eBPF: {} (enabled={})", cfg.proxy.ebpf_interface, cfg.proxy.ebpf_enabled);
-                            println!("  Nodes: {}", cfg.nodes.len());
-                            if let Some(ref rules) = cfg.rules.config_file {
-                                println!("  Rules: {rules}");
-                            }
-                        }
-                        Err(e) => {
-                            eprintln!("✗ Validation failed: {e}");
-                            std::process::exit(1);
-                        }
+        Commands::Validate { config } => match Config::from_file(config.to_str().unwrap_or("")) {
+            Ok(cfg) => match cfg.validate() {
+                Ok(_) => {
+                    println!("✓ Configuration '{:?}' is valid", config);
+                    println!(
+                        "  Listen: {} (SOCKS5), {} (HTTP)",
+                        cfg.proxy.socks5_listen, cfg.proxy.http_listen
+                    );
+                    println!(
+                        "  eBPF: {} (enabled={})",
+                        cfg.proxy.ebpf_interface, cfg.proxy.ebpf_enabled
+                    );
+                    println!("  Nodes: {}", cfg.nodes.len());
+                    if let Some(ref rules) = cfg.rules.config_file {
+                        println!("  Rules: {rules}");
                     }
                 }
                 Err(e) => {
-                    eprintln!("✗ Failed to parse config: {e}");
+                    eprintln!("✗ Validation failed: {e}");
                     std::process::exit(1);
                 }
+            },
+            Err(e) => {
+                eprintln!("✗ Failed to parse config: {e}");
+                std::process::exit(1);
             }
-        }
+        },
     }
 
     Ok(())
@@ -169,7 +179,7 @@ async fn run_proxy(
 
     // Build ProxyConfig from Config
     let mut proxy_config = ProxyConfig::default();
-    
+
     // Parse listen addresses
     if let Ok(addr) = loaded_config.proxy.socks5_listen.parse::<SocketAddr>() {
         proxy_config.socks5_listen = Some(addr);
@@ -177,20 +187,20 @@ async fn run_proxy(
     if let Ok(addr) = loaded_config.proxy.http_listen.parse::<SocketAddr>() {
         proxy_config.http_listen = Some(addr);
     }
-    
+
     // eBPF settings
     proxy_config.ebpf.enabled = loaded_config.proxy.ebpf_enabled;
     proxy_config.xdp_interface = loaded_config.proxy.ebpf_interface.clone();
-    
+
     // Timeouts
     proxy_config.pool.tcp_timeout = Duration::from_secs(loaded_config.proxy.tcp_timeout);
     proxy_config.pool.udp_timeout = Duration::from_secs(loaded_config.proxy.udp_timeout);
-    
+
     // Build protocol servers from nodes
     for node in &loaded_config.nodes {
         let server_addr = node.server.clone();
         let port = node.port;
-        
+
         match node.node_type {
             NodeType::Trojan => {
                 if let Some(ref password) = node.trojan_password {
@@ -208,7 +218,7 @@ async fn run_proxy(
                     let method_str = node.method.as_deref().unwrap_or("chacha20-ietf-poly1305");
                     let method = SsCipherType::from_str(method_str)
                         .unwrap_or(SsCipherType::Chacha20IetfPoly1305);
-                    
+
                     proxy_config.ss_listen = Some("127.0.0.1:1080".parse().unwrap());
                     proxy_config.ss_server = Some(SsServerConfig {
                         addr: server_addr,
@@ -235,7 +245,7 @@ async fn run_proxy(
                     let security_str = node.security.as_deref().unwrap_or("aes-128-gcm-aead");
                     let security = VmessSecurity::from_str(security_str)
                         .unwrap_or(VmessSecurity::Aes128GcmAead);
-                    
+
                     proxy_config.vmess_listen = Some("127.0.0.1:1080".parse().unwrap());
                     proxy_config.vmess_server = Some(VmessServerConfig {
                         addr: server_addr,

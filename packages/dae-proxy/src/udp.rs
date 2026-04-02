@@ -1,7 +1,7 @@
 //! UDP forwarding implementation
 //!
 //! Handles UDP traffic relay with NAT semantics and session management.
-//! 
+//!
 //! Note: This is a simplified implementation for Phase 3. Full UDP relay
 //! with proper NAT traversal will be implemented in Phase 4.
 
@@ -112,9 +112,11 @@ impl UdpProxy {
         _server_addr: SocketAddr,
     ) -> std::io::Result<(UdpSocket, UdpSocket)> {
         // Create client-facing socket - bind to random port using tokio
-        let client_socket = UdpSocket::bind(SocketAddr::new(IpAddr::V4(Ipv4Addr::UNSPECIFIED), 0)).await?;
+        let client_socket =
+            UdpSocket::bind(SocketAddr::new(IpAddr::V4(Ipv4Addr::UNSPECIFIED), 0)).await?;
         // Create server-facing socket - bind to random port
-        let server_socket = UdpSocket::bind(SocketAddr::new(IpAddr::V4(Ipv4Addr::UNSPECIFIED), 0)).await?;
+        let server_socket =
+            UdpSocket::bind(SocketAddr::new(IpAddr::V4(Ipv4Addr::UNSPECIFIED), 0)).await?;
 
         Ok((client_socket, server_socket))
     }
@@ -133,7 +135,7 @@ impl UdpProxy {
                 Ok((len, client_addr)) => {
                     let packet_data = buf[..len].to_vec();
                     let proxy = self.clone();
-                    
+
                     tokio::spawn(async move {
                         if let Err(e) = proxy.handle_packet(packet_data, client_addr).await {
                             debug!("UDP handle error: {}", e);
@@ -157,11 +159,7 @@ impl UdpProxy {
         let server_addr = self.extract_destination(&data).await?;
 
         // Create session key
-        let key = ConnectionKey::new(
-            client_addr,
-            server_addr,
-            crate::connection::Protocol::Udp,
-        );
+        let key = ConnectionKey::new(client_addr, server_addr, crate::connection::Protocol::Udp);
 
         // Check if session exists
         {
@@ -175,22 +173,17 @@ impl UdpProxy {
         }
 
         // Create new session
-        self.create_session(key, client_addr, server_addr, &data).await?;
-        
+        self.create_session(key, client_addr, server_addr, &data)
+            .await?;
+
         Ok(())
     }
 
     /// Extract destination address from packet
-    async fn extract_destination(
-        self: &Arc<Self>,
-        _data: &[u8],
-    ) -> std::io::Result<SocketAddr> {
+    async fn extract_destination(self: &Arc<Self>, _data: &[u8]) -> std::io::Result<SocketAddr> {
         // Simplified: Return a placeholder
         // Real implementation would parse SOCKS5, HTTP, DNS, etc.
-        Ok(SocketAddr::new(
-            IpAddr::V4(Ipv4Addr::new(8, 8, 8, 8)),
-            53,
-        ))
+        Ok(SocketAddr::new(IpAddr::V4(Ipv4Addr::new(8, 8, 8, 8)), 53))
     }
 
     /// Create a new UDP session
@@ -202,7 +195,8 @@ impl UdpProxy {
         initial_data: &[u8],
     ) -> std::io::Result<()> {
         // Create socket pair
-        let (client_socket, server_socket) = Self::create_socket_pair(client_addr, server_addr).await?;
+        let (client_socket, server_socket) =
+            Self::create_socket_pair(client_addr, server_addr).await?;
 
         let session = Arc::new(UdpSessionData::new(
             client_socket,
@@ -230,7 +224,7 @@ impl UdpProxy {
 
         // Relay initial packet first
         self.relay_packet_to_session(key, initial_data).await?;
-        
+
         // Start relay task
         let proxy = self.clone();
         let session_key = key;
@@ -251,12 +245,14 @@ impl UdpProxy {
         if let Some(session) = sessions.get(&key) {
             let server_socket = session.server_socket.clone();
             let server_addr = session.server_addr;
-            
+
             let len = data.len().min(self.config.max_packet_size);
             if let Err(e) = timeout(
                 self.config.per_session_timeout,
                 server_socket.send_to(&data[..len], server_addr),
-            ).await? {
+            )
+            .await?
+            {
                 warn!("UDP send error: {}", e);
             }
         }
@@ -290,7 +286,7 @@ impl UdpProxy {
                     match result {
                         Ok((len, _)) => {
                             last_activity = std::time::Instant::now();
-                            
+
                             if let Err(e) = server_socket.send_to(&client_buf[..len], server_addr).await {
                                 warn!("UDP send to server error: {}", e);
                                 break;
@@ -308,7 +304,7 @@ impl UdpProxy {
                     match result {
                         Ok((len, _)) => {
                             last_activity = std::time::Instant::now();
-                            
+
                             if let Err(e) = client_socket.send_to(&server_buf[..len], client_addr).await {
                                 warn!("UDP send to client error: {}", e);
                                 break;
@@ -337,7 +333,7 @@ impl UdpProxy {
         let mut sessions = self.sessions.write().await;
         if sessions.remove(key).is_some() {
             debug!("Removed UDP session for {:?}", key);
-            
+
             // Update eBPF
             if let Some(ref handle) = self.session_handle {
                 if let Ok(handle_write) = handle.try_write() {
@@ -353,7 +349,7 @@ impl UdpProxy {
     #[allow(dead_code)]
     async fn cleanup_expired_sessions(self: Arc<Self>) {
         let timeout = self.config.per_session_timeout;
-        
+
         // Collect expired keys
         let keys_to_remove: Vec<ConnectionKey> = {
             let sessions = self.sessions.read().await;
@@ -365,7 +361,7 @@ impl UdpProxy {
             }
             keys
         };
-        
+
         // Remove expired sessions
         if !keys_to_remove.is_empty() {
             let mut sessions = self.sessions.write().await;

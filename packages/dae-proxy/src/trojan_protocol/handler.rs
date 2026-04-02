@@ -57,7 +57,10 @@ impl TrojanHandler {
 
     /// Get the next backend using round-robin
     fn next_backend(&self) -> &TrojanServerConfig {
-        let idx = self.current_index.fetch_add(1, std::sync::atomic::Ordering::Relaxed) % self.backends.len();
+        let idx = self
+            .current_index
+            .fetch_add(1, std::sync::atomic::Ordering::Relaxed)
+            % self.backends.len();
         &self.backends[idx]
     }
 
@@ -105,7 +108,7 @@ impl TrojanHandler {
             error!("Invalid Trojan header: missing CRLF after password");
             return Err(std::io::Error::new(
                 std::io::ErrorKind::InvalidData,
-                "invalid Trojan header"
+                "invalid Trojan header",
             ));
         }
 
@@ -121,7 +124,7 @@ impl TrojanHandler {
                 error!("Unknown Trojan command: {}", command);
                 return Err(std::io::Error::new(
                     std::io::ErrorKind::InvalidData,
-                    "unknown Trojan command"
+                    "unknown Trojan command",
                 ));
             }
         };
@@ -142,7 +145,7 @@ impl TrojanHandler {
                         let mut ip_buf = [0u8; 4];
                         client.read_exact(&mut ip_buf).await?;
                         TrojanTargetAddress::Ipv4(IpAddr::V4(Ipv4Addr::new(
-                            ip_buf[0], ip_buf[1], ip_buf[2], ip_buf[3]
+                            ip_buf[0], ip_buf[1], ip_buf[2], ip_buf[3],
                         )))
                     }
                     0x02 => {
@@ -152,11 +155,12 @@ impl TrojanHandler {
                         let domain_len = len_buf[0] as usize;
                         let mut domain_buf = vec![0u8; domain_len];
                         client.read_exact(&mut domain_buf).await?;
-                        let domain = String::from_utf8(domain_buf)
-                            .map_err(|_| std::io::Error::new(
+                        let domain = String::from_utf8(domain_buf).map_err(|_| {
+                            std::io::Error::new(
                                 std::io::ErrorKind::InvalidData,
-                                "invalid domain in Trojan header"
-                            ))?;
+                                "invalid domain in Trojan header",
+                            )
+                        })?;
                         TrojanTargetAddress::Domain(domain, 0) // Port will be read next
                     }
                     0x03 => {
@@ -177,7 +181,7 @@ impl TrojanHandler {
                     _ => {
                         return Err(std::io::Error::new(
                             std::io::ErrorKind::InvalidData,
-                            "invalid address type in Trojan header"
+                            "invalid address type in Trojan header",
                         ));
                     }
                 };
@@ -193,7 +197,7 @@ impl TrojanHandler {
                 if crlf_buf != TROJAN_CRLF {
                     return Err(std::io::Error::new(
                         std::io::ErrorKind::InvalidData,
-                        "invalid Trojan header: missing CRLF after address"
+                        "invalid Trojan header: missing CRLF after address",
                     ));
                 }
 
@@ -207,24 +211,37 @@ impl TrojanHandler {
                 let remote_addr = format!("{}:{}", backend.addr, backend.port);
                 let timeout = self.config.tcp_timeout;
 
-                info!("Trojan TCP: {} -> {} (via {}:{}, {} backends available)",
-                    client_addr, address_str, backend.addr, backend.port, self.backend_count());
+                info!(
+                    "Trojan TCP: {} -> {} (via {}:{}, {} backends available)",
+                    client_addr,
+                    address_str,
+                    backend.addr,
+                    backend.port,
+                    self.backend_count()
+                );
 
                 // Connect to the selected backend
-                let remote = match tokio::time::timeout(timeout, TcpStream::connect(&remote_addr)).await {
-                    Ok(Ok(s)) => s,
-                    Ok(Err(e)) => {
-                        error!("Failed to connect to Trojan backend {}:{}: {}", backend.addr, backend.port, e);
-                        return Err(e);
-                    }
-                    Err(_) => {
-                        error!("Timeout connecting to Trojan backend {}:{}", backend.addr, backend.port);
-                        return Err(std::io::Error::new(
-                            std::io::ErrorKind::TimedOut,
-                            "connection to Trojan server timed out"
-                        ));
-                    }
-                };
+                let remote =
+                    match tokio::time::timeout(timeout, TcpStream::connect(&remote_addr)).await {
+                        Ok(Ok(s)) => s,
+                        Ok(Err(e)) => {
+                            error!(
+                                "Failed to connect to Trojan backend {}:{}: {}",
+                                backend.addr, backend.port, e
+                            );
+                            return Err(e);
+                        }
+                        Err(_) => {
+                            error!(
+                                "Timeout connecting to Trojan backend {}:{}",
+                                backend.addr, backend.port
+                            );
+                            return Err(std::io::Error::new(
+                                std::io::ErrorKind::TimedOut,
+                                "connection to Trojan server timed out",
+                            ));
+                        }
+                    };
 
                 debug!("Connected to Trojan server {}", remote_addr);
 
@@ -236,7 +253,7 @@ impl TrojanHandler {
                 error!("Trojan UDP Associate not fully implemented");
                 Err(std::io::Error::new(
                     std::io::ErrorKind::Unsupported,
-                    "Trojan UDP Associate not implemented"
+                    "Trojan UDP Associate not implemented",
                 ))
             }
         }
@@ -276,8 +293,13 @@ impl TrojanHandler {
 
             let payload = &buf[payload_offset..n];
 
-            debug!("Trojan UDP: {} -> {}:{} ({} bytes)",
-                client_addr, target_addr, target_port, payload.len());
+            debug!(
+                "Trojan UDP: {} -> {}:{} ({} bytes)",
+                client_addr,
+                target_addr,
+                target_port,
+                payload.len()
+            );
 
             // Forward to Trojan server and back
             let server_addr = format!("{}:{}", self.config.server.addr, self.config.server.port);
@@ -285,7 +307,12 @@ impl TrojanHandler {
             server_socket.send_to(payload, &server_addr).await?;
 
             let mut response_buf = vec![0u8; MAX_UDP_SIZE];
-            if let Ok(Ok((m, _))) = tokio::time::timeout(self.config.udp_timeout, server_socket.recv_from(&mut response_buf)).await {
+            if let Ok(Ok((m, _))) = tokio::time::timeout(
+                self.config.udp_timeout,
+                server_socket.recv_from(&mut response_buf),
+            )
+            .await
+            {
                 client.send_to(&response_buf[..m], &client_addr).await?;
             }
         }
@@ -331,12 +358,12 @@ mod tests {
             },
         ];
         let handler = TrojanHandler::with_backends(config, backends);
-        
+
         // First call should return first backend
         // (due to fetch_add, the index is incremented first)
         let backend1 = handler.next_backend();
         let backend2 = handler.next_backend();
-        
+
         // Both should be different
         assert_ne!(backend1.addr, backend2.addr);
     }

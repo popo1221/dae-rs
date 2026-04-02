@@ -9,5 +9,5 @@
 pub mod mac_dns;
 
 pub use mac_dns::{
-    MacDnsResolver, MacDnsConfig, MacDnsRule, DnsCacheEntry, DnsResolution, DnsError,
+    DnsCacheEntry, DnsError, DnsResolution, MacDnsConfig, MacDnsResolver, MacDnsRule,
 };

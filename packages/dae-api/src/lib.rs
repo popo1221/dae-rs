@@ -28,9 +28,9 @@
 //!
 //! When used with dae-cli, enable with the `--api` flag or use the `api` subcommand.
 
-pub mod server;
-pub mod routes;
 pub mod models;
+pub mod routes;
+pub mod server;
 
-pub use server::{ApiServer, ApiError, AppState};
 pub use models::*;
+pub use server::{ApiError, ApiServer, AppState};

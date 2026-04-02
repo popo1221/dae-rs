@@ -5,7 +5,6 @@
 
 #![no_std]
 #![deny(warnings)]
-
 // Allow strict clippy lints for eBPF code patterns
 #![allow(clippy::field_reassign_with_default)]
 
@@ -108,7 +107,7 @@ fn lookup_routing(dst_ip: u32) -> Option<RoutingEntry> {
     if let Some(route) = ROUTING.get(&key) {
         return Some(*route);
     }
-    
+
     // Try decreasing prefix lengths from /24 down to /1
     let mut prefix: u32 = 24;
     while prefix > 0 {
@@ -118,7 +117,7 @@ fn lookup_routing(dst_ip: u32) -> Option<RoutingEntry> {
         }
         prefix -= 1;
     }
-    
+
     // Try /0 (catch-all)
     let key = Key::new(0, 0);
     ROUTING.get(&key).copied()

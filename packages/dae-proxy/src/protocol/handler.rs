@@ -4,9 +4,9 @@
 //! of registered protocol handlers. It allows dynamic registration and lookup
 //! of protocol handlers at runtime.
 
+use crate::protocol::{ProtocolHandler, ProtocolType};
 use std::collections::HashMap;
 use std::sync::Arc;
-use crate::protocol::{ProtocolHandler, ProtocolType};
 
 /// Protocol handler registry
 ///
@@ -30,11 +30,7 @@ impl ProtocolRegistry {
     /// # Arguments
     /// * `protocol` - The protocol type to register
     /// * `handler` - The handler implementation
-    pub fn register<H: ProtocolHandler + 'static>(
-        &mut self,
-        protocol: ProtocolType,
-        handler: H,
-    ) {
+    pub fn register<H: ProtocolHandler + 'static>(&mut self, protocol: ProtocolType, handler: H) {
         self.handlers.insert(protocol, Arc::new(handler));
     }
 
@@ -95,8 +91,8 @@ impl std::fmt::Debug for ProtocolRegistry {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use async_trait::async_trait;
     use crate::core::{Context, Result as ProxyResult};
+    use async_trait::async_trait;
     use std::net::{IpAddr, SocketAddr};
     use std::str::FromStr;
 
@@ -135,14 +131,14 @@ mod tests {
     #[test]
     fn test_registry_register_and_get() {
         let mut registry = ProtocolRegistry::new();
-        
+
         let handler = TestHandler { name: "test" };
         registry.register(ProtocolType::Socks5, handler);
-        
+
         assert!(!registry.is_empty());
         assert_eq!(registry.len(), 1);
         assert!(registry.contains(ProtocolType::Socks5));
-        
+
         let retrieved = registry.get(ProtocolType::Socks5);
         assert!(retrieved.is_some());
         assert_eq!(retrieved.unwrap().name(), "test");
@@ -158,10 +154,10 @@ mod tests {
     #[test]
     fn test_registry_unregister() {
         let mut registry = ProtocolRegistry::new();
-        
+
         let handler = TestHandler { name: "test" };
         registry.register(ProtocolType::Socks5, handler);
-        
+
         let removed = registry.unregister(ProtocolType::Socks5);
         assert!(removed.is_some());
         assert!(registry.is_empty());
@@ -171,13 +167,13 @@ mod tests {
     #[test]
     fn test_registry_multiple_protocols() {
         let mut registry = ProtocolRegistry::new();
-        
+
         registry.register(ProtocolType::Socks5, TestHandler { name: "socks5" });
         registry.register(ProtocolType::Http, TestHandler { name: "http" });
         registry.register(ProtocolType::Shadowsocks, TestHandler { name: "ss" });
-        
+
         assert_eq!(registry.len(), 3);
-        
+
         let protocols: Vec<_> = registry.protocols().collect();
         assert!(protocols.contains(&ProtocolType::Socks5));
         assert!(protocols.contains(&ProtocolType::Http));
@@ -187,10 +183,10 @@ mod tests {
     #[test]
     fn test_registry_override() {
         let mut registry = ProtocolRegistry::new();
-        
+
         registry.register(ProtocolType::Socks5, TestHandler { name: "first" });
         registry.register(ProtocolType::Socks5, TestHandler { name: "second" });
-        
+
         assert_eq!(registry.len(), 1);
         assert_eq!(registry.get(ProtocolType::Socks5).unwrap().name(), "second");
     }
@@ -199,7 +195,7 @@ mod tests {
     fn test_registry_debug() {
         let mut registry = ProtocolRegistry::new();
         registry.register(ProtocolType::Socks5, TestHandler { name: "test" });
-        
+
         let debug_str = format!("{registry:?}");
         assert!(debug_str.contains("ProtocolRegistry"));
     }

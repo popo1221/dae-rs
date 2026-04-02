@@ -2,11 +2,7 @@
 //!
 //! Endpoints for viewing and updating proxy configuration
 
-use axum::{
-    extract::State,
-    http::StatusCode,
-    Json,
-};
+use axum::{extract::State, http::StatusCode, Json};
 use std::sync::Arc;
 use tokio::sync::RwLock;
 
@@ -16,9 +12,7 @@ use crate::AppState;
 /// Get current configuration
 ///
 /// GET /api/config
-pub async fn get_config(
-    State(state): State<Arc<RwLock<AppState>>>,
-) -> Json<ConfigResponse> {
+pub async fn get_config(State(state): State<Arc<RwLock<AppState>>>) -> Json<ConfigResponse> {
     let state = state.read().await;
     Json(state.config.clone())
 }
@@ -35,7 +29,7 @@ pub async fn update_config(
     Json(input): Json<ConfigUpdate>,
 ) -> Result<Json<ConfigResponse>, (StatusCode, Json<ErrorResponse>)> {
     let mut state = state.write().await;
-    
+
     // Update config fields if provided
     if let Some(socks5) = input.socks5_listen {
         state.config.socks5_listen = Some(socks5);
@@ -46,7 +40,7 @@ pub async fn update_config(
     if let Some(ebpf) = input.ebpf_enabled {
         state.config.ebpf_enabled = ebpf;
     }
-    
+
     Ok(Json(state.config.clone()))
 }
 

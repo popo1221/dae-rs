@@ -33,7 +33,7 @@ impl EthHdr {
     pub fn from_ctx(ctx: &XdpContext) -> Option<*const EthHdr> {
         let data = ctx.data();
         let data_end = ctx.data_end();
-        
+
         let ptr = data as *const EthHdr;
         // Safety: check that the header fits within bounds
         if ptr as usize + core::mem::size_of::<EthHdr>() > data_end {
@@ -80,7 +80,7 @@ impl IpHdr {
     pub fn from_ctx_after_eth(ctx: &XdpContext, eth_offset: usize) -> Option<*const IpHdr> {
         let data = ctx.data();
         let data_end = ctx.data_end();
-        
+
         let ptr = unsafe {
             // Safety: we checked bounds via the if statement
             (data as *const u8).add(eth_offset) as *const IpHdr
@@ -138,10 +138,14 @@ pub struct TcpHdr {
 impl TcpHdr {
     /// Parse TCP header from context (after IP header)
     #[allow(dead_code)]
-    pub fn from_ctx_after_ip(ctx: &XdpContext, ip_offset: usize, ip_hdr_len: u8) -> Option<*const TcpHdr> {
+    pub fn from_ctx_after_ip(
+        ctx: &XdpContext,
+        ip_offset: usize,
+        ip_hdr_len: u8,
+    ) -> Option<*const TcpHdr> {
         let data = ctx.data();
         let data_end = ctx.data_end();
-        
+
         let offset = ip_offset + ip_hdr_len as usize;
         let ptr = unsafe {
             // Safety: we checked bounds via the if statement
@@ -209,10 +213,14 @@ pub struct UdpHdr {
 impl UdpHdr {
     /// Parse UDP header from context (after IP header)
     #[allow(dead_code)]
-    pub fn from_ctx_after_ip(ctx: &XdpContext, ip_offset: usize, ip_hdr_len: u8) -> Option<*const UdpHdr> {
+    pub fn from_ctx_after_ip(
+        ctx: &XdpContext,
+        ip_offset: usize,
+        ip_hdr_len: u8,
+    ) -> Option<*const UdpHdr> {
         let data = ctx.data();
         let data_end = ctx.data_end();
-        
+
         let offset = ip_offset + ip_hdr_len as usize;
         let ptr = unsafe {
             // Safety: we checked bounds via the if statement

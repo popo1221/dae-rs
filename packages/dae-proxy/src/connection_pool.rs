@@ -82,7 +82,11 @@ pub struct ConnectionPool {
 
 impl ConnectionPool {
     /// Create a new connection pool
-    pub fn new(connection_timeout: Duration, udp_timeout: Duration, tcp_keepalive: Duration) -> Self {
+    pub fn new(
+        connection_timeout: Duration,
+        udp_timeout: Duration,
+        tcp_keepalive: Duration,
+    ) -> Self {
         Self {
             connections: RwLock::new(HashMap::new()),
             connection_timeout,
@@ -92,12 +96,9 @@ impl ConnectionPool {
     }
 
     /// Get a connection by key, or create a new one
-    pub async fn get_or_create(
-        &self,
-        key: ConnectionKey,
-    ) -> (SharedConnection, bool) {
+    pub async fn get_or_create(&self, key: ConnectionKey) -> (SharedConnection, bool) {
         let mut connections = self.connections.write().await;
-        
+
         if let Some(conn) = connections.get(&key) {
             debug!("Reusing existing connection for {:?}", key);
             let mut conn_write = conn.write().await;
@@ -114,7 +115,7 @@ impl ConnectionPool {
 
         let conn = new_connection(src, dst, key.protocol(), self.tcp_keepalive);
         connections.insert(key, conn.clone());
-        
+
         debug!("Created new connection for {:?}", key);
         (conn, true)
     }
@@ -142,7 +143,7 @@ impl ConnectionPool {
         let mut removed = 0;
 
         let timeout = self.connection_timeout;
-        
+
         connections.retain(|key, conn| {
             let keep = {
                 let conn_read = conn.blocking_read();
@@ -191,7 +192,7 @@ impl ConnectionPool {
     /// Close all connections gracefully
     pub async fn close_all(&self) {
         let mut connections = self.connections.write().await;
-        
+
         for (key, conn) in connections.drain() {
             let mut conn_write = conn.write().await;
             conn_write.start_close();
@@ -211,7 +212,11 @@ pub fn new_connection_pool(
     udp_timeout: Duration,
     tcp_keepalive: Duration,
 ) -> SharedConnectionPool {
-    Arc::new(ConnectionPool::new(connection_timeout, udp_timeout, tcp_keepalive))
+    Arc::new(ConnectionPool::new(
+        connection_timeout,
+        udp_timeout,
+        tcp_keepalive,
+    ))
 }
 
 #[cfg(test)]

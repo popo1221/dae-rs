@@ -18,16 +18,16 @@ use crate::mac::MacAddr;
 pub enum DnsError {
     #[error("No DNS server configured for MAC {0}")]
     NoDnsServerForMac(MacAddr),
-    
+
     #[error("DNS resolution failed: {0}")]
     ResolutionFailed(String),
-    
+
     #[error("Invalid domain name: {0}")]
     InvalidDomain(String),
-    
+
     #[error("DNS server {0} returned no results")]
     NoResults(String),
-    
+
     #[error("DNS cache error: {0}")]
     CacheError(String),
 }
@@ -75,7 +75,12 @@ impl MacDnsRule {
     }
 
     /// Create a new MAC DNS rule with MAC prefix match
-    pub fn with_mask(mac: MacAddr, mask: MacAddr, dns_servers: Vec<String>, fallback_dns: Vec<String>) -> Self {
+    pub fn with_mask(
+        mac: MacAddr,
+        mask: MacAddr,
+        dns_servers: Vec<String>,
+        fallback_dns: Vec<String>,
+    ) -> Self {
         Self {
             mac,
             mac_mask: Some(mask),
@@ -86,7 +91,8 @@ impl MacDnsRule {
 
     /// Check if this rule matches the given MAC address
     pub fn matches(&self, mac: &MacAddr) -> bool {
-        crate::mac::matcher::match_mac_with_mask_opt(mac, &self.mac, &self.mac_mask).unwrap_or(false)
+        crate::mac::matcher::match_mac_with_mask_opt(mac, &self.mac, &self.mac_mask)
+            .unwrap_or(false)
     }
 }
 
@@ -160,48 +166,60 @@ impl MacDnsResolver {
                 return (rule.dns_servers.clone(), rule.fallback_dns.clone());
             }
         }
-        (self.config.default_servers.clone(), self.config.default_fallback.clone())
+        (
+            self.config.default_servers.clone(),
+            self.config.default_fallback.clone(),
+        )
     }
 
     /// Check if the cache has a valid entry for the given MAC and domain
     async fn get_cached(&self, mac: &MacAddr, domain: &str) -> Option<DnsCacheEntry> {
         let cache = self.cache.read().await;
-        cache.get(&(*mac, domain.to_lowercase())).cloned().filter(|e| !e.is_expired())
+        cache
+            .get(&(*mac, domain.to_lowercase()))
+            .cloned()
+            .filter(|e| !e.is_expired())
     }
 
     /// Store a resolution result in cache
     async fn put_cached(&self, mac: &MacAddr, domain: &str, entry: DnsCacheEntry) {
         let mut cache = self.cache.write().await;
-        
+
         // Evict oldest if at capacity
         if cache.len() >= self.config.max_cache_size {
             // Simple eviction: remove 10% oldest entries
             let evict_count = (self.config.max_cache_size / 10).max(1);
-            let keys_to_remove: Vec<_> = cache.iter()
+            let keys_to_remove: Vec<_> = cache
+                .iter()
                 .map(|((mac, domain), entry)| ((*mac, domain.clone()), entry.cached_at))
                 .collect();
-            
+
             let mut sorted: Vec<_> = keys_to_remove.into_iter().collect();
             sorted.sort_by_key(|(_, instant)| *instant);
-            
+
             for (key, _) in sorted.into_iter().take(evict_count) {
                 cache.remove(&key);
             }
         }
-        
+
         cache.insert((*mac, domain.to_lowercase()), entry);
     }
 
     /// Perform DNS resolution using a specific DNS server
     fn resolve_with_server(domain: &str, server: &str) -> Result<DnsResolution, DnsError> {
-        let addr_string = format!("{}:53", server.trim_start_matches("https://").trim_start_matches("http://"));
-        
+        let addr_string = format!(
+            "{}:53",
+            server
+                .trim_start_matches("https://")
+                .trim_start_matches("http://")
+        );
+
         let addresses: Vec<IpAddr> = match addr_string.to_socket_addrs() {
             Ok(mut addrs) => {
                 let _sock_addr = addrs.next().ok_or_else(|| {
                     DnsError::ResolutionFailed(format!("No address for DNS server: {server}"))
                 })?;
-                
+
                 // Simple DNS resolution using std library
                 // In production, you'd use a proper DNS library like trust-dns
                 match domain.to_socket_addrs() {
@@ -238,7 +256,7 @@ impl MacDnsResolver {
     /// on the MAC address.
     pub async fn resolve(&self, mac: &MacAddr, domain: &str) -> Result<DnsResolution, DnsError> {
         let domain_lower = domain.to_lowercase();
-        
+
         // Check cache first
         if let Some(entry) = self.get_cached(mac, &domain_lower).await {
             debug!("DNS cache hit for {} (MAC: {})", domain, mac);
@@ -251,9 +269,9 @@ impl MacDnsResolver {
         }
 
         debug!("DNS cache miss for {} (MAC: {}), resolving...", domain, mac);
-        
+
         let (primary_servers, fallback_servers) = self.get_dns_servers_for_mac(mac);
-        
+
         // Try primary servers first
         for server in &primary_servers {
             match Self::resolve_with_server(&domain_lower, server) {
@@ -289,7 +307,10 @@ impl MacDnsResolver {
                     return Ok(resolution);
                 }
                 Err(e) => {
-                    warn!("DNS fallback resolution failed with server {}: {}", server, e);
+                    warn!(
+                        "DNS fallback resolution failed with server {}: {}",
+                        server, e
+                    );
                 }
             }
         }
@@ -302,16 +323,16 @@ impl MacDnsResolver {
     /// Add or update a MAC DNS rule
     pub async fn update_rule(&mut self, rule: MacDnsRule) {
         let mut config = self.config.clone();
-        
+
         // Find and replace existing rule for the same MAC, or append
         let existing_idx = config.rules.iter().position(|r| r.mac == rule.mac);
-        
+
         if let Some(idx) = existing_idx {
             config.rules[idx] = rule;
         } else {
             config.rules.push(rule);
         }
-        
+
         self.config = config;
     }
 
@@ -320,12 +341,12 @@ impl MacDnsResolver {
         let mut config = self.config.clone();
         let original_len = config.rules.len();
         config.rules.retain(|r| r.mac != *mac);
-        
+
         let removed = original_len != config.rules.len();
         if removed {
             self.config = config;
         }
-        
+
         removed
     }
 
@@ -360,9 +381,9 @@ mod tests {
     fn test_mac_dns_rule_exact_match() {
         let mac = MacAddr::parse("AA:BB:CC:DD:EE:FF").unwrap();
         let rule = MacDnsRule::new(mac, vec!["8.8.8.8:53".to_string()], vec![]);
-        
+
         assert!(rule.matches(&mac));
-        
+
         let other_mac = MacAddr::parse("11:22:33:44:55:66").unwrap();
         assert!(!rule.matches(&other_mac));
     }
@@ -372,11 +393,11 @@ mod tests {
         let mac = MacAddr::parse("AA:BB:CC:DD:EE:FF").unwrap();
         let mask = MacAddr::parse("FF:FF:FF:00:00:00").unwrap();
         let rule = MacDnsRule::with_mask(mac, mask, vec!["8.8.8.8:53".to_string()], vec![]);
-        
+
         // Should match any MAC with AA:BB:CC as first 3 bytes
         let matching_mac = MacAddr::parse("AA:BB:CC:11:22:33").unwrap();
         assert!(rule.matches(&matching_mac));
-        
+
         let non_matching_mac = MacAddr::parse("11:22:33:DD:EE:FF").unwrap();
         assert!(!rule.matches(&non_matching_mac));
     }
@@ -392,15 +413,15 @@ mod tests {
     async fn test_resolver_update_rule() {
         let mut resolver = MacDnsResolver::default_config();
         let mac = MacAddr::parse("AA:BB:CC:DD:EE:FF").unwrap();
-        
+
         let rule = MacDnsRule::new(
             mac,
             vec!["192.168.1.1:53".to_string()],
             vec!["8.8.8.8:53".to_string()],
         );
-        
+
         resolver.update_rule(rule).await;
-        
+
         let rules = resolver.get_rules();
         assert_eq!(rules.len(), 1);
         assert_eq!(rules[0].dns_servers[0], "192.168.1.1:53");
@@ -410,12 +431,12 @@ mod tests {
     async fn test_resolver_remove_rule() {
         let mut resolver = MacDnsResolver::default_config();
         let mac = MacAddr::parse("AA:BB:CC:DD:EE:FF").unwrap();
-        
+
         let rule = MacDnsRule::new(mac, vec!["192.168.1.1:53".to_string()], vec![]);
         resolver.update_rule(rule).await;
-        
+
         assert_eq!(resolver.get_rules().len(), 1);
-        
+
         resolver.remove_rule(&mac).await;
         assert!(resolver.get_rules().is_empty());
     }
@@ -423,9 +444,9 @@ mod tests {
     #[tokio::test]
     async fn test_cache_operations() {
         let resolver = MacDnsResolver::default_config();
-        
+
         assert_eq!(resolver.cache_size().await, 0);
-        
+
         // Clear empty cache should work
         resolver.clear_cache().await;
         assert_eq!(resolver.cache_size().await, 0);

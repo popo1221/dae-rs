@@ -19,36 +19,26 @@
 //! - `*Manager`: Concrete implementation managing lifecycle
 //! - `*Handle`: Reference to a managed entity
 
-pub mod node;
-pub mod manager;
-pub mod selector;
 pub mod health;
+pub mod manager;
+pub mod node;
+pub mod selector;
 pub mod simple;
 
 // Node Store - Zed-inspired naming for node management
 pub mod store;
 
 // Re-export common types
-pub use node::{Node, NodeId, NodeError};
+pub use health::{HealthCheckResult, HealthChecker, HealthCheckerConfig};
 pub use manager::{NodeManager, SelectionPolicy};
-pub use selector::{NodeSelector, DefaultNodeSelector};
-pub use health::{HealthChecker, HealthCheckerConfig, HealthCheckResult};
+pub use node::{Node, NodeError, NodeId};
+pub use selector::{DefaultNodeSelector, NodeSelector};
 
 // Re-export simple module types
-pub use simple::{
-    SimpleNode,
-    SimpleNodeManager,
-    LatencyTestResult,
-    LatencyMonitor,
-};
+pub use simple::{LatencyMonitor, LatencyTestResult, SimpleNode, SimpleNodeManager};
 
 // Re-export NodeStore types (Zed-inspired)
-pub use store::{
-    NodeStore as NodeStoreTrait,
-    NodeHandle,
-    NodeState,
-    NodeManagerConfig,
-};
+pub use store::{NodeHandle, NodeManagerConfig, NodeState, NodeStore as NodeStoreTrait};
 
 // Type aliases following Zed's naming conventions
 

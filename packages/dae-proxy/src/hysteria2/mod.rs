@@ -11,4 +11,4 @@
 pub mod hysteria2;
 pub mod quic;
 
-pub use hysteria2::{Hysteria2Handler, Hysteria2Server, Hysteria2Config, Hysteria2Error};
+pub use hysteria2::{Hysteria2Config, Hysteria2Error, Hysteria2Handler, Hysteria2Server};

@@ -61,7 +61,7 @@
 //! impl ProtocolHandler for MyLegacyHandler { ... }
 //!
 //! // Wrap with adapter to use as Handler
-//! let handler: ProtocolHandlerAdapter<MyLegacyHandler> = 
+//! let handler: ProtocolHandlerAdapter<MyLegacyHandler> =
 //!     ProtocolHandlerAdapter::new(MyLegacyHandler::new());
 //! ```
 
@@ -93,16 +93,16 @@ pub trait HandlerConfig: Send + Sync + std::fmt::Debug {}
 pub trait Handler: Send + Sync {
     /// Configuration type for this handler
     type Config: HandlerConfig;
-    
+
     /// Returns the handler name (e.g., "trojan", "vless", "socks5")
     fn name(&self) -> &'static str;
-    
+
     /// Returns the protocol type
     fn protocol(&self) -> ProtocolType;
-    
+
     /// Returns a reference to the handler configuration
     fn config(&self) -> &Self::Config;
-    
+
     /// Handle an incoming connection
     ///
     /// This is the main entry point for handling proxy connections.
@@ -113,7 +113,7 @@ pub trait Handler: Send + Sync {
     /// 4. Establish connection to target (or reject)
     /// 5. Relay traffic bidirectionally
     async fn handle(&self, conn: Connection) -> Result<(), ProxyError>;
-    
+
     /// Check if handler is healthy
     ///
     /// Used for health checks and load balancing.
@@ -121,7 +121,7 @@ pub trait Handler: Send + Sync {
     fn is_healthy(&self) -> bool {
         true
     }
-    
+
     /// Reload configuration (hot reload support)
     ///
     /// Called when configuration is hot-reloaded.
@@ -154,61 +154,70 @@ impl HandlerStats {
     pub fn new() -> Self {
         Self::default()
     }
-    
+
     /// Record a new connection
     #[inline]
     pub fn inc_connection(&self) {
-        self.total_connections.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
-        self.active_connections.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+        self.total_connections
+            .fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+        self.active_connections
+            .fetch_add(1, std::sync::atomic::Ordering::Relaxed);
     }
-    
+
     /// Record connection closed
     #[inline]
     pub fn dec_connection(&self) {
-        self.active_connections.fetch_sub(1, std::sync::atomic::Ordering::Relaxed);
+        self.active_connections
+            .fetch_sub(1, std::sync::atomic::Ordering::Relaxed);
     }
-    
+
     /// Record bytes transferred
     #[inline]
     pub fn add_bytes(&self, sent: u64, received: u64) {
         if sent > 0 {
-            self.bytes_sent.fetch_add(sent, std::sync::atomic::Ordering::Relaxed);
+            self.bytes_sent
+                .fetch_add(sent, std::sync::atomic::Ordering::Relaxed);
         }
         if received > 0 {
-            self.bytes_received.fetch_add(received, std::sync::atomic::Ordering::Relaxed);
+            self.bytes_received
+                .fetch_add(received, std::sync::atomic::Ordering::Relaxed);
         }
     }
-    
+
     /// Record an error
     #[inline]
     pub fn inc_errors(&self) {
-        self.errors.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+        self.errors
+            .fetch_add(1, std::sync::atomic::Ordering::Relaxed);
     }
-    
+
     /// Get current active connections
     #[inline]
     pub fn active_connections(&self) -> u64 {
-        self.active_connections.load(std::sync::atomic::Ordering::Relaxed)
+        self.active_connections
+            .load(std::sync::atomic::Ordering::Relaxed)
     }
-    
+
     /// Get total connections handled
     #[inline]
     pub fn total_connections(&self) -> u64 {
-        self.total_connections.load(std::sync::atomic::Ordering::Relaxed)
+        self.total_connections
+            .load(std::sync::atomic::Ordering::Relaxed)
     }
-    
+
     /// Get total bytes sent
     #[inline]
     pub fn bytes_sent(&self) -> u64 {
         self.bytes_sent.load(std::sync::atomic::Ordering::Relaxed)
     }
-    
+
     /// Get total bytes received
     #[inline]
     pub fn bytes_received(&self) -> u64 {
-        self.bytes_received.load(std::sync::atomic::Ordering::Relaxed)
+        self.bytes_received
+            .load(std::sync::atomic::Ordering::Relaxed)
     }
-    
+
     /// Get total errors
     #[inline]
     pub fn errors(&self) -> u64 {
@@ -239,9 +248,9 @@ impl<T: Handler> HandlerStatsExt for T {
 ///
 /// // Create a ProtocolHandler
 /// let socks5 = Socks5ProtocolHandler::new(config);
-/// 
+///
 /// // Wrap it as a Handler
-/// let handler: ProtocolHandlerAdapter<Socks5ProtocolHandler> = 
+/// let handler: ProtocolHandlerAdapter<Socks5ProtocolHandler> =
 ///     ProtocolHandlerAdapter::new(socks5);
 /// ```
 #[derive(Debug)]
@@ -259,12 +268,12 @@ impl<H> ProtocolHandlerAdapter<H> {
             stats: HandlerStats::new(),
         }
     }
-    
+
     /// Get a reference to the inner ProtocolHandler
     pub fn inner(&self) -> &H {
         &self.inner
     }
-    
+
     /// Get mutable reference to the inner ProtocolHandler
     pub fn inner_mut(&mut self) -> &mut H {
         &mut self.inner
@@ -278,26 +287,26 @@ pub struct ProtocolHandlerConfig;
 impl HandlerConfig for ProtocolHandlerConfig {}
 
 #[async_trait]
-impl<H> Handler for ProtocolHandlerAdapter<H> 
+impl<H> Handler for ProtocolHandlerAdapter<H>
 where
     H: crate::protocol::ProtocolHandler + Send + Sync,
 {
     type Config = ProtocolHandlerConfig;
-    
+
     fn name(&self) -> &'static str {
         self.inner.name()
     }
-    
+
     fn protocol(&self) -> ProtocolType {
         // ProtocolHandler doesn't expose ProtocolType directly
         // We infer it from the name
         ProtocolType::from_str(self.inner.name()).unwrap_or(ProtocolType::Socks5)
     }
-    
+
     fn config(&self) -> &Self::Config {
         &ProtocolHandlerConfig
     }
-    
+
     async fn handle(&self, _conn: Connection) -> Result<(), ProxyError> {
         // ProtocolHandler uses Context, not Connection
         // This adapter provides a bridge - but full implementation
@@ -314,21 +323,21 @@ mod tests {
     #[test]
     fn test_handler_stats() {
         let stats = HandlerStats::new();
-        
+
         assert_eq!(stats.active_connections(), 0);
         assert_eq!(stats.total_connections(), 0);
-        
+
         stats.inc_connection();
         assert_eq!(stats.total_connections(), 1);
         assert_eq!(stats.active_connections(), 1);
-        
+
         stats.dec_connection();
         assert_eq!(stats.active_connections(), 0);
-        
+
         stats.add_bytes(100, 200);
         assert_eq!(stats.bytes_sent(), 100);
         assert_eq!(stats.bytes_received(), 200);
-        
+
         stats.inc_errors();
         assert_eq!(stats.errors(), 1);
     }
@@ -337,10 +346,10 @@ mod tests {
     fn test_handler_stats_concurrent() {
         use std::sync::Arc;
         use std::thread;
-        
+
         let stats = Arc::new(HandlerStats::new());
         let mut handles = vec![];
-        
+
         for _ in 0..10 {
             let s = stats.clone();
             handles.push(thread::spawn(move || {
@@ -350,11 +359,11 @@ mod tests {
                 }
             }));
         }
-        
+
         for h in handles {
             h.join().unwrap();
         }
-        
+
         assert_eq!(stats.total_connections(), 1000);
         assert_eq!(stats.active_connections(), 0);
     }

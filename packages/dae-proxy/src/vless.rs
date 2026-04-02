@@ -158,7 +158,9 @@ impl VlessTargetAddress {
                 if payload.len() < 7 {
                     return None;
                 }
-                let ip = IpAddr::V4(Ipv4Addr::new(payload[1], payload[2], payload[3], payload[4]));
+                let ip = IpAddr::V4(Ipv4Addr::new(
+                    payload[1], payload[2], payload[3], payload[4],
+                ));
                 let port = u16::from_be_bytes([payload[5], payload[6]]);
                 Some((VlessTargetAddress::Ipv4(ip), port))
             }
@@ -171,8 +173,8 @@ impl VlessTargetAddress {
                 if payload.len() < 4 + domain_len {
                     return None;
                 }
-                let domain = String::from_utf8(payload[2..2+domain_len].to_vec()).ok()?;
-                let port = u16::from_be_bytes([payload[2+domain_len], payload[3+domain_len]]);
+                let domain = String::from_utf8(payload[2..2 + domain_len].to_vec()).ok()?;
+                let port = u16::from_be_bytes([payload[2 + domain_len], payload[3 + domain_len]]);
                 Some((VlessTargetAddress::Domain(domain, port), port))
             }
             0x03 => {
@@ -272,7 +274,7 @@ impl VlessHandler {
             error!("Invalid VLESS version: {}", header_buf[0]);
             return Err(std::io::Error::new(
                 std::io::ErrorKind::InvalidData,
-                "invalid VLESS version"
+                "invalid VLESS version",
             ));
         }
 
@@ -282,7 +284,7 @@ impl VlessHandler {
             error!("Invalid UUID length");
             return Err(std::io::Error::new(
                 std::io::ErrorKind::InvalidData,
-                "invalid UUID"
+                "invalid UUID",
             ));
         }
 
@@ -296,7 +298,7 @@ impl VlessHandler {
                 error!("Unknown VLESS command: {}", command);
                 return Err(std::io::Error::new(
                     std::io::ErrorKind::InvalidData,
-                    "unknown VLESS command"
+                    "unknown VLESS command",
                 ));
             }
         };
@@ -315,24 +317,57 @@ impl VlessHandler {
                 let address = match atyp {
                     0x01 => {
                         // IPv4
-                        if addl_buf.len() < 10 { return Err(std::io::Error::new(std::io::ErrorKind::InvalidData, "buffer too small")); }
-                        let ip = IpAddr::V4(Ipv4Addr::new(addl_buf[5], addl_buf[6], addl_buf[7], addl_buf[8]));
+                        if addl_buf.len() < 10 {
+                            return Err(std::io::Error::new(
+                                std::io::ErrorKind::InvalidData,
+                                "buffer too small",
+                            ));
+                        }
+                        let ip = IpAddr::V4(Ipv4Addr::new(
+                            addl_buf[5],
+                            addl_buf[6],
+                            addl_buf[7],
+                            addl_buf[8],
+                        ));
                         let _port = u16::from_be_bytes([addl_buf[9], addl_buf[10]]);
                         VlessTargetAddress::Ipv4(ip)
                     }
                     0x02 => {
                         // Domain
-                        if addl_buf.len() < 6 { return Err(std::io::Error::new(std::io::ErrorKind::InvalidData, "buffer too small")); }
+                        if addl_buf.len() < 6 {
+                            return Err(std::io::Error::new(
+                                std::io::ErrorKind::InvalidData,
+                                "buffer too small",
+                            ));
+                        }
                         let domain_len = addl_buf[5] as usize;
-                        if addl_buf.len() < 6 + domain_len + 2 { return Err(std::io::Error::new(std::io::ErrorKind::InvalidData, "buffer too small")); }
-                        let domain = String::from_utf8(addl_buf[6..6+domain_len].to_vec())
-                            .map_err(|_| std::io::Error::new(std::io::ErrorKind::InvalidData, "invalid domain"))?;
-                        let port = u16::from_be_bytes([addl_buf[6+domain_len], addl_buf[6+domain_len+1]]);
+                        if addl_buf.len() < 6 + domain_len + 2 {
+                            return Err(std::io::Error::new(
+                                std::io::ErrorKind::InvalidData,
+                                "buffer too small",
+                            ));
+                        }
+                        let domain = String::from_utf8(addl_buf[6..6 + domain_len].to_vec())
+                            .map_err(|_| {
+                                std::io::Error::new(
+                                    std::io::ErrorKind::InvalidData,
+                                    "invalid domain",
+                                )
+                            })?;
+                        let port = u16::from_be_bytes([
+                            addl_buf[6 + domain_len],
+                            addl_buf[6 + domain_len + 1],
+                        ]);
                         VlessTargetAddress::Domain(domain, port)
                     }
                     0x03 => {
                         // IPv6
-                        if addl_buf.len() < 22 { return Err(std::io::Error::new(std::io::ErrorKind::InvalidData, "buffer too small")); }
+                        if addl_buf.len() < 22 {
+                            return Err(std::io::Error::new(
+                                std::io::ErrorKind::InvalidData,
+                                "buffer too small",
+                            ));
+                        }
                         let ip = IpAddr::V6(Ipv6Addr::new(
                             u16::from_be_bytes([addl_buf[5], addl_buf[6]]),
                             u16::from_be_bytes([addl_buf[7], addl_buf[8]]),
@@ -349,28 +384,32 @@ impl VlessHandler {
                     _ => {
                         return Err(std::io::Error::new(
                             std::io::ErrorKind::InvalidData,
-                            "invalid address type"
+                            "invalid address type",
                         ));
                     }
                 };
 
-                info!("VLESS TCP: {} -> {} (via {}:{})",
-                    client_addr, address, self.config.server.addr, self.config.server.port);
+                info!(
+                    "VLESS TCP: {} -> {} (via {}:{})",
+                    client_addr, address, self.config.server.addr, self.config.server.port
+                );
 
                 // Connect to VLESS server
-                let remote_addr = format!("{}:{}", self.config.server.addr, self.config.server.port);
+                let remote_addr =
+                    format!("{}:{}", self.config.server.addr, self.config.server.port);
                 let timeout = self.config.tcp_timeout;
 
-                let remote = match tokio::time::timeout(timeout, TcpStream::connect(&remote_addr)).await {
-                    Ok(Ok(s)) => s,
-                    Ok(Err(e)) => return Err(e),
-                    Err(_) => {
-                        return Err(std::io::Error::new(
-                            std::io::ErrorKind::TimedOut,
-                            "connection to VLESS server timed out"
-                        ));
-                    }
-                };
+                let remote =
+                    match tokio::time::timeout(timeout, TcpStream::connect(&remote_addr)).await {
+                        Ok(Ok(s)) => s,
+                        Ok(Err(e)) => return Err(e),
+                        Err(_) => {
+                            return Err(std::io::Error::new(
+                                std::io::ErrorKind::TimedOut,
+                                "connection to VLESS server timed out",
+                            ));
+                        }
+                    };
 
                 debug!("Connected to VLESS server {}", remote_addr);
 
@@ -382,7 +421,7 @@ impl VlessHandler {
                 error!("VLESS UDP not fully implemented");
                 Err(std::io::Error::new(
                     std::io::ErrorKind::Unsupported,
-                    "VLESS UDP not implemented"
+                    "VLESS UDP not implemented",
                 ))
             }
             VlessCommand::XtlsVision => {
@@ -390,7 +429,7 @@ impl VlessHandler {
                 error!("VLESS XTLS Vision not fully implemented");
                 Err(std::io::Error::new(
                     std::io::ErrorKind::Unsupported,
-                    "VLESS XTLS Vision not implemented"
+                    "VLESS XTLS Vision not implemented",
                 ))
             }
         }
@@ -422,15 +461,21 @@ impl VlessHandler {
             }
 
             // Parse VLESS UDP header
-            let (target_addr, target_port, payload_offset) = match VlessTargetAddress::parse_from_bytes(&buf) {
-                Some((addr, port)) => (addr, port, 0), // Placeholder for actual offset
-                None => continue,
-            };
+            let (target_addr, target_port, payload_offset) =
+                match VlessTargetAddress::parse_from_bytes(&buf) {
+                    Some((addr, port)) => (addr, port, 0), // Placeholder for actual offset
+                    None => continue,
+                };
 
             let payload = &buf[payload_offset..n];
 
-            debug!("VLESS UDP: {} -> {}:{} ({} bytes)",
-                client_addr, target_addr, target_port, payload.len());
+            debug!(
+                "VLESS UDP: {} -> {}:{} ({} bytes)",
+                client_addr,
+                target_addr,
+                target_port,
+                payload.len()
+            );
 
             // Forward to VLESS server and back
             let server_addr = format!("{}:{}", self.config.server.addr, self.config.server.port);
@@ -438,7 +483,12 @@ impl VlessHandler {
             server_socket.send_to(payload, &server_addr).await?;
 
             let mut response_buf = vec![0u8; MAX_UDP_SIZE];
-            if let Ok(Ok((m, _))) = tokio::time::timeout(self.config.udp_timeout, server_socket.recv_from(&mut response_buf)).await {
+            if let Ok(Ok((m, _))) = tokio::time::timeout(
+                self.config.udp_timeout,
+                server_socket.recv_from(&mut response_buf),
+            )
+            .await
+            {
                 client.send_to(&response_buf[..m], &client_addr).await?;
             }
         }
@@ -524,7 +574,7 @@ mod tests {
     #[test]
     fn test_target_address_parse_ipv4() {
         let payload = [
-            0x01, 192, 168, 1, 1, 0x1F, 0x90  // 192.168.1.1:8080
+            0x01, 192, 168, 1, 1, 0x1F, 0x90, // 192.168.1.1:8080
         ];
         let result = VlessTargetAddress::parse_from_bytes(&payload);
         assert!(result.is_some());
@@ -542,10 +592,10 @@ mod tests {
     fn test_target_address_parse_domain() {
         // Domain format: ATYP(1) + LEN(1) + DOMAIN(LEN) + PORT(2)
         let payload = [
-            0x02,       // ATYP_DOMAIN
-            0x0b,       // domain length = 11
-            b'e', b'x', b'a', b'm', b'p', b'l', b'e', b'.', b'c', b'o', b'm',  // "example.com"
-            0x00, 0x50  // port = 80
+            0x02, // ATYP_DOMAIN
+            0x0b, // domain length = 11
+            b'e', b'x', b'a', b'm', b'p', b'l', b'e', b'.', b'c', b'o', b'm', // "example.com"
+            0x00, 0x50, // port = 80
         ];
         let result = VlessTargetAddress::parse_from_bytes(&payload);
         assert!(result.is_some());

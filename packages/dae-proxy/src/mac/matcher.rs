@@ -46,7 +46,11 @@ pub fn match_mac_with_mask(mac: &MacAddr, pattern: &MacAddr, mask: &Option<MacAd
 }
 
 /// Match with mask - returns Option<bool> for cleaner usage
-pub fn match_mac_with_mask_opt(mac: &MacAddr, pattern: &MacAddr, mask: &Option<MacAddr>) -> Option<bool> {
+pub fn match_mac_with_mask_opt(
+    mac: &MacAddr,
+    pattern: &MacAddr,
+    mask: &Option<MacAddr>,
+) -> Option<bool> {
     Some(match_mac_with_mask(mac, pattern, mask))
 }
 
@@ -119,7 +123,6 @@ fn get_mac_from_arp_cache(ip: &IpAddr) -> Option<MacAddr> {
 /// the system tries to communicate with an IP.
 #[cfg(target_os = "linux")]
 pub fn probe_arp(ip: &IpAddr) -> Option<MacAddr> {
-    
     use std::process::Command;
 
     if let IpAddr::V4(v4) = ip {

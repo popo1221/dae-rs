@@ -35,25 +35,25 @@ pub enum SelectionPolicy {
 pub trait NodeManager: Send + Sync {
     /// Select a node based on the given policy
     async fn select(&self, policy: &SelectionPolicy) -> Option<Arc<dyn Node>>;
-    
+
     /// Get a specific node by ID
     fn get(&self, id: &NodeId) -> Option<Arc<dyn Node>>;
-    
+
     /// Get all registered nodes
     async fn all_nodes(&self) -> Vec<Arc<dyn Node>>;
-    
+
     /// Get all available (online) nodes
     async fn available_nodes(&self) -> Vec<Arc<dyn Node>>;
-    
+
     /// Update the latency for a specific node
     async fn update_latency(&self, node_id: &NodeId, latency: u32);
-    
+
     /// Mark a node as offline
     async fn set_offline(&self, node_id: &NodeId);
-    
+
     /// Get the latency for a specific node (if known)
     fn get_latency(&self, node_id: &NodeId) -> Option<u32>;
-    
+
     /// Run latency tests for all nodes and return results
     async fn run_latency_test(&self) -> HashMap<NodeId, u32>;
 }

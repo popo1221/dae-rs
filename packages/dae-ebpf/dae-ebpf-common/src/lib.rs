@@ -5,7 +5,6 @@
 //! - User-space loader (dae-ebpf)
 
 #![no_std]
-
 // Allow strict clippy lints for eBPF code patterns
 #![allow(clippy::field_reassign_with_default)]
 #![allow(clippy::manual_memcpy)]
@@ -20,6 +19,6 @@ pub mod stats;
 
 // Re-export commonly used types
 pub use config::{ConfigEntry, GLOBAL_CONFIG_KEY};
-pub use routing::{RoutingEntry, action};
-pub use session::{SessionEntry, SessionKey, state};
-pub use stats::{StatsEntry, idx};
+pub use routing::{action, RoutingEntry};
+pub use session::{state, SessionEntry, SessionKey};
+pub use stats::{idx, StatsEntry};

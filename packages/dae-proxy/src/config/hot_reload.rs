@@ -154,7 +154,10 @@ impl HotReload {
         let config_path = self.config_path.clone();
 
         // Start watching the file
-        if let Err(e) = self.watcher.watch(&config_path, RecursiveMode::NonRecursive) {
+        if let Err(e) = self
+            .watcher
+            .watch(&config_path, RecursiveMode::NonRecursive)
+        {
             error!("Failed to start watching config file: {}", e);
             return;
         }
@@ -176,10 +179,10 @@ impl HotReload {
             match receiver.recv_timeout(Duration::from_secs(1)) {
                 Ok(Ok(event)) => {
                     // Check if any event is related to our config file
-                    let config_changed = event.paths.iter().any(|p| {
-                        p == &config_path
-                            || p.file_name() == config_path.file_name()
-                    });
+                    let config_changed = event
+                        .paths
+                        .iter()
+                        .any(|p| p == &config_path || p.file_name() == config_path.file_name());
 
                     if config_changed {
                         // Apply debouncing
@@ -229,7 +232,10 @@ impl HotReload {
         let config_path = self.config_path.clone();
 
         // Start watching the file
-        if let Err(e) = self.watcher.watch(&config_path, RecursiveMode::NonRecursive) {
+        if let Err(e) = self
+            .watcher
+            .watch(&config_path, RecursiveMode::NonRecursive)
+        {
             error!("Failed to start watching config file: {}", e);
             return;
         }
@@ -250,10 +256,10 @@ impl HotReload {
             match receiver.recv_timeout(Duration::from_secs(1)) {
                 Ok(Ok(event)) => {
                     // Check if any event is related to our config file
-                    let config_changed = event.paths.iter().any(|p| {
-                        p == &config_path
-                            || p.file_name() == config_path.file_name()
-                    });
+                    let config_changed = event
+                        .paths
+                        .iter()
+                        .any(|p| p == &config_path || p.file_name() == config_path.file_name());
 
                     if config_changed {
                         // Apply debouncing
@@ -297,9 +303,7 @@ impl HotReload {
             .map_err(|e| HotReloadError::Parse(format!("Failed to parse config: {e}")))?;
 
         // Validate the configuration
-        config
-            .validate()
-            .map_err(HotReloadError::Config)?;
+        config.validate().map_err(HotReloadError::Config)?;
 
         Ok(config)
     }
@@ -328,7 +332,10 @@ impl RuleEngine {
     /// # Returns
     /// A handle that can be used to stop the hot reload task
     #[allow(dead_code)]
-    pub fn start_hot_reload(self: &std::sync::Arc<Self>, config_path: PathBuf) -> std::result::Result<(), Error> {
+    pub fn start_hot_reload(
+        self: &std::sync::Arc<Self>,
+        config_path: PathBuf,
+    ) -> std::result::Result<(), Error> {
         let config_path_clone = config_path.clone();
         let engine = self.clone();
 
@@ -342,22 +349,24 @@ impl RuleEngine {
                 }
             };
 
-            watcher.start_async(move |new_config| {
-                let engine = engine.clone();
-                async move {
-                    // Update rule engine configuration
-                    if let Some(ref rules_config) = new_config.rules.config_file {
-                        if let Err(e) = engine.reload(rules_config).await {
-                            error!("Failed to reload rules: {}", e);
-                            return;
+            watcher
+                .start_async(move |new_config| {
+                    let engine = engine.clone();
+                    async move {
+                        // Update rule engine configuration
+                        if let Some(ref rules_config) = new_config.rules.config_file {
+                            if let Err(e) = engine.reload(rules_config).await {
+                                error!("Failed to reload rules: {}", e);
+                                return;
+                            }
+                        } else if !new_config.rules.rule_groups.is_empty() {
+                            // Handle inline rule groups if needed
+                            info!("Inline rule groups updated");
                         }
-                    } else if !new_config.rules.rule_groups.is_empty() {
-                        // Handle inline rule groups if needed
-                        info!("Inline rule groups updated");
+                        info!("Rule engine hot reload completed");
                     }
-                    info!("Rule engine hot reload completed");
-                }
-            }).await;
+                })
+                .await;
         });
 
         Ok(())

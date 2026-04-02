@@ -3,17 +3,17 @@
 //! Provides WebSocket transport layer for protocols like VLESS, VMess, and Trojan.
 //! Supports both client connections and server-side WebSocket handling.
 
+use super::Transport;
 use async_trait::async_trait;
+use futures::{SinkExt, StreamExt};
 use std::collections::HashMap;
 use std::fmt::Debug;
 use std::io::{Error as IoError, ErrorKind};
 use std::time::Duration;
-use tokio::net::TcpStream;
 use tokio::net::TcpListener;
-use tokio_tungstenite::WebSocketStream;
+use tokio::net::TcpStream;
 use tokio_tungstenite::MaybeTlsStream;
-use futures::{StreamExt, SinkExt};
-use super::Transport;
+use tokio_tungstenite::WebSocketStream;
 
 /// WebSocket stream type alias for client connections (TLS-capable)
 pub type WsStream = WebSocketStream<MaybeTlsStream<TcpStream>>;
@@ -73,7 +73,10 @@ impl WsConnection<WsStream> {
     /// Write data to WebSocket
     /// Returns number of bytes written
     pub async fn write(&mut self, buf: &[u8]) -> std::io::Result<usize> {
-        self.stream.send(tokio_tungstenite::tungstenite::Message::Binary(buf.to_vec()))
+        self.stream
+            .send(tokio_tungstenite::tungstenite::Message::Binary(
+                buf.to_vec(),
+            ))
             .await
             .map_err(|e| IoError::other(e.to_string()))?;
         Ok(buf.len())
@@ -82,7 +85,10 @@ impl WsConnection<WsStream> {
     /// Write text data to WebSocket
     /// Returns number of bytes written
     pub async fn write_text(&mut self, text: &str) -> std::io::Result<usize> {
-        self.stream.send(tokio_tungstenite::tungstenite::Message::Text(text.to_string()))
+        self.stream
+            .send(tokio_tungstenite::tungstenite::Message::Text(
+                text.to_string(),
+            ))
             .await
             .map_err(|e| IoError::other(e.to_string()))?;
         Ok(text.len())
@@ -90,8 +96,14 @@ impl WsConnection<WsStream> {
 
     /// Close the WebSocket connection gracefully
     pub async fn close(mut self) -> std::io::Result<()> {
-        let _ = self.stream.send(tokio_tungstenite::tungstenite::Message::Close(None)).await;
-        self.stream.close(None).await.map_err(|e| IoError::other(e.to_string()))
+        let _ = self
+            .stream
+            .send(tokio_tungstenite::tungstenite::Message::Close(None))
+            .await;
+        self.stream
+            .close(None)
+            .await
+            .map_err(|e| IoError::other(e.to_string()))
     }
 
     /// Get the underlying WebSocket stream
@@ -266,9 +278,7 @@ impl WsConnector {
     }
 
     /// Connect to the WebSocket server (returns TLS-capable stream)
-    pub async fn connect(
-        &self,
-    ) -> Result<WsStream, Box<dyn std::error::Error + Send + Sync>> {
+    pub async fn connect(&self) -> Result<WsStream, Box<dyn std::error::Error + Send + Sync>> {
         use tokio_tungstenite::connect_async;
 
         let url = self.transport.url();
@@ -313,10 +323,7 @@ impl WsConnector {
     }
 
     /// Create a WebSocket server listener
-    pub async fn listen(
-        &self,
-        addr: &str,
-    ) -> Result<WsIncoming, IoError> {
+    pub async fn listen(&self, addr: &str) -> Result<WsIncoming, IoError> {
         let listener = TcpListener::bind(addr).await?;
         Ok(WsIncoming { listener })
     }
@@ -346,7 +353,10 @@ mod tests {
         assert_eq!(config.host, "example.com");
         assert_eq!(config.path, "/vless");
         assert!(config.tls);
-        assert_eq!(config.headers.get("Origin"), Some(&"https://example.com".to_string()));
+        assert_eq!(
+            config.headers.get("Origin"),
+            Some(&"https://example.com".to_string())
+        );
         assert_eq!(config.timeout, Duration::from_secs(60));
         assert_eq!(config.max_frame_size, 32768);
     }

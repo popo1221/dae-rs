@@ -69,7 +69,7 @@ impl DirectRouteEntry {
     pub fn new_domain_suffix(domain: &str) -> Self {
         let mut entry = Self::default();
         entry.rule_type = rule_type::DIRECT_RULE_DOMAIN_SUFFIX;
-        
+
         // Encode domain as u32 array (null-terminated, max 63 chars + null)
         let bytes = domain.as_bytes();
         for (i, chunk) in bytes.chunks(4).enumerate().take(16) {
@@ -104,7 +104,7 @@ impl DirectRouteEntry {
         if self.rule_type != rule_type::DIRECT_RULE_IPV4_CIDR {
             return false;
         }
-        
+
         let mask = if self.prefix_len == 0 {
             0
         } else {
@@ -118,7 +118,7 @@ impl DirectRouteEntry {
         if self.rule_type != rule_type::DIRECT_RULE_DOMAIN_SUFFIX {
             return false;
         }
-        
+
         // Extract null-terminated domain string from the array
         let mut stored_len = 0;
         for &word in &self.domain {
@@ -139,32 +139,38 @@ impl DirectRouteEntry {
                 break;
             }
         }
-        
+
         if stored_len == 0 {
             return false;
         }
-        
+
         // Compare domain suffix (simplified - just check if domain ends with stored suffix)
         if domain.len() < stored_len {
             return false;
         }
-        
+
         // Extract stored suffix bytes
         let mut stored_bytes = [0u8; 64];
         for (i, &word) in self.domain.iter().enumerate() {
             stored_bytes[i * 4] = (word & 0xFF) as u8;
-            if i * 4 + 1 >= stored_len { break; }
+            if i * 4 + 1 >= stored_len {
+                break;
+            }
             stored_bytes[i * 4 + 1] = ((word >> 8) & 0xFF) as u8;
-            if i * 4 + 2 >= stored_len { break; }
+            if i * 4 + 2 >= stored_len {
+                break;
+            }
             stored_bytes[i * 4 + 2] = ((word >> 16) & 0xFF) as u8;
-            if i * 4 + 3 >= stored_len { break; }
+            if i * 4 + 3 >= stored_len {
+                break;
+            }
             stored_bytes[i * 4 + 3] = ((word >> 24) & 0xFF) as u8;
         }
-        
+
         // Compare using byte-by-byte comparison (no Cow needed)
         let domain_lower = domain.as_bytes();
         let stored = &stored_bytes[..stored_len];
-        
+
         // Check if domain ends with stored suffix
         if domain_lower.len() > stored.len() {
             // Check if there's a '.' before the suffix match
@@ -173,13 +179,16 @@ impl DirectRouteEntry {
                 return true;
             }
             // Also check with leading dot
-            if offset > 0 && domain_lower[offset - 1] == b'.' && domain_lower[offset..] == stored[..] {
+            if offset > 0
+                && domain_lower[offset - 1] == b'.'
+                && domain_lower[offset..] == stored[..]
+            {
                 return true;
             }
         } else if domain_lower == stored {
             return true;
         }
-        
+
         false
     }
 
@@ -188,17 +197,17 @@ impl DirectRouteEntry {
         if self.rule_type != rule_type::DIRECT_RULE_PORT {
             return false;
         }
-        
+
         // Check protocol match
         let proto_bit = match proto {
-            6 => 0b001, // TCP
+            6 => 0b001,  // TCP
             17 => 0b010, // UDP
             _ => 0,
         };
         if (self.ip_version & proto_bit) == 0 && self.ip_version != 0 {
             return false;
         }
-        
+
         // Check port match
         self.data[0] as u16 == port
     }
@@ -319,7 +328,7 @@ impl ProcessRuleEntry {
         // Find null terminator
         let null_pos = bytes.iter().position(|&b| b == 0).unwrap_or(bytes.len());
         let trimmed = &bytes[..null_pos];
-        
+
         core::str::from_utf8(trimmed).ok()
     }
 }
@@ -332,7 +341,7 @@ fn contains(haystack: &[u8], needle: &[u8]) -> bool {
     if haystack.len() < needle.len() {
         return false;
     }
-    
+
     for i in 0..=haystack.len() - needle.len() {
         if &haystack[i..i + needle.len()] == needle {
             return true;
@@ -379,13 +388,17 @@ impl ProcessInfoEntry {
     /// Get the process name
     /// Returns None if the name cannot be decoded as UTF-8
     pub fn get_name(&self) -> Option<&'_ str> {
-        let len = if self.name_len == 0 { 0 } else { self.name_len as usize };
+        let len = if self.name_len == 0 {
+            0
+        } else {
+            self.name_len as usize
+        };
         let bytes = &self.name[..len.min(16)];
-        
+
         // Find null terminator
         let null_pos = bytes.iter().position(|&b| b == 0).unwrap_or(bytes.len());
         let trimmed = &bytes[..null_pos];
-        
+
         core::str::from_utf8(trimmed).ok()
     }
 

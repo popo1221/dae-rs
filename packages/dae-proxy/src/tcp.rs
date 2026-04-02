@@ -79,23 +79,22 @@ impl TcpProxy {
         Self::configure_socket(&socket)?;
         socket.bind(&addr.into())?;
         socket.listen(128)?;
-        
+
         // Convert to std listener first, then to tokio
         let std_listener: std::net::TcpListener = socket.into();
         std_listener.set_nonblocking(true)?;
-        
+
         TcpListener::from_std(std_listener)
     }
 
     /// Connect to remote with timeout
     pub async fn connect_remote(addr: SocketAddr) -> std::io::Result<TcpStream> {
-        let stream = tokio_timeout(
-            Duration::from_secs(5),
-            TcpStream::connect(addr),
-        )
-        .await
-        .map_err(|_| std::io::Error::new(std::io::ErrorKind::TimedOut, "connection timeout"))??;
-        
+        let stream = tokio_timeout(Duration::from_secs(5), TcpStream::connect(addr))
+            .await
+            .map_err(|_| {
+                std::io::Error::new(std::io::ErrorKind::TimedOut, "connection timeout")
+            })??;
+
         Ok(stream)
     }
 
@@ -140,13 +139,14 @@ impl TcpProxy {
         if is_new {
             // New connection - update state
             self.update_session_state(&key, ConnectionState::New).await;
-            
+
             // Mark as established
             {
                 let mut conn_write = conn.write().await;
                 conn_write.establish();
             }
-            self.update_session_state(&key, ConnectionState::Active).await;
+            self.update_session_state(&key, ConnectionState::Active)
+                .await;
         }
 
         // Connect to remote
@@ -155,17 +155,26 @@ impl TcpProxy {
             Err(e) => {
                 warn!("Failed to connect to remote {}: {}", remote_addr, e);
                 self.connection_pool.remove(&key).await;
-                self.update_session_state(&key, ConnectionState::Closed).await;
+                self.update_session_state(&key, ConnectionState::Closed)
+                    .await;
                 return Err(e);
             }
         };
 
         // Start relay using tokio::io::split
-        let result = Self::relay_connection(client, remote, conn.clone(), self.config.connection_timeout, key).await;
+        let result = Self::relay_connection(
+            client,
+            remote,
+            conn.clone(),
+            self.config.connection_timeout,
+            key,
+        )
+        .await;
 
         // Cleanup
         self.connection_pool.remove(&key).await;
-        self.update_session_state(&key, ConnectionState::Closed).await;
+        self.update_session_state(&key, ConnectionState::Closed)
+            .await;
 
         result
     }
@@ -181,15 +190,15 @@ impl TcpProxy {
         // Split both streams
         let (mut client_read, mut client_write) = tokio::io::split(client);
         let (mut remote_read, mut remote_write) = tokio::io::split(remote);
-        
+
         // Create channels for errors - clone the sender for each task
         let (tx1, mut rx1) = tokio::sync::mpsc::channel::<std::io::Result<()>>(2);
         let tx2 = tx1.clone();
-        
+
         let conn1 = connection.clone();
         let conn2 = connection.clone();
         let timeout_dur = timeout_duration;
-        
+
         // Client to remote
         let send_handle = tokio::spawn(async move {
             let mut buf = vec![0u8; 64 * 1024];
@@ -222,7 +231,7 @@ impl TcpProxy {
                 }
             }
         });
-        
+
         // Remote to client
         let recv_handle = tokio::spawn(async move {
             let mut buf = vec![0u8; 64 * 1024];
@@ -255,26 +264,30 @@ impl TcpProxy {
                 }
             }
         });
-        
+
         // Wait for first result
         let result = rx1.recv().await.unwrap_or(Ok(()));
-        
+
         // Abort handles
         send_handle.abort();
         recv_handle.abort();
-        
+
         // Close connection
         {
             let mut conn = connection.write().await;
             conn.close();
         }
-        
+
         info!("TCP relay completed for {:?}", key);
         result
     }
 
     /// Create connection key from addresses
-    fn create_connection_key(&self, client_addr: SocketAddr, remote_addr: SocketAddr) -> ConnectionKey {
+    fn create_connection_key(
+        &self,
+        client_addr: SocketAddr,
+        remote_addr: SocketAddr,
+    ) -> ConnectionKey {
         ConnectionKey::new(client_addr, remote_addr, crate::connection::Protocol::Tcp)
     }
 

@@ -33,7 +33,7 @@ pub mod matcher;
 pub mod resolver;
 pub mod rule;
 
-pub use matcher::{ProcessInfo, match_process_name};
+pub use matcher::{match_process_name, ProcessInfo};
 pub use resolver::{ProcessResolver, TASK_COMM_LEN};
 pub use rule::{ProcessMatchRule, ProcessRuleSet, ProcessRuleSetBuilder};
 

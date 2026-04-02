@@ -4,15 +4,12 @@
 
 #[cfg(test)]
 mod integration_tests {
-    use dae_proxy::{
-        RuleEngine, RuleEngineConfig, RuleAction, Rule,
-        RuleGroup, RuleMatchAction, DomainRule, IpCidrRule,
-        Socks5Handler,
-        ConnectionPool, ConnectionKey,
-        TrojanServerConfig, TrojanTlsConfig,
-        Protocol,
-    };
     use dae_proxy::socks5::Socks5HandlerConfig;
+    use dae_proxy::{
+        ConnectionKey, ConnectionPool, DomainRule, IpCidrRule, Protocol, Rule, RuleAction,
+        RuleEngine, RuleEngineConfig, RuleGroup, RuleMatchAction, Socks5Handler,
+        TrojanServerConfig, TrojanTlsConfig,
+    };
     use std::net::{Ipv4Addr, Ipv6Addr, SocketAddr};
     use std::sync::Arc;
     use std::time::Duration;
@@ -43,13 +40,11 @@ mod integration_tests {
     #[tokio::test]
     async fn test_rule_group_creation() {
         let mut group = RuleGroup::new("test_group");
-        group.add_rule(Rule::new(
-            "domain",
-            "test.com",
-            RuleMatchAction::Drop,
-            10,
-        ).expect("Failed to create rule"));
-        
+        group.add_rule(
+            Rule::new("domain", "test.com", RuleMatchAction::Drop, 10)
+                .expect("Failed to create rule"),
+        );
+
         assert_eq!(group.name, "test_group");
         assert_eq!(group.rules.len(), 1);
         assert_eq!(group.default_action, RuleMatchAction::Proxy);
@@ -57,12 +52,7 @@ mod integration_tests {
 
     #[tokio::test]
     async fn test_rule_with_action_creation() {
-        let rule = Rule::new(
-            "domain",
-            "example.com",
-            RuleMatchAction::Pass,
-            10,
-        );
+        let rule = Rule::new("domain", "example.com", RuleMatchAction::Pass, 10);
         assert!(rule.is_ok());
         let rule = rule.unwrap();
         assert_eq!(rule.action, RuleMatchAction::Pass);
@@ -73,7 +63,7 @@ mod integration_tests {
         let rule = DomainRule::new("example.com");
         let mut packet = dae_proxy::PacketInfo::default();
         packet.destination_domain = Some("example.com".to_string());
-        
+
         assert!(rule.matches_packet(&packet));
     }
 
@@ -82,7 +72,7 @@ mod integration_tests {
         let rule = IpCidrRule::new("10.0.0.0/8").expect("Invalid CIDR");
         let mut packet = dae_proxy::PacketInfo::default();
         packet.destination_ip = Ipv4Addr::new(10, 0, 1, 100).into();
-        
+
         assert!(rule.matches_packet(&packet));
     }
 
@@ -91,7 +81,7 @@ mod integration_tests {
         let rule = IpCidrRule::new("10.0.0.0/8").expect("Invalid CIDR");
         let mut packet = dae_proxy::PacketInfo::default();
         packet.destination_ip = Ipv4Addr::new(192, 168, 1, 100).into();
-        
+
         assert!(!rule.matches_packet(&packet));
     }
 
@@ -108,7 +98,7 @@ mod integration_tests {
         let mut packet = dae_proxy::PacketInfo::default();
         packet.source_ip = Ipv6Addr::new(0, 0, 0, 0, 0, 0, 0, 1).into();
         packet.destination_ip = Ipv6Addr::new(0, 0, 0, 0, 0, 0, 0, 2).into();
-        
+
         assert!(packet.source_ip.is_ipv6());
         assert!(packet.destination_ip.is_ipv6());
     }
@@ -121,7 +111,7 @@ mod integration_tests {
             password: "test-password".to_string(),
             tls: TrojanTlsConfig::default(),
         };
-        
+
         assert_eq!(config.addr, "example.com");
         assert_eq!(config.port, 443);
     }
@@ -229,7 +219,7 @@ mod integration_tests {
         while let Some(res) = join_set.join_next().await {
             results.push(res.expect("Task panicked"));
         }
-        
+
         assert_eq!(results.len(), 10);
     }
 

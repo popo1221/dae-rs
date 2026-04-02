@@ -16,9 +16,7 @@ use crate::AppState;
 /// List all nodes
 ///
 /// GET /api/nodes
-pub async fn list_nodes(
-    State(state): State<Arc<RwLock<AppState>>>,
-) -> Json<Vec<NodeResponse>> {
+pub async fn list_nodes(State(state): State<Arc<RwLock<AppState>>>) -> Json<Vec<NodeResponse>> {
     let state = state.read().await;
     Json(state.nodes.clone())
 }
@@ -47,7 +45,7 @@ pub async fn test_node(
     Path(id): Path<String>,
 ) -> Result<Json<NodeResponse>, StatusCode> {
     let mut state = state.write().await;
-    
+
     if let Some(node) = state.nodes.iter_mut().find(|n| n.id == id) {
         // Simulate latency test - in real implementation this would ping the node
         let latency = Some(42);

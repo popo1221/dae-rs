@@ -38,12 +38,12 @@ pub trait Transport: Send + Sync + Debug {
 }
 
 // Re-export all transport types
-pub mod tcp;
-pub mod ws;
-pub mod tls;
 pub mod grpc;
+pub mod tcp;
+pub mod tls;
+pub mod ws;
 
+pub use grpc::{GrpcConfig, GrpcTransport};
 pub use tcp::TcpTransport;
-pub use ws::{WsTransport, WsConnector, WsStream, WsConfig};
-pub use tls::{TlsTransport, TlsConfig, RealityConfig};
-pub use grpc::{GrpcTransport, GrpcConfig};
+pub use tls::{RealityConfig, TlsConfig, TlsTransport};
+pub use ws::{WsConfig, WsConnector, WsStream, WsTransport};

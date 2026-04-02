@@ -5,7 +5,7 @@ use std::path::Path;
 use thiserror::Error;
 
 pub mod rules;
-pub use rules::{RuleConfig, RuleGroupConfig, RuleConfigItem};
+pub use rules::{RuleConfig, RuleConfigItem, RuleGroupConfig};
 
 /// Configuration validation errors
 #[derive(Error, Debug)]
@@ -72,7 +72,6 @@ pub enum LogLevel {
     Warn,
     Error,
 }
-
 
 impl std::fmt::Display for LogLevel {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
@@ -148,8 +147,7 @@ impl Default for ProxyConfig {
 }
 
 /// Rules configuration
-#[derive(Debug, Clone, Deserialize)]
-#[derive(Default)]
+#[derive(Debug, Clone, Deserialize, Default)]
 pub struct RulesConfig {
     /// External rules config file
     #[serde(default)]
@@ -158,7 +156,6 @@ pub struct RulesConfig {
     #[serde(default)]
     pub rule_groups: Vec<RuleGroupConfig>,
 }
-
 
 /// Logging configuration
 #[derive(Debug, Clone, Deserialize)]
@@ -569,17 +566,17 @@ impl Config {
     /// Load configuration from file (auto-detect format)
     pub fn from_file(path: &str) -> Result<Self, Box<dyn std::error::Error>> {
         let content = std::fs::read_to_string(path)?;
-        
+
         // Try new format first
         if let Ok(config) = toml::from_str::<Config>(&content) {
             return Ok(config);
         }
-        
+
         // Try legacy format
         if let Ok(config) = toml::from_str::<LegacyConfig>(&content) {
             return Self::from_legacy(config);
         }
-        
+
         Err("Unable to parse configuration file".into())
     }
 
@@ -589,19 +586,19 @@ impl Config {
         if let Ok(config) = toml::from_str::<Config>(content) {
             return Ok(config);
         }
-        
+
         // Try legacy format
         if let Ok(config) = toml::from_str::<LegacyConfig>(content) {
             return Self::from_legacy(config);
         }
-        
+
         Err("Unable to parse configuration".into())
     }
 
     /// Convert legacy configuration to new format
     fn from_legacy(legacy: LegacyConfig) -> Result<Self, Box<dyn std::error::Error>> {
         let mut nodes = Vec::new();
-        
+
         // Convert shadowsocks servers to nodes
         for ss in legacy.shadowsocks {
             nodes.push(NodeConfig {
@@ -619,7 +616,7 @@ impl Config {
                 aead: Some(ss.ota),
             });
         }
-        
+
         // Convert vless servers to nodes
         for vless in legacy.vless {
             nodes.push(NodeConfig {
@@ -637,7 +634,7 @@ impl Config {
                 aead: None,
             });
         }
-        
+
         // Convert vmess servers to nodes
         for vmess in legacy.vmess {
             nodes.push(NodeConfig {
@@ -655,7 +652,7 @@ impl Config {
                 aead: Some(vmess.enable_aead),
             });
         }
-        
+
         // Convert trojan servers to nodes
         for trojan in legacy.trojan {
             nodes.push(NodeConfig {
@@ -673,7 +670,7 @@ impl Config {
                 aead: None,
             });
         }
-        
+
         Ok(Config {
             proxy: ProxyConfig {
                 socks5_listen: format!("127.0.0.1:{}", legacy.global.port),
@@ -700,32 +697,32 @@ impl Config {
         // Validate proxy listen addresses
         self.validate_listen_addr("socks5_listen", &self.proxy.socks5_listen)?;
         self.validate_listen_addr("http_listen", &self.proxy.http_listen)?;
-        
+
         // Validate timeouts
         if self.proxy.tcp_timeout == 0 {
             return Err(ConfigError::ValidationError(
-                "tcp_timeout must be greater than 0".to_string()
+                "tcp_timeout must be greater than 0".to_string(),
             ));
         }
         if self.proxy.udp_timeout == 0 {
             return Err(ConfigError::ValidationError(
-                "udp_timeout must be greater than 0".to_string()
+                "udp_timeout must be greater than 0".to_string(),
             ));
         }
-        
+
         // Validate eBPF interface
         if self.proxy.ebpf_interface.is_empty() {
             return Err(ConfigError::ValidationError(
-                "ebpf_interface cannot be empty".to_string()
+                "ebpf_interface cannot be empty".to_string(),
             ));
         }
-        
+
         // Validate nodes
         self.validate_nodes()?;
-        
+
         // Validate rules
         self.validate_rules()?;
-        
+
         Ok(())
     }
 
@@ -735,7 +732,7 @@ impl Config {
         if addr.is_empty() {
             return Err(ConfigError::MissingField(field.to_string()));
         }
-        
+
         // Parse address
         match addr.parse::<std::net::SocketAddr>() {
             Ok(socket_addr) => {
@@ -772,55 +769,64 @@ impl Config {
             // Validate port
             if node.port == 0 {
                 return Err(ConfigError::InvalidNode(format!(
-                    "Node '{}': port must be between 1 and 65535", node.name
+                    "Node '{}': port must be between 1 and 65535",
+                    node.name
                 )));
             }
-            
+
             // Validate server address
             if node.server.is_empty() {
                 return Err(ConfigError::InvalidNode(format!(
-                    "Node '{}': server address is required", node.name
+                    "Node '{}': server address is required",
+                    node.name
                 )));
             }
-            
+
             // Validate type-specific fields
             match node.node_type {
                 NodeType::Shadowsocks => {
                     if node.method.is_none() {
                         return Err(ConfigError::InvalidNode(format!(
-                            "Node '{}': method is required for shadowsocks", node.name
+                            "Node '{}': method is required for shadowsocks",
+                            node.name
                         )));
                     }
                     if node.password.is_none() {
                         return Err(ConfigError::InvalidNode(format!(
-                            "Node '{}': password is required for shadowsocks", node.name
+                            "Node '{}': password is required for shadowsocks",
+                            node.name
                         )));
                     }
                 }
                 NodeType::Vless => {
                     if node.uuid.is_none() || node.uuid.as_ref().unwrap().is_empty() {
                         return Err(ConfigError::InvalidNode(format!(
-                            "Node '{}': uuid is required for vless", node.name
+                            "Node '{}': uuid is required for vless",
+                            node.name
                         )));
                     }
                 }
                 NodeType::Vmess => {
                     if node.uuid.is_none() || node.uuid.as_ref().unwrap().is_empty() {
                         return Err(ConfigError::InvalidNode(format!(
-                            "Node '{}': uuid (user_id) is required for vmess", node.name
+                            "Node '{}': uuid (user_id) is required for vmess",
+                            node.name
                         )));
                     }
                 }
                 NodeType::Trojan => {
-                    if node.trojan_password.is_none() || node.trojan_password.as_ref().unwrap().is_empty() {
+                    if node.trojan_password.is_none()
+                        || node.trojan_password.as_ref().unwrap().is_empty()
+                    {
                         return Err(ConfigError::InvalidNode(format!(
-                            "Node '{}': password is required for trojan", node.name
+                            "Node '{}': password is required for trojan",
+                            node.name
                         )));
                     }
                 }
             }
         }
-        
+
         Ok(())
     }
 
@@ -831,32 +837,35 @@ impl Config {
             if !Path::new(config_file).exists() {
                 return Err(ConfigError::RuleFileNotFound(config_file.clone()));
             }
-            
+
             // Try to parse the rules file
             if let Ok(content) = std::fs::read_to_string(config_file) {
                 if let Err((_, errors)) = rules::parse_and_validate(&content) {
                     let error_strings: Vec<String> = errors.iter().map(|e| e.to_string()).collect();
                     return Err(ConfigError::RuleFileParseError(format!(
-                        "{}: {}", config_file, error_strings.join(", ")
+                        "{}: {}",
+                        config_file,
+                        error_strings.join(", ")
                     )));
                 }
             }
         }
-        
+
         // If rule_groups are specified inline, validate them
         for group in &self.rules.rule_groups {
             if group.name.is_empty() {
                 return Err(ConfigError::ValidationError(
-                    "Rule group name cannot be empty".to_string()
+                    "Rule group name cannot be empty".to_string(),
                 ));
             }
             if group.rules.is_empty() {
                 return Err(ConfigError::ValidationError(format!(
-                    "Rule group '{}' has no rules", group.name
+                    "Rule group '{}' has no rules",
+                    group.name
                 )));
             }
         }
-        
+
         Ok(())
     }
 
@@ -867,22 +876,34 @@ impl Config {
 
     /// Get all shadowsocks nodes
     pub fn shadowsocks_nodes(&self) -> Vec<&NodeConfig> {
-        self.nodes.iter().filter(|n| n.node_type == NodeType::Shadowsocks).collect()
+        self.nodes
+            .iter()
+            .filter(|n| n.node_type == NodeType::Shadowsocks)
+            .collect()
     }
 
     /// Get all vless nodes
     pub fn vless_nodes(&self) -> Vec<&NodeConfig> {
-        self.nodes.iter().filter(|n| n.node_type == NodeType::Vless).collect()
+        self.nodes
+            .iter()
+            .filter(|n| n.node_type == NodeType::Vless)
+            .collect()
     }
 
     /// Get all vmess nodes
     pub fn vmess_nodes(&self) -> Vec<&NodeConfig> {
-        self.nodes.iter().filter(|n| n.node_type == NodeType::Vmess).collect()
+        self.nodes
+            .iter()
+            .filter(|n| n.node_type == NodeType::Vmess)
+            .collect()
     }
 
     /// Get all trojan nodes
     pub fn trojan_nodes(&self) -> Vec<&NodeConfig> {
-        self.nodes.iter().filter(|n| n.node_type == NodeType::Trojan).collect()
+        self.nodes
+            .iter()
+            .filter(|n| n.node_type == NodeType::Trojan)
+            .collect()
     }
 }
 
@@ -904,7 +925,10 @@ mod tests {
 
     #[test]
     fn test_node_type_from_str() {
-        assert_eq!("shadowsocks".parse::<NodeType>().unwrap(), NodeType::Shadowsocks);
+        assert_eq!(
+            "shadowsocks".parse::<NodeType>().unwrap(),
+            NodeType::Shadowsocks
+        );
         assert_eq!("vless".parse::<NodeType>().unwrap(), NodeType::Vless);
         assert_eq!("vmess".parse::<NodeType>().unwrap(), NodeType::Vmess);
         assert_eq!("trojan".parse::<NodeType>().unwrap(), NodeType::Trojan);
@@ -934,22 +958,20 @@ mod tests {
     fn test_validate_valid_config() {
         let config = Config {
             proxy: ProxyConfig::default(),
-            nodes: vec![
-                NodeConfig {
-                    name: "test-ss".to_string(),
-                    node_type: NodeType::Shadowsocks,
-                    server: "1.2.3.4".to_string(),
-                    port: 8388,
-                    method: Some("chacha20-ietf-poly1305".to_string()),
-                    password: Some("password".to_string()),
-                    uuid: None,
-                    trojan_password: None,
-                    security: None,
-                    tls: None,
-                    tls_server_name: None,
-                    aead: None,
-                },
-            ],
+            nodes: vec![NodeConfig {
+                name: "test-ss".to_string(),
+                node_type: NodeType::Shadowsocks,
+                server: "1.2.3.4".to_string(),
+                port: 8388,
+                method: Some("chacha20-ietf-poly1305".to_string()),
+                password: Some("password".to_string()),
+                uuid: None,
+                trojan_password: None,
+                security: None,
+                tls: None,
+                tls_server_name: None,
+                aead: None,
+            }],
             rules: RulesConfig::default(),
             logging: LoggingConfig::default(),
         };
@@ -960,22 +982,20 @@ mod tests {
     fn test_validate_invalid_port() {
         let config = Config {
             proxy: ProxyConfig::default(),
-            nodes: vec![
-                NodeConfig {
-                    name: "test-ss".to_string(),
-                    node_type: NodeType::Shadowsocks,
-                    server: "1.2.3.4".to_string(),
-                    port: 0, // Invalid port
-                    method: Some("chacha20-ietf-poly1305".to_string()),
-                    password: Some("password".to_string()),
-                    uuid: None,
-                    trojan_password: None,
-                    security: None,
-                    tls: None,
-                    tls_server_name: None,
-                    aead: None,
-                },
-            ],
+            nodes: vec![NodeConfig {
+                name: "test-ss".to_string(),
+                node_type: NodeType::Shadowsocks,
+                server: "1.2.3.4".to_string(),
+                port: 0, // Invalid port
+                method: Some("chacha20-ietf-poly1305".to_string()),
+                password: Some("password".to_string()),
+                uuid: None,
+                trojan_password: None,
+                security: None,
+                tls: None,
+                tls_server_name: None,
+                aead: None,
+            }],
             rules: RulesConfig::default(),
             logging: LoggingConfig::default(),
         };
@@ -990,23 +1010,24 @@ mod tests {
                 log_level: "debug".to_string(),
             },
             proxy: vec![],
-            shadowsocks: vec![
-                ShadowsocksServerConfig {
-                    name: "ss1".to_string(),
-                    addr: "1.2.3.4".to_string(),
-                    port: 8388,
-                    method: "chacha20-ietf-poly1305".to_string(),
-                    password: "password".to_string(),
-                    ota: false,
-                },
-            ],
-            vless: vec![
-                VlessServerConfig::new("vless1", "5.6.7.8", 443, "uuid-1234"),
-            ],
+            shadowsocks: vec![ShadowsocksServerConfig {
+                name: "ss1".to_string(),
+                addr: "1.2.3.4".to_string(),
+                port: 8388,
+                method: "chacha20-ietf-poly1305".to_string(),
+                password: "password".to_string(),
+                ota: false,
+            }],
+            vless: vec![VlessServerConfig::new(
+                "vless1",
+                "5.6.7.8",
+                443,
+                "uuid-1234",
+            )],
             vmess: vec![],
             trojan: vec![],
         };
-        
+
         let config = Config::from_legacy(legacy).unwrap();
         assert_eq!(config.proxy.socks5_listen, "127.0.0.1:8080");
         assert_eq!(config.nodes.len(), 2);
@@ -1051,11 +1072,11 @@ mod tests {
             rules: RulesConfig::default(),
             logging: LoggingConfig::default(),
         };
-        
+
         assert!(config.find_node("node1").is_some());
         assert!(config.find_node("node2").is_some());
         assert!(config.find_node("node3").is_none());
-        
+
         assert_eq!(config.shadowsocks_nodes().len(), 1);
         assert_eq!(config.vless_nodes().len(), 1);
         assert_eq!(config.vmess_nodes().len(), 0);

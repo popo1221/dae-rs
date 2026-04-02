@@ -45,11 +45,17 @@ impl TrojanServer {
 
     /// Create with multiple backends for failover
     #[allow(dead_code)]
-    pub async fn with_backends(config: TrojanClientConfig, backends: Vec<TrojanServerConfig>) -> std::io::Result<Self> {
+    pub async fn with_backends(
+        config: TrojanClientConfig,
+        backends: Vec<TrojanServerConfig>,
+    ) -> std::io::Result<Self> {
         let listen_addr = config.listen_addr;
         let handler = Arc::new(TrojanHandler::with_backends(config, backends));
         let listener = TcpListener::bind(listen_addr).await?;
-        info!("Trojan server created with {} backends", handler.backend_count());
+        info!(
+            "Trojan server created with {} backends",
+            handler.backend_count()
+        );
         Ok(Self {
             handler,
             listener,

@@ -47,9 +47,7 @@ pub struct EbpfPrograms {
 impl EbpfPrograms {
     /// Create a new eBPF Programs manager
     pub fn new() -> Self {
-        Self {
-            loaded: false,
-        }
+        Self { loaded: false }
     }
 
     /// Load eBPF programs from an object file
@@ -111,14 +109,14 @@ pub fn find_ebpf_object(name: &str, search_paths: &[&Path]) -> Option<std::path:
             return Some(obj_path);
         }
     }
-    
+
     // Also check current directory
     let current_dir = std::path::Path::new(".");
     let obj_path = current_dir.join(name);
     if obj_path.exists() {
         return Some(obj_path);
     }
-    
+
     None
 }
 

@@ -3,9 +3,9 @@
 //! This file provides a placeholder for future VLESS-specific handler implementations.
 //! The main VLESS logic is in `../../vless.rs`.
 
-use async_trait::async_trait;
 use crate::core::{Context, Result as ProxyResult};
 use crate::protocol::ProtocolHandler;
+use async_trait::async_trait;
 
 /// VLESS protocol handler
 ///

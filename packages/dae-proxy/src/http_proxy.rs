@@ -37,28 +37,28 @@ impl BasicAuth {
             password: password.to_string(),
         }
     }
-    
+
     /// Parse from Proxy-Authorization header value
     pub fn from_header(value: &str) -> Option<Self> {
         let value = value.trim();
         if !value.starts_with("Basic ") {
             return None;
         }
-        
+
         let encoded = &value[6..];
         let decoded = base64_decode(encoded)?;
-        
+
         let parts: Vec<&str> = decoded.splitn(2, ':').collect();
         if parts.len() != 2 {
             return None;
         }
-        
+
         Some(Self {
             username: parts[0].to_string(),
             password: parts[1].to_string(),
         })
     }
-    
+
     /// Validate credentials
     pub fn matches(&self, username: &str, password: &str) -> bool {
         self.username == username && self.password == password
@@ -77,15 +77,15 @@ fn base64_decode(input: &str) -> Option<String> {
             _ => None,
         }
     }
-    
+
     let input = input.as_bytes();
     let mut output = Vec::with_capacity(input.len() * 3 / 4);
-    
+
     let mut i = 0;
     while i < input.len() {
         let mut block = [0u8; 4];
         let mut valid = 0u8;
-        
+
         for j in 0..4 {
             if i + j >= input.len() {
                 break;
@@ -98,7 +98,7 @@ fn base64_decode(input: &str) -> Option<String> {
             block[j] = v;
             valid += 1;
         }
-        
+
         if valid >= 2 {
             output.push((block[0] << 2) | (block[1] >> 4));
         }
@@ -108,10 +108,10 @@ fn base64_decode(input: &str) -> Option<String> {
         if valid >= 4 {
             output.push((block[2] << 6) | block[3]);
         }
-        
+
         i += 4;
     }
-    
+
     String::from_utf8(output).ok()
 }
 
@@ -150,13 +150,13 @@ impl HttpConnectRequest {
         if parts.len() < 2 {
             return None;
         }
-        
+
         let host_port = parts[1];
         let (host, port) = Self::parse_host_port(host_port)?;
-        
+
         Some(Self { host, port })
     }
-    
+
     /// Parse host:port string
     fn parse_host_port(s: &str) -> Option<(String, u16)> {
         if let Some(idx) = s.rfind(':') {
@@ -181,14 +181,14 @@ impl HttpProxyHandler {
     pub fn new(config: HttpProxyHandlerConfig) -> Self {
         Self { config }
     }
-    
+
     /// Create with no authentication
     pub fn new_no_auth() -> Self {
         Self {
             config: HttpProxyHandlerConfig::default(),
         }
     }
-    
+
     /// Create with Basic authentication
     pub fn new_with_auth(username: &str, password: &str) -> Self {
         Self {
@@ -199,13 +199,13 @@ impl HttpProxyHandler {
             },
         }
     }
-    
+
     /// Handle an HTTP proxy connection
     pub async fn handle(self: Arc<Self>, mut client: TcpStream) -> std::io::Result<()> {
         // Read the request line
         let mut line = String::new();
         let mut reader = tokio::io::BufReader::new(&mut client);
-        
+
         // Read headers until empty line
         let mut headers = std::collections::HashMap::new();
         loop {
@@ -226,9 +226,9 @@ impl HttpProxyHandler {
                 Err(e) => return Err(e),
             }
         }
-        
+
         debug!("HTTP proxy request headers: {:?}", headers);
-        
+
         // Check for Proxy-Authorization
         if let Some((ref username, ref password)) = self.config.auth {
             let auth_header = headers.get("proxy-authorization");
@@ -241,17 +241,17 @@ impl HttpProxyHandler {
             } else {
                 false
             };
-            
+
             if !authorized {
                 info!("HTTP proxy: unauthorized access attempt");
                 client.write_all(consts::HTTP_PROXY_AUTH_REQUIRED).await?;
                 return Err(std::io::Error::new(
                     std::io::ErrorKind::PermissionDenied,
-                    "proxy authentication required"
+                    "proxy authentication required",
                 ));
             }
         }
-        
+
         // Parse the CONNECT request
         let request = match HttpConnectRequest::parse(&line) {
             Some(r) => r,
@@ -259,42 +259,43 @@ impl HttpProxyHandler {
                 client.write_all(consts::HTTP_BAD_GATEWAY).await?;
                 return Err(std::io::Error::new(
                     std::io::ErrorKind::InvalidInput,
-                    "invalid CONNECT request"
+                    "invalid CONNECT request",
                 ));
             }
         };
-        
+
         info!("HTTP CONNECT: {}:{}", request.host, request.port);
-        
+
         // Connect to target
-        let target_addr: SocketAddr = match SocketAddr::from_str(&format!("{}:{}", request.host, request.port)) {
-            Ok(addr) => addr,
-            Err(_) => {
-                // Try DNS resolution
-                match tokio::net::lookup_host(format!("{}:{}", request.host, request.port)).await {
-                    Ok(mut addrs) => {
-                        match addrs.next() {
+        let target_addr: SocketAddr =
+            match SocketAddr::from_str(&format!("{}:{}", request.host, request.port)) {
+                Ok(addr) => addr,
+                Err(_) => {
+                    // Try DNS resolution
+                    match tokio::net::lookup_host(format!("{}:{}", request.host, request.port))
+                        .await
+                    {
+                        Ok(mut addrs) => match addrs.next() {
                             Some(addr) => addr,
                             None => {
                                 client.write_all(consts::HTTP_BAD_GATEWAY).await?;
                                 return Err(std::io::Error::new(
                                     std::io::ErrorKind::HostUnreachable,
-                                    "no addresses found"
+                                    "no addresses found",
                                 ));
                             }
+                        },
+                        Err(e) => {
+                            client.write_all(consts::HTTP_BAD_GATEWAY).await?;
+                            return Err(std::io::Error::new(
+                                std::io::ErrorKind::HostUnreachable,
+                                format!("DNS resolution failed: {e}"),
+                            ));
                         }
                     }
-                    Err(e) => {
-                        client.write_all(consts::HTTP_BAD_GATEWAY).await?;
-                        return Err(std::io::Error::new(
-                            std::io::ErrorKind::HostUnreachable,
-                            format!("DNS resolution failed: {e}")
-                        ));
-                    }
                 }
-            }
-        };
-        
+            };
+
         // Connect to remote
         let timeout = std::time::Duration::from_secs(self.config.tcp_timeout_secs);
         let remote = match tokio::time::timeout(timeout, TcpStream::connect(target_addr)).await {
@@ -308,28 +309,28 @@ impl HttpProxyHandler {
                 client.write_all(consts::HTTP_BAD_GATEWAY).await?;
                 return Err(std::io::Error::new(
                     std::io::ErrorKind::TimedOut,
-                    "connection timeout"
+                    "connection timeout",
                 ));
             }
         };
-        
+
         // Send 200 Connection Established
         client.write_all(consts::HTTP_OK).await?;
-        
+
         info!("HTTP CONNECT tunnel established: -> {}", target_addr);
-        
+
         // Relay data between client and remote
         self.relay(client, remote).await
     }
-    
+
     /// Relay data between client and remote
     async fn relay(&self, client: TcpStream, remote: TcpStream) -> std::io::Result<()> {
         let (mut cr, mut cw) = tokio::io::split(client);
         let (mut rr, mut rw) = tokio::io::split(remote);
-        
+
         let client_to_remote = tokio::io::copy(&mut cr, &mut rw);
         let remote_to_client = tokio::io::copy(&mut rr, &mut cw);
-        
+
         tokio::try_join!(client_to_remote, remote_to_client)?;
         Ok(())
     }
@@ -349,20 +350,23 @@ impl HttpProxyServer {
             listen_addr: addr,
         })
     }
-    
+
     /// Create with custom handler
-    pub async fn with_handler(addr: SocketAddr, handler: HttpProxyHandler) -> std::io::Result<Self> {
+    pub async fn with_handler(
+        addr: SocketAddr,
+        handler: HttpProxyHandler,
+    ) -> std::io::Result<Self> {
         Ok(Self {
             handler: Arc::new(handler),
             listen_addr: addr,
         })
     }
-    
+
     /// Start the HTTP proxy server
     pub async fn start(self: Arc<Self>) -> std::io::Result<()> {
         let listener = tokio::net::TcpListener::bind(self.listen_addr).await?;
         info!("HTTP proxy server listening on {}", self.listen_addr);
-        
+
         loop {
             match listener.accept().await {
                 Ok((client, addr)) => {
@@ -384,18 +388,18 @@ impl HttpProxyServer {
 #[cfg(test)]
 mod tests {
     use super::*;
-    
+
     #[test]
     fn test_http_connect_request_parse() {
         let req = HttpConnectRequest::parse("CONNECT example.com:443 HTTP/1.1").unwrap();
         assert_eq!(req.host, "example.com");
         assert_eq!(req.port, 443);
-        
+
         let req2 = HttpConnectRequest::parse("CONNECT 192.168.1.1:8080 HTTP/1.0").unwrap();
         assert_eq!(req2.host, "192.168.1.1");
         assert_eq!(req2.port, 8080);
     }
-    
+
     #[test]
     fn test_basic_auth_from_header() {
         // "admin:secret" in base64
@@ -403,7 +407,7 @@ mod tests {
         assert!(auth.matches("admin", "secret"));
         assert!(!auth.matches("admin", "wrong"));
     }
-    
+
     #[test]
     fn test_base64_decode() {
         assert_eq!(base64_decode("SGVsbG8=").unwrap(), "Hello");

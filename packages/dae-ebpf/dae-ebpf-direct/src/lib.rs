@@ -5,7 +5,6 @@
 //! without requiring any iptables rules.
 
 #![deny(warnings)]
-
 // Allow strict clippy lints for eBPF code patterns
 #![allow(clippy::field_reassign_with_default)]
 
@@ -19,16 +18,16 @@ use thiserror::Error;
 pub enum EbpfError {
     #[error("Map error: {0}")]
     Map(String),
-    
+
     #[error("Program error: {0}")]
     Program(String),
-    
+
     #[error("Sockmap error: {0}")]
     Sockmap(String),
-    
+
     #[error("IO error: {0}")]
     Io(#[from] std::io::Error),
-    
+
     #[error("Invalid argument: {0}")]
     InvalidArgument(String),
 }
@@ -63,7 +62,7 @@ impl ConnectionKey {
         let src_port = u16::from_be_bytes([bytes[8], bytes[9]]);
         let dst_port = u16::from_be_bytes([bytes[10], bytes[11]]);
         let protocol = bytes[12];
-        
+
         Self {
             src_ip,
             dst_ip,
@@ -79,12 +78,20 @@ impl ConnectionKey {
         let dst_ip = self.dst_ip.to_ne_bytes();
         let src_port = self.src_port.to_be_bytes();
         let dst_port = self.dst_port.to_be_bytes();
-        
+
         [
-            src_ip[0], src_ip[1], src_ip[2], src_ip[3],
-            dst_ip[0], dst_ip[1], dst_ip[2], dst_ip[3],
-            src_port[0], src_port[1],
-            dst_port[0], dst_port[1],
+            src_ip[0],
+            src_ip[1],
+            src_ip[2],
+            src_ip[3],
+            dst_ip[0],
+            dst_ip[1],
+            dst_ip[2],
+            dst_ip[3],
+            src_port[0],
+            src_port[1],
+            dst_port[0],
+            dst_port[1],
             self.protocol,
         ]
     }
@@ -104,7 +111,14 @@ pub struct ConnectionInfo {
 
 impl ConnectionInfo {
     /// Create a new connection info
-    pub fn new(src_ip: u32, dst_ip: u32, src_port: u16, dst_port: u16, protocol: u8, pid: u32) -> Self {
+    pub fn new(
+        src_ip: u32,
+        dst_ip: u32,
+        src_port: u16,
+        dst_port: u16,
+        protocol: u8,
+        pid: u32,
+    ) -> Self {
         Self {
             src_ip,
             dst_ip,

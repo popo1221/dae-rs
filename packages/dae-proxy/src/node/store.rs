@@ -34,13 +34,13 @@ use std::sync::Arc;
 pub trait NodeStore: Send + Sync {
     /// Select a node based on the selection policy
     fn select(&self) -> Option<Arc<dyn Node>>;
-    
+
     /// Get all available nodes
     fn all(&self) -> Vec<Arc<dyn Node>>;
-    
+
     /// Get the number of available nodes
     fn len(&self) -> usize;
-    
+
     /// Check if there are any nodes
     fn is_empty(&self) -> bool {
         self.len() == 0
@@ -53,13 +53,13 @@ pub trait NodeStore: Send + Sync {
 pub trait NodeManager: NodeStore {
     /// Add a new node
     fn add_node(&mut self, node: Arc<dyn Node>) -> Result<(), NodeError>;
-    
+
     /// Remove a node by ID
     fn remove_node(&mut self, id: &NodeId) -> Result<(), NodeError>;
-    
+
     /// Update node health status
     fn update_health(&mut self, id: &NodeId, healthy: bool) -> Result<(), NodeError>;
-    
+
     /// Reload configuration
     fn reload(&mut self, config: NodeManagerConfig) -> Result<(), NodeError>;
 }
@@ -98,21 +98,26 @@ pub struct NodeHandle {
 
 impl NodeHandle {
     pub fn new(id: String, name: String, address: String, port: u16) -> Self {
-        Self { id, name, address, port }
+        Self {
+            id,
+            name,
+            address,
+            port,
+        }
     }
-    
+
     pub fn id(&self) -> &str {
         &self.id
     }
-    
+
     pub fn name(&self) -> &str {
         &self.name
     }
-    
+
     pub fn address(&self) -> &str {
         &self.address
     }
-    
+
     pub fn port(&self) -> u16 {
         self.port
     }
@@ -144,13 +149,13 @@ impl NodeState {
             last_check: std::time::Instant::now(),
         }
     }
-    
+
     pub fn with_health(mut self, healthy: bool) -> Self {
         self.healthy = healthy;
         self.last_check = std::time::Instant::now();
         self
     }
-    
+
     pub fn with_latency(mut self, latency_ms: u32) -> Self {
         self.latency_ms = Some(latency_ms);
         self.last_check = std::time::Instant::now();
@@ -159,7 +164,7 @@ impl NodeState {
 }
 
 /// Re-export for convenience
-pub use crate::node::{Node, NodeId, NodeError, SelectionPolicy};
+pub use crate::node::{Node, NodeError, NodeId, SelectionPolicy};
 
 #[cfg(test)]
 mod tests {
@@ -173,7 +178,7 @@ mod tests {
             "192.168.1.1".to_string(),
             443,
         );
-        
+
         assert_eq!(handle.name(), "test-node");
         assert_eq!(handle.address(), "192.168.1.1");
         assert_eq!(handle.port(), 443);
@@ -186,8 +191,10 @@ mod tests {
             "test-node".to_string(),
             "192.168.1.1".to_string(),
             443,
-        ).with_health(true).with_latency(100);
-        
+        )
+        .with_health(true)
+        .with_latency(100);
+
         assert!(state.healthy);
         assert_eq!(state.latency_ms, Some(100));
     }

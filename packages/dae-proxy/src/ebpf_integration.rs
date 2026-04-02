@@ -3,13 +3,13 @@
 //! Provides wrappers around eBPF maps for session, routing, and stats management.
 
 use crate::connection_pool::ConnectionKey;
-use crate::rule_engine::{SharedRuleEngine, PacketInfo, RuleAction};
-use dae_ebpf_common::session::{SessionEntry, SessionKey};
+use crate::rule_engine::{PacketInfo, RuleAction, SharedRuleEngine};
 use dae_ebpf_common::routing::RoutingEntry;
-use dae_ebpf_common::stats::{StatsEntry, idx as stats_idx};
+use dae_ebpf_common::session::{SessionEntry, SessionKey};
+use dae_ebpf_common::stats::{idx as stats_idx, StatsEntry};
+use std::sync::Arc;
 use thiserror::Error;
 use tracing::{debug, info};
-use std::sync::Arc;
 
 /// Error type for eBPF operations
 #[derive(Error, Debug)]
@@ -192,7 +192,7 @@ impl EbpfSessionHandle {
         if let Some(ref sessions) = self.maps.sessions {
             sessions.insert(key, &entry)?;
         }
-        
+
         debug!("Created eBPF session: {:?}", key);
         Ok(())
     }
@@ -207,7 +207,7 @@ impl EbpfSessionHandle {
                 sessions.insert(key, &entry)?;
             }
         }
-        
+
         debug!("Updated eBPF session: {:?} state={}", key, state);
         Ok(())
     }
@@ -217,7 +217,7 @@ impl EbpfSessionHandle {
         if let Some(ref sessions) = self.maps.sessions {
             sessions.remove(key)?;
         }
-        
+
         debug!("Removed eBPF session: {:?}", key);
         Ok(())
     }

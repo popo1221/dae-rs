@@ -3,9 +3,9 @@
 //! This file provides a placeholder for future HTTP-specific handler implementations.
 //! The main HTTP logic is in `../../http_proxy.rs`.
 
-use async_trait::async_trait;
 use crate::core::{Context, Result as ProxyResult};
 use crate::protocol::ProtocolHandler;
+use async_trait::async_trait;
 
 /// HTTP protocol handler
 ///

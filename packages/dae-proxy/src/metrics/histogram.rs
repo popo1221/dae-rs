@@ -76,19 +76,25 @@ pub fn register_histograms(registry: &Registry) -> Result<(), prometheus::Error>
 /// Observe connection duration
 #[inline]
 pub fn observe_connection_duration(protocol: &str, duration_secs: f64) {
-    CONNECTION_DURATION_HISTOGRAM.with_label_values(&[protocol]).observe(duration_secs);
+    CONNECTION_DURATION_HISTOGRAM
+        .with_label_values(&[protocol])
+        .observe(duration_secs);
 }
 
 /// Observe request size
 #[inline]
 pub fn observe_request_size(direction: &str, bytes: f64) {
-    REQUEST_SIZE_HISTOGRAM.with_label_values(&[direction]).observe(bytes);
+    REQUEST_SIZE_HISTOGRAM
+        .with_label_values(&[direction])
+        .observe(bytes);
 }
 
 /// Observe response time
 #[inline]
 pub fn observe_response_time(transport: &str, seconds: f64) {
-    RESPONSE_TIME_HISTOGRAM.with_label_values(&[transport]).observe(seconds);
+    RESPONSE_TIME_HISTOGRAM
+        .with_label_values(&[transport])
+        .observe(seconds);
 }
 
 /// Observe DNS resolution latency
@@ -100,7 +106,9 @@ pub fn observe_dns_latency(seconds: f64) {
 /// Observe eBPF operation latency
 #[inline]
 pub fn observe_ebpf_latency(operation: &str, seconds: f64) {
-    EBPF_LATENCY_HISTOGRAM.with_label_values(&[operation]).observe(seconds);
+    EBPF_LATENCY_HISTOGRAM
+        .with_label_values(&[operation])
+        .observe(seconds);
 }
 
 /// Observe rule match latency
@@ -112,5 +120,7 @@ pub fn observe_rule_match_latency(seconds: f64) {
 /// Observe node latency
 #[inline]
 pub fn observe_node_latency(node_id: &str, seconds: f64) {
-    NODE_LATENCY_HISTOGRAM.with_label_values(&[node_id]).observe(seconds);
+    NODE_LATENCY_HISTOGRAM
+        .with_label_values(&[node_id])
+        .observe(seconds);
 }

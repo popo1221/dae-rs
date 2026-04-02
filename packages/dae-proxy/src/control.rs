@@ -5,6 +5,7 @@
 //!
 //! The control socket is typically at /var/run/dae/control.sock
 
+use serde::{Deserialize, Serialize};
 use std::path::Path;
 use std::sync::Arc;
 use std::time::SystemTime;
@@ -12,7 +13,6 @@ use tokio::io::{AsyncBufReadExt, AsyncReadExt, AsyncWriteExt, BufStream};
 use tokio::net::{UnixListener, UnixStream};
 use tokio::sync::RwLock;
 use tracing::{error, info, warn};
-use serde::{Deserialize, Serialize};
 
 /// Control command types
 #[derive(Debug, Clone)]
@@ -122,7 +122,12 @@ impl ControlState {
             .unwrap_or(0)
     }
 
-    pub fn get_status(&self, rules_loaded: bool, rule_count: usize, nodes_configured: usize) -> ProxyStatus {
+    pub fn get_status(
+        &self,
+        rules_loaded: bool,
+        rule_count: usize,
+        nodes_configured: usize,
+    ) -> ProxyStatus {
         ProxyStatus {
             running: false, // Will be updated by caller
             uptime_secs: self.uptime_secs(),
@@ -221,14 +226,20 @@ impl ControlServer {
         }
 
         let response = Self::process_command(line.trim(), state).await;
-        
+
         // Send response
         let response_str = match &response {
             ControlResponse::Ok(msg) => msg.clone(),
             ControlResponse::Error(msg) => format!("ERROR: {msg}\n"),
-            ControlResponse::Stats(stats) => format!("{}\n", serde_json::to_string(stats).unwrap_or_default()),
-            ControlResponse::Status(status) => format!("{}\n", serde_json::to_string(status).unwrap_or_default()),
-            ControlResponse::TestResult(result) => format!("{}\n", serde_json::to_string(result).unwrap_or_default()),
+            ControlResponse::Stats(stats) => {
+                format!("{}\n", serde_json::to_string(stats).unwrap_or_default())
+            }
+            ControlResponse::Status(status) => {
+                format!("{}\n", serde_json::to_string(status).unwrap_or_default())
+            }
+            ControlResponse::TestResult(result) => {
+                format!("{}\n", serde_json::to_string(result).unwrap_or_default())
+            }
             ControlResponse::Version(ver) => format!("dae-rs {ver}\n"),
         };
 
@@ -239,10 +250,7 @@ impl ControlServer {
     }
 
     /// Process a control command
-    async fn process_command(
-        cmd: &str,
-        state: &Arc<ControlState>,
-    ) -> ControlResponse {
+    async fn process_command(cmd: &str, state: &Arc<ControlState>) -> ControlResponse {
         let parts: Vec<&str> = cmd.split_whitespace().collect();
         let command = parts.first().map(|s| s.to_lowercase()).unwrap_or_default();
 
@@ -282,9 +290,7 @@ impl ControlServer {
                     ControlResponse::Error("Usage: test <node_name>".to_string())
                 }
             }
-            "version" | "ver" => {
-                ControlResponse::Version(env!("CARGO_PKG_VERSION").to_string())
-            }
+            "version" | "ver" => ControlResponse::Version(env!("CARGO_PKG_VERSION").to_string()),
             "help" | "?" => {
                 let help = r#"Available commands:
   status         Show proxy status
@@ -297,12 +303,12 @@ impl ControlServer {
 "#;
                 ControlResponse::Ok(help.to_string())
             }
-            "" => {
-                ControlResponse::Ok("Use 'help' for available commands".to_string())
-            }
+            "" => ControlResponse::Ok("Use 'help' for available commands".to_string()),
             _ => {
                 warn!("Unknown control command: {}", cmd);
-                ControlResponse::Error(format!("Unknown command: {cmd}. Use 'help' for available commands."))
+                ControlResponse::Error(format!(
+                    "Unknown command: {cmd}. Use 'help' for available commands."
+                ))
             }
         }
     }
@@ -324,7 +330,7 @@ fn node_count() -> usize {
 /// Connect to control socket and send command
 pub async fn connect_and_send(socket_path: &str, command: &str) -> std::io::Result<String> {
     let mut stream = UnixStream::connect(socket_path).await?;
-    
+
     stream.write_all(format!("{command}\n").as_bytes()).await?;
     stream.flush().await?;
 
@@ -337,14 +343,16 @@ pub async fn connect_and_send(socket_path: &str, command: &str) -> std::io::Resu
 /// Connect to control socket and get response as structured type
 pub async fn connect_and_get_status(socket_path: &str) -> std::io::Result<ControlResponse> {
     let response = connect_and_send(socket_path, "status").await?;
-    
+
     // Parse JSON response
     if let Ok(status) = serde_json::from_str::<ProxyStatus>(&response) {
         return Ok(ControlResponse::Status(status));
     }
-    
+
     if response.starts_with("ERROR:") {
-        return Ok(ControlResponse::Error(response.trim_start_matches("ERROR:").trim().to_string()));
+        return Ok(ControlResponse::Error(
+            response.trim_start_matches("ERROR:").trim().to_string(),
+        ));
     }
 
     Ok(ControlResponse::Ok(response))
@@ -360,17 +368,17 @@ mod tests {
         let state1 = ControlState::new();
         let resp = ControlServer::process_command("status", &Arc::new(state1)).await;
         assert!(matches!(resp, ControlResponse::Status(_)));
-        
+
         // Test help command
         let state2 = ControlState::new();
         let resp = ControlServer::process_command("help", &Arc::new(state2)).await;
         assert!(matches!(resp, ControlResponse::Ok(_)));
-        
+
         // Test unknown command
         let state3 = ControlState::new();
         let resp = ControlServer::process_command("unknown", &Arc::new(state3)).await;
         assert!(matches!(resp, ControlResponse::Error(_)));
-        
+
         // Test version command
         let state4 = ControlState::new();
         let resp = ControlServer::process_command("version", &Arc::new(state4)).await;
@@ -380,12 +388,12 @@ mod tests {
     #[tokio::test]
     async fn test_control_state() {
         let state = ControlState::new();
-        
+
         assert!(!state.is_running().await);
-        
+
         state.set_running(true).await;
         assert!(state.is_running().await);
-        
+
         // Wait a bit and check uptime
         tokio::time::sleep(std::time::Duration::from_millis(10)).await;
         assert!(state.uptime_secs() >= 0);
@@ -399,7 +407,7 @@ mod tests {
             latency_ms: Some(100),
             error: None,
         };
-        
+
         let json = serde_json::to_string(&result).unwrap();
         assert!(json.contains("test-node"));
         assert!(json.contains("true"));

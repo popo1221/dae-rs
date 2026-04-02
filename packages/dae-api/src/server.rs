@@ -3,21 +3,22 @@
 //! This module provides the HTTP API server for managing nodes, rules, and configuration
 
 use axum::{
-    Router,
-    routing::{get, post, put},
     http::StatusCode,
-    Json,
     response::{IntoResponse, Response},
+    routing::{get, post, put},
+    Json, Router,
 };
 use std::net::SocketAddr;
 use std::sync::Arc;
 use tokio::sync::RwLock;
-use tower_http::cors::{CorsLayer, Any};
+use tower_http::cors::{Any, CorsLayer};
 use tower_http::trace::TraceLayer;
 use tracing::info;
 
-use crate::routes::{nodes, rules, config, stats};
-use crate::models::{NodeResponse, NodeStatus, RuleResponse, ConfigResponse, StatsResponse, ErrorResponse};
+use crate::models::{
+    ConfigResponse, ErrorResponse, NodeResponse, NodeStatus, RuleResponse, StatsResponse,
+};
+use crate::routes::{config, nodes, rules, stats};
 
 /// Application state shared across route handlers
 #[derive(Debug, Clone)]
@@ -159,12 +160,14 @@ impl ApiServer {
     pub async fn start(self) -> Result<(), ApiError> {
         let addr = SocketAddr::from(([0, 0, 0, 0], self.port));
         info!("Starting REST API server on http://{}", addr);
-        
-        let listener = tokio::net::TcpListener::bind(addr).await.map_err(|e| ApiError::ServerError(e.to_string()))?;
+
+        let listener = tokio::net::TcpListener::bind(addr)
+            .await
+            .map_err(|e| ApiError::ServerError(e.to_string()))?;
         axum::serve(listener, self.app)
             .await
             .map_err(|e| ApiError::ServerError(e.to_string()))?;
-        
+
         Ok(())
     }
 }
@@ -174,10 +177,10 @@ impl ApiServer {
 pub enum ApiError {
     #[error("Server error: {0}")]
     ServerError(String),
-    
+
     #[error("Invalid request: {0}")]
     InvalidRequest(String),
-    
+
     #[error("Not found: {0}")]
     NotFound(String),
 }
@@ -193,10 +196,9 @@ impl IntoResponse for ApiError {
                 StatusCode::BAD_REQUEST,
                 ErrorResponse::new("invalid_request", msg),
             ),
-            ApiError::NotFound(msg) => (
-                StatusCode::NOT_FOUND,
-                ErrorResponse::new("not_found", msg),
-            ),
+            ApiError::NotFound(msg) => {
+                (StatusCode::NOT_FOUND, ErrorResponse::new("not_found", msg))
+            }
         };
 
         (status, Json(error_response)).into_response()
@@ -213,33 +215,51 @@ mod tests {
     #[tokio::test]
     async fn test_list_nodes() {
         let server = ApiServer::new(0).await;
-        let response = server.app
-            .oneshot(Request::builder().uri("/api/nodes").body(Body::empty()).unwrap())
+        let response = server
+            .app
+            .oneshot(
+                Request::builder()
+                    .uri("/api/nodes")
+                    .body(Body::empty())
+                    .unwrap(),
+            )
             .await
             .unwrap();
-        
+
         assert_eq!(response.status(), StatusCode::OK);
     }
 
     #[tokio::test]
     async fn test_get_node_not_found() {
         let server = ApiServer::new(0).await;
-        let response = server.app
-            .oneshot(Request::builder().uri("/api/nodes/nonexistent").body(Body::empty()).unwrap())
+        let response = server
+            .app
+            .oneshot(
+                Request::builder()
+                    .uri("/api/nodes/nonexistent")
+                    .body(Body::empty())
+                    .unwrap(),
+            )
             .await
             .unwrap();
-        
+
         assert_eq!(response.status(), StatusCode::NOT_FOUND);
     }
 
     #[tokio::test]
     async fn test_health() {
         let server = ApiServer::new(0).await;
-        let response = server.app
-            .oneshot(Request::builder().uri("/api/health").body(Body::empty()).unwrap())
+        let response = server
+            .app
+            .oneshot(
+                Request::builder()
+                    .uri("/api/health")
+                    .body(Body::empty())
+                    .unwrap(),
+            )
             .await
             .unwrap();
-        
+
         assert_eq!(response.status(), StatusCode::OK);
     }
 }

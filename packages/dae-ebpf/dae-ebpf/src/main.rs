@@ -75,18 +75,18 @@ async fn main() -> Result<()> {
 
     // Load and attach the XDP program
     let mut loader = loader::EbpfLoader::new()?;
-    
+
     match loader.load(&args.interface, &args.xdp_object).await {
         Ok(_) => {
             info!("XDP program loaded successfully");
             info!("eBPF maps created and initialized");
-            
+
             // Keep the program running
             info!("Press Ctrl+C to stop");
-            
+
             // Wait for shutdown signal
             tokio::signal::ctrl_c().await?;
-            
+
             info!("Shutting down...");
             loader.unload().await?;
             Ok(())

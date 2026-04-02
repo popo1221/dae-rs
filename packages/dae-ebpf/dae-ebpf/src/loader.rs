@@ -40,8 +40,7 @@ impl EbpfLoader {
         debug!("Loading eBPF object from: {}", xdp_object);
 
         // Load eBPF programs using aya
-        let mut ebpf = Ebpf::load_file(path)
-            .context("Failed to load eBPF object file")?;
+        let mut ebpf = Ebpf::load_file(path).context("Failed to load eBPF object file")?;
 
         // Get the XDP program
         let prog: &mut Xdp = ebpf
@@ -50,8 +49,7 @@ impl EbpfLoader {
             .try_into()?;
 
         // Load the program
-        prog.load()
-            .context("Failed to load XDP program")?;
+        prog.load().context("Failed to load XDP program")?;
 
         // Attach to the interface
         info!("Attaching XDP to interface: {}", interface);
@@ -60,7 +58,7 @@ impl EbpfLoader {
 
         // Initialize maps
         self.maps.init(&ebpf)?;
-        
+
         // Initialize default routing rules
         self.maps.init_default_routes()?;
 

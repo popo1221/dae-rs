@@ -188,8 +188,8 @@ impl JuicityAddress {
                 if buf.len() < 4 + domain_len {
                     return None;
                 }
-                let domain = String::from_utf8(buf[2..2+domain_len].to_vec()).ok()?;
-                let port = u16::from_be_bytes([buf[2+domain_len], buf[3+domain_len]]);
+                let domain = String::from_utf8(buf[2..2 + domain_len].to_vec()).ok()?;
+                let port = u16::from_be_bytes([buf[2 + domain_len], buf[3 + domain_len]]);
                 (JuicityAddress::Domain(domain, port), 4 + domain_len)
             }
             JuicityAddressType::Ipv6 => {
@@ -313,15 +313,16 @@ impl JuicityCodec {
         pos += 1;
 
         // Connection ID (4 bytes)
-        let connection_id = u32::from_le_bytes([buf[pos], buf[pos+1], buf[pos+2], buf[pos+3]]);
+        let connection_id =
+            u32::from_le_bytes([buf[pos], buf[pos + 1], buf[pos + 2], buf[pos + 3]]);
         pos += 4;
 
         // Session ID (4 bytes)
-        let session_id = u32::from_le_bytes([buf[pos], buf[pos+1], buf[pos+2], buf[pos+3]]);
+        let session_id = u32::from_le_bytes([buf[pos], buf[pos + 1], buf[pos + 2], buf[pos + 3]]);
         pos += 4;
 
         // Sequence (4 bytes)
-        let sequence = u32::from_le_bytes([buf[pos], buf[pos+1], buf[pos+2], buf[pos+3]]);
+        let sequence = u32::from_le_bytes([buf[pos], buf[pos + 1], buf[pos + 2], buf[pos + 3]]);
         pos += 4;
 
         // Address (if present, for Open command)
@@ -386,9 +387,18 @@ mod tests {
 
     #[test]
     fn test_address_type_conversion() {
-        assert_eq!(JuicityAddressType::from_byte(0x01), Some(JuicityAddressType::Ipv4));
-        assert_eq!(JuicityAddressType::from_byte(0x02), Some(JuicityAddressType::Domain));
-        assert_eq!(JuicityAddressType::from_byte(0x03), Some(JuicityAddressType::Ipv6));
+        assert_eq!(
+            JuicityAddressType::from_byte(0x01),
+            Some(JuicityAddressType::Ipv4)
+        );
+        assert_eq!(
+            JuicityAddressType::from_byte(0x02),
+            Some(JuicityAddressType::Domain)
+        );
+        assert_eq!(
+            JuicityAddressType::from_byte(0x03),
+            Some(JuicityAddressType::Ipv6)
+        );
         assert_eq!(JuicityAddressType::from_byte(0xFF), None);
     }
 
@@ -409,10 +419,11 @@ mod tests {
     #[test]
     fn test_address_domain_parse() {
         let bytes = [
-            0x02,       // ATYP_DOMAIN
-            0x0b,       // domain length = 11
-            b'e', b'x', b'a', b'm', b'p', b'l', b'e', b'.', b'c', b'o', b'm',  // "example.com" (11 chars)
-            0x00, 0x50  // port = 80
+            0x02, // ATYP_DOMAIN
+            0x0b, // domain length = 11
+            b'e', b'x', b'a', b'm', b'p', b'l', b'e', b'.', b'c', b'o',
+            b'm', // "example.com" (11 chars)
+            0x00, 0x50, // port = 80
         ];
         let (addr, len) = JuicityAddress::parse_from_bytes(&bytes).unwrap();
         match addr {
@@ -428,13 +439,17 @@ mod tests {
     #[test]
     fn test_address_ipv6_parse() {
         let bytes = [
-            0x03,       // ATYP_IPV6
-            0x20, 0x01, 0x0d, 0xb8, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x01, 0x00, 0x50  // [2001:db8::1]:80
+            0x03, // ATYP_IPV6
+            0x20, 0x01, 0x0d, 0xb8, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+            0x00, 0x01, 0x00, 0x50, // [2001:db8::1]:80
         ];
         let (addr, len) = JuicityAddress::parse_from_bytes(&bytes).unwrap();
         match addr {
             JuicityAddress::Ipv6(ip, port) => {
-                assert_eq!(ip, IpAddr::V6(Ipv6Addr::new(0x2001, 0x0db8, 0, 0, 0, 0, 0, 0x0001)));
+                assert_eq!(
+                    ip,
+                    IpAddr::V6(Ipv6Addr::new(0x2001, 0x0db8, 0, 0, 0, 0, 0, 0x0001))
+                );
                 assert_eq!(port, 80);
             }
             _ => panic!("Expected Ipv6"),
@@ -454,12 +469,16 @@ mod tests {
         let addr = JuicityAddress::Domain("example.com".to_string(), 80);
         let bytes = addr.to_bytes();
         // 1 byte type + 1 byte length + 11 bytes domain + 2 bytes port = 15 bytes
-        assert_eq!(bytes, vec![
-            0x02,       // ATYP_DOMAIN
-            0x0b,       // length (11 chars for "example.com")
-            b'e', b'x', b'a', b'm', b'p', b'l', b'e', b'.', b'c', b'o', b'm',  // "example.com"
-            0x00, 0x50  // port = 80
-        ]);
+        assert_eq!(
+            bytes,
+            vec![
+                0x02, // ATYP_DOMAIN
+                0x0b, // length (11 chars for "example.com")
+                b'e', b'x', b'a', b'm', b'p', b'l', b'e', b'.', b'c', b'o',
+                b'm', // "example.com"
+                0x00, 0x50 // port = 80
+            ]
+        );
     }
 
     #[test]

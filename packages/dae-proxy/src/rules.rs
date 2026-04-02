@@ -55,7 +55,9 @@ impl DomainRuleType {
         let domain_lower = domain.to_lowercase();
         match self {
             DomainRuleType::Exact(d) => domain_lower == *d,
-            DomainRuleType::Suffix(suffix) => domain_lower.ends_with(suffix) || domain_lower == suffix.trim_start_matches('.'),
+            DomainRuleType::Suffix(suffix) => {
+                domain_lower.ends_with(suffix) || domain_lower == suffix.trim_start_matches('.')
+            }
             DomainRuleType::Keyword(keyword) => domain_lower.contains(keyword),
         }
     }
@@ -280,7 +282,9 @@ impl DnsTypeRule {
     pub fn new(types: &[&str]) -> Result<Self, String> {
         let query_types: Result<Vec<_>, _> = types
             .iter()
-            .map(|s| DnsQueryType::from_str(s).ok_or_else(|| format!("Unknown DNS query type: {s}")))
+            .map(|s| {
+                DnsQueryType::from_str(s).ok_or_else(|| format!("Unknown DNS query type: {s}"))
+            })
             .collect();
 
         Ok(Self {
@@ -329,7 +333,12 @@ pub enum Rule {
 
 impl Rule {
     /// Create a rule from type string and value
-    pub fn new(rule_type_str: &str, value: &str, action: RuleMatchAction, priority: u32) -> Result<RuleWithAction, String> {
+    pub fn new(
+        rule_type_str: &str,
+        value: &str,
+        action: RuleMatchAction,
+        priority: u32,
+    ) -> Result<RuleWithAction, String> {
         let rule = match rule_type_str.to_lowercase().as_str() {
             "domain" => Rule::Domain(DomainRule::new(value)),
             "domain-suffix" => {
@@ -350,7 +359,11 @@ impl Rule {
             _ => return Err(format!("Unknown rule type: {rule_type_str}")),
         };
 
-        Ok(RuleWithAction { rule, action, priority })
+        Ok(RuleWithAction {
+            rule,
+            action,
+            priority,
+        })
     }
 
     /// Check if this rule matches the given packet info
@@ -494,10 +507,10 @@ mod tests {
     #[test]
     fn test_ip_cidr_rule_v4() {
         let rule = IpCidrRule::new("10.0.0.0/8").unwrap();
-        
+
         let ip1: IpAddr = Ipv4Addr::new(10, 0, 0, 1).into();
         let ip2: IpAddr = Ipv4Addr::new(192, 168, 0, 1).into();
-        
+
         assert!(rule.matches_ip(&ip1));
         assert!(!rule.matches_ip(&ip2));
     }
@@ -505,10 +518,10 @@ mod tests {
     #[test]
     fn test_ip_cidr_rule_exclude() {
         let rule = IpCidrRule::new("!10.0.0.0/8").unwrap();
-        
+
         let ip1: IpAddr = Ipv4Addr::new(10, 0, 0, 1).into();
         let ip2: IpAddr = Ipv4Addr::new(192, 168, 0, 1).into();
-        
+
         assert!(!rule.matches_ip(&ip1));
         assert!(rule.matches_ip(&ip2));
     }

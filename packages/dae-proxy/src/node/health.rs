@@ -6,7 +6,7 @@
 use std::sync::Arc;
 use std::time::Duration;
 
-use super::node::{Node, NodeId, NodeError};
+use super::node::{Node, NodeError, NodeId};
 
 /// Health check result
 #[derive(Debug, Clone)]
@@ -54,16 +54,16 @@ impl HealthChecker {
     pub fn new(config: HealthCheckerConfig) -> Self {
         Self { config }
     }
-    
+
     /// Create a HealthChecker with default configuration
     pub fn default() -> Self {
         Self::new(HealthCheckerConfig::default())
     }
-    
+
     /// Check the health of a single node
     pub async fn check_node(node: &Arc<dyn Node>) -> HealthCheckResult {
         let node_id = node.id().clone();
-        
+
         match node.ping().await {
             Ok(latency) => HealthCheckResult {
                 node_id,
@@ -79,16 +79,14 @@ impl HealthChecker {
             },
         }
     }
-    
+
     /// Check health of multiple nodes concurrently
     pub async fn check_nodes(nodes: &[Arc<dyn Node>]) -> Vec<HealthCheckResult> {
-        let futures: Vec<_> = nodes.iter()
-            .map(Self::check_node)
-            .collect();
-        
+        let futures: Vec<_> = nodes.iter().map(Self::check_node).collect();
+
         futures::future::join_all(futures).await
     }
-    
+
     /// Get the configuration
     pub fn config(&self) -> &HealthCheckerConfig {
         &self.config
@@ -113,9 +111,15 @@ mod tests {
 
     #[async_trait]
     impl Node for TestNode {
-        fn id(&self) -> &NodeId { &self.id }
-        fn name(&self) -> &str { "Test" }
-        fn protocol(&self) -> &'static str { "test" }
+        fn id(&self) -> &NodeId {
+            &self.id
+        }
+        fn name(&self) -> &str {
+            "Test"
+        }
+        fn protocol(&self) -> &'static str {
+            "test"
+        }
         async fn ping(&self) -> Result<u32, NodeError> {
             if self.should_fail {
                 Err(NodeError::Timeout)
@@ -123,7 +127,9 @@ mod tests {
                 Ok(50)
             }
         }
-        async fn is_available(&self) -> bool { !self.should_fail }
+        async fn is_available(&self) -> bool {
+            !self.should_fail
+        }
     }
 
     #[tokio::test]
@@ -132,7 +138,7 @@ mod tests {
             id: "test1".into(),
             should_fail: false,
         });
-        
+
         let result = HealthChecker::check_node(&node).await;
         assert!(result.is_healthy);
         assert_eq!(result.latency_ms, Some(50));
@@ -144,7 +150,7 @@ mod tests {
             id: "test2".into(),
             should_fail: true,
         });
-        
+
         let result = HealthChecker::check_node(&node).await;
         assert!(!result.is_healthy);
         assert!(result.error.is_some());

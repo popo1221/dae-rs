@@ -60,7 +60,9 @@ impl TrojanTargetAddress {
                 if payload.len() < 7 {
                     return None;
                 }
-                let ip = IpAddr::V4(Ipv4Addr::new(payload[1], payload[2], payload[3], payload[4]));
+                let ip = IpAddr::V4(Ipv4Addr::new(
+                    payload[1], payload[2], payload[3], payload[4],
+                ));
                 let port = u16::from_be_bytes([payload[5], payload[6]]);
                 Some((TrojanTargetAddress::Ipv4(ip), port))
             }
@@ -73,8 +75,8 @@ impl TrojanTargetAddress {
                 if payload.len() < 4 + domain_len {
                     return None;
                 }
-                let domain = String::from_utf8(payload[2..2+domain_len].to_vec()).ok()?;
-                let port = u16::from_be_bytes([payload[2+domain_len], payload[3+domain_len]]);
+                let domain = String::from_utf8(payload[2..2 + domain_len].to_vec()).ok()?;
+                let port = u16::from_be_bytes([payload[2 + domain_len], payload[3 + domain_len]]);
                 Some((TrojanTargetAddress::Domain(domain, port), port))
             }
             0x03 => {
@@ -150,7 +152,7 @@ mod tests {
     #[test]
     fn test_target_address_parse_ipv4() {
         let payload = [
-            0x01, 192, 168, 1, 1, 0x1F, 0x90  // 192.168.1.1:8080
+            0x01, 192, 168, 1, 1, 0x1F, 0x90, // 192.168.1.1:8080
         ];
         let result = TrojanTargetAddress::parse_from_bytes(&payload);
         assert!(result.is_some());
@@ -168,10 +170,10 @@ mod tests {
     fn test_target_address_parse_domain() {
         // Domain format: ATYP(1) + LEN(1) + DOMAIN(LEN) + PORT(2)
         let payload = [
-            0x02,       // ATYP_DOMAIN
-            0x0b,       // domain length = 11
-            b'e', b'x', b'a', b'm', b'p', b'l', b'e', b'.', b'c', b'o', b'm',  // "example.com"
-            0x00, 0x50  // port = 80
+            0x02, // ATYP_DOMAIN
+            0x0b, // domain length = 11
+            b'e', b'x', b'a', b'm', b'p', b'l', b'e', b'.', b'c', b'o', b'm', // "example.com"
+            0x00, 0x50, // port = 80
         ];
         let result = TrojanTargetAddress::parse_from_bytes(&payload);
         assert!(result.is_some());

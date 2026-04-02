@@ -56,13 +56,17 @@ pub fn inc_connection() {
 /// Increment bytes sent
 #[inline]
 pub fn inc_bytes_sent(transport: &str, bytes: u64) {
-    BYTES_SENT_COUNTER.with_label_values(&[transport]).inc_by(bytes);
+    BYTES_SENT_COUNTER
+        .with_label_values(&[transport])
+        .inc_by(bytes);
 }
 
 /// Increment bytes received
 #[inline]
 pub fn inc_bytes_received(transport: &str, bytes: u64) {
-    BYTES_RECEIVED_COUNTER.with_label_values(&[transport]).inc_by(bytes);
+    BYTES_RECEIVED_COUNTER
+        .with_label_values(&[transport])
+        .inc_by(bytes);
 }
 
 /// Increment rule match counter

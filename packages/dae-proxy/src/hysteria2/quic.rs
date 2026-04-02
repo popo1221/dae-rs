@@ -50,8 +50,7 @@ impl Default for QuicConfig {
 }
 
 /// Congestion control algorithms supported by QUIC
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-#[derive(Default)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub enum CongestionControl {
     /// CUBIC (Linux default)
     Cubic,
@@ -63,7 +62,6 @@ pub enum CongestionControl {
     /// New Reno
     NewReno,
 }
-
 
 /// QUIC connection state
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -112,32 +110,32 @@ impl QuicStream {
             state: QuicState::Connecting,
         }
     }
-    
+
     /// Get stream ID
     pub fn stream_id(&self) -> u64 {
         self.stream_id
     }
-    
+
     /// Check if stream is bidirectional
     pub fn is_bidirectional(&self) -> bool {
         (self.stream_id & 0x03) == 0x00
     }
-    
+
     /// Check if stream is localInitiated
     pub fn is_local_initiated(&self) -> bool {
         (self.stream_id & 0x01) == 0x01
     }
-    
+
     /// Get local address
     pub fn local_addr(&self) -> SocketAddr {
         self.local_addr
     }
-    
+
     /// Get remote address
     pub fn remote_addr(&self) -> SocketAddr {
         self.remote_addr
     }
-    
+
     /// Get connection state
     pub fn state(&self) -> QuicState {
         self.state
@@ -158,24 +156,25 @@ impl QuicEndpoint {
     pub fn new(config: QuicConfig) -> Self {
         Self { config }
     }
-    
+
     /// Connect to a remote server
-    pub async fn connect(
-        &self,
-        _remote_addr: SocketAddr,
-    ) -> Result<QuicConnection, QuicError> {
+    pub async fn connect(&self, _remote_addr: SocketAddr) -> Result<QuicConnection, QuicError> {
         // Placeholder - full implementation would use quinn::Endpoint::connect()
         warn!("QUIC connect not fully implemented - requires quinn integration");
-        Err(QuicError::NotImplemented("QUIC connect requires quinn integration".to_string()))
+        Err(QuicError::NotImplemented(
+            "QUIC connect requires quinn integration".to_string(),
+        ))
     }
-    
+
     /// Accept an incoming connection
     pub async fn accept(&self) -> Result<QuicConnection, QuicError> {
         // Placeholder - full implementation would use quinn::Endpoint::accept()
         warn!("QUIC accept not fully implemented - requires quinn integration");
-        Err(QuicError::NotImplemented("QUIC accept requires quinn integration".to_string()))
+        Err(QuicError::NotImplemented(
+            "QUIC accept requires quinn integration".to_string(),
+        ))
     }
-    
+
     /// Bind to a local address for UDP
     pub async fn bind(&self, _local_addr: SocketAddr) -> Result<(), QuicError> {
         // Placeholder
@@ -204,31 +203,31 @@ impl QuicConnection {
             local_addr,
             remote_addr,
             max_stream_data: 1024 * 1024, // 1MB
-            max_data: 10 * 1024 * 1024,    // 10MB
+            max_data: 10 * 1024 * 1024,   // 10MB
         }
     }
-    
+
     /// Get connection state
     pub fn state(&self) -> QuicState {
         self.state
     }
-    
+
     /// Get local address
     pub fn local_addr(&self) -> SocketAddr {
         self.local_addr
     }
-    
+
     /// Get remote address
     pub fn remote_addr(&self) -> SocketAddr {
         self.remote_addr
     }
-    
+
     /// Open a new bidirectional stream
     pub async fn open_stream(&self) -> Result<QuicStream, QuicError> {
         if self.state != QuicState::Connected {
             return Err(QuicError::NotConnected);
         }
-        
+
         let stream_id = rand::random();
         Ok(QuicStream::new(
             stream_id,
@@ -236,13 +235,13 @@ impl QuicConnection {
             self.remote_addr,
         ))
     }
-    
+
     /// Accept an incoming stream
     pub async fn accept_stream(&self) -> Result<QuicStream, QuicError> {
         if self.state != QuicState::Connected {
             return Err(QuicError::NotConnected);
         }
-        
+
         // Placeholder - would get actual stream from quinn
         let stream_id = rand::random();
         Ok(QuicStream::new(
@@ -251,7 +250,7 @@ impl QuicConnection {
             self.local_addr,
         ))
     }
-    
+
     /// Close the connection
     pub async fn close(&mut self) {
         self.state = QuicState::Closing;
@@ -265,22 +264,22 @@ impl QuicConnection {
 pub enum QuicError {
     #[error("Connection failed: {0}")]
     ConnectionFailed(String),
-    
+
     #[error("Stream error: {0}")]
     StreamError(String),
-    
+
     #[error("Protocol error: {0}")]
     Protocol(String),
-    
+
     #[error("Timeout: {0}")]
     Timeout(String),
-    
+
     #[error("Not connected")]
     NotConnected,
-    
+
     #[error("Not implemented: {0}")]
     NotImplemented(String),
-    
+
     #[error("IO error: {0}")]
     Io(#[from] std::io::Error),
 }
@@ -297,34 +296,34 @@ impl QuicUdpSocket {
     pub async fn from_socket(socket: UdpSocket) -> Result<Self, QuicError> {
         Ok(Self { socket })
     }
-    
+
     /// Bind to a local address
     pub async fn bind(addr: SocketAddr) -> Result<Self, QuicError> {
         let socket = UdpSocket::bind(addr).await?;
         Ok(Self { socket })
     }
-    
+
     /// Connect to a remote address
     pub async fn connect(&self, addr: SocketAddr) -> Result<(), QuicError> {
         self.socket.connect(addr).await?;
         Ok(())
     }
-    
+
     /// Send data to the connected remote address
     pub async fn send(&self, data: &[u8]) -> Result<usize, QuicError> {
         Ok(self.socket.send(data).await?)
     }
-    
+
     /// Receive data from any source
     pub async fn recv(&self, buf: &mut [u8]) -> Result<usize, QuicError> {
         Ok(self.socket.recv(buf).await?)
     }
-    
+
     /// Get local address
     pub fn local_addr(&self) -> Result<SocketAddr, QuicError> {
         Ok(self.socket.local_addr()?)
     }
-    
+
     /// Get peer address
     pub fn peer_addr(&self) -> Result<SocketAddr, QuicError> {
         Ok(self.socket.peer_addr()?)
@@ -348,9 +347,9 @@ mod tests {
     fn test_quic_stream_properties() {
         let local = SocketAddr::new(IpAddr::V4(Ipv4Addr::LOCALHOST), 12345);
         let remote = SocketAddr::new(IpAddr::V4(Ipv4Addr::LOCALHOST), 8080);
-        
+
         let stream = QuicStream::new(0, local, remote);
-        
+
         assert_eq!(stream.local_addr(), local);
         assert_eq!(stream.remote_addr(), remote);
         assert!(stream.is_bidirectional());
@@ -360,9 +359,9 @@ mod tests {
     fn test_quic_connection_state() {
         let local = SocketAddr::new(IpAddr::V4(Ipv4Addr::LOCALHOST), 12345);
         let remote = SocketAddr::new(IpAddr::V4(Ipv4Addr::LOCALHOST), 8080);
-        
+
         let conn = QuicConnection::new(local, remote);
-        
+
         assert_eq!(conn.state(), QuicState::Connecting);
     }
 }

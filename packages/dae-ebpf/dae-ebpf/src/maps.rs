@@ -19,9 +19,7 @@ pub struct MapManager {
 impl MapManager {
     /// Create a new map manager
     pub fn new() -> Self {
-        Self {
-            initialized: false,
-        }
+        Self { initialized: false }
     }
 
     /// Initialize map handles from loaded eBPF instance
@@ -31,20 +29,18 @@ impl MapManager {
         debug!("Initializing eBPF map handles");
 
         // Verify config map exists
-        let _ = ebpf.map("CONFIG")
-            .context("Failed to find CONFIG map")?;
+        let _ = ebpf.map("CONFIG").context("Failed to find CONFIG map")?;
 
         // Verify session map exists
-        let _ = ebpf.map("SESSIONS")
+        let _ = ebpf
+            .map("SESSIONS")
             .context("Failed to find SESSIONS map")?;
 
         // Verify routing map exists
-        let _ = ebpf.map("ROUTING")
-            .context("Failed to find ROUTING map")?;
+        let _ = ebpf.map("ROUTING").context("Failed to find ROUTING map")?;
 
         // Verify stats map exists
-        let _ = ebpf.map("STATS")
-            .context("Failed to find STATS map")?;
+        let _ = ebpf.map("STATS").context("Failed to find STATS map")?;
 
         self.initialized = true;
         info!("eBPF maps initialized successfully");

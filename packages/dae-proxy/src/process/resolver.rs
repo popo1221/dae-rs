@@ -4,10 +4,9 @@
 //! /proc filesystem. It can get process names, paths, and find processes by
 //! network connections.
 
-use std::path::PathBuf;
-use std::io::{BufRead, BufReader};
 use std::fs::File;
-
+use std::io::{BufRead, BufReader};
+use std::path::PathBuf;
 
 /// Maximum process name length (TASK_COMM_LEN in kernel)
 pub const TASK_COMM_LEN: usize = 16;
@@ -47,18 +46,20 @@ impl ProcessResolver {
         let file = File::open(&path).ok()?;
         let reader = BufReader::new(file);
         let mut args = Vec::new();
-        
+
         for line in reader.split(0u8) {
             if let Ok(bytes) = line {
                 if bytes.is_empty() {
                     break;
                 }
                 // cmdline uses null bytes as separators
-                let arg = String::from_utf8_lossy(&bytes).trim_end_matches('\0').to_string();
+                let arg = String::from_utf8_lossy(&bytes)
+                    .trim_end_matches('\0')
+                    .to_string();
                 args.push(arg);
             }
         }
-        
+
         if args.is_empty() {
             None
         } else {
@@ -70,19 +71,17 @@ impl ProcessResolver {
     pub fn get_process_info(pid: u32) -> Option<ProcessInfo> {
         let name = Self::get_process_name(pid)?;
         let mut info = ProcessInfo::new(pid, name);
-        
+
         if let Some(path) = Self::get_process_path(pid) {
             info = info.with_path(path);
         }
-        
+
         if let Some(cmdline) = Self::get_process_cmdline(pid) {
             info = info.with_cmdline(cmdline);
         }
-        
+
         Some(info)
     }
-
-
 
     /// List all processes with their names
     ///
@@ -95,9 +94,7 @@ impl ProcessResolver {
                 (pid, name)
             })
             .take_while(|(pid, _)| *pid < 65536) // Cap at reasonable PID max
-            .filter_map(|(pid, name): (u32, Option<String>)| {
-                name.map(|n| (pid, n))
-            })
+            .filter_map(|(pid, name): (u32, Option<String>)| name.map(|n| (pid, n)))
     }
 
     /// Check if a PID exists
@@ -156,7 +153,7 @@ mod tests {
         // Current process exists
         let pid = std::process::id();
         assert!(ProcessResolver::pid_exists(pid));
-        
+
         // Non-existent PID
         assert!(!ProcessResolver::pid_exists(0));
         assert!(!ProcessResolver::pid_exists(u32::MAX));
@@ -167,7 +164,7 @@ mod tests {
         let pid = std::process::id();
         let info = ProcessResolver::get_process_info(pid);
         assert!(info.is_some());
-        
+
         if let Some(info) = info {
             assert_eq!(info.pid, pid);
             assert!(!info.name.is_empty());
@@ -180,14 +177,21 @@ mod tests {
         // Take a larger sample of processes
         let processes: Vec<_> = ProcessResolver::list_processes().take(100).collect();
         println!("Found {} processes (sample)", processes.len());
-        
+
         // We should have found some processes (at least PID 1 which is usually init/systemd)
         assert!(!processes.is_empty(), "Should find at least some processes");
-        
+
         // Current process name should be resolvable
         let current_pid = std::process::id();
         let current_name = ProcessResolver::get_process_name(current_pid);
-        assert!(current_name.is_some(), "Should be able to get current process name");
-        println!("Current process (PID {}): {}", current_pid, current_name.unwrap());
+        assert!(
+            current_name.is_some(),
+            "Should be able to get current process name"
+        );
+        println!(
+            "Current process (PID {}): {}",
+            current_pid,
+            current_name.unwrap()
+        );
     }
 }

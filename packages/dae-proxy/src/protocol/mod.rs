@@ -5,8 +5,8 @@
 //! Each protocol implementation (SOCKS5, HTTP, Shadowsocks, VLESS, VMess, Trojan, etc.)
 //! must implement the [`ProtocolHandler`] trait.
 
-use async_trait::async_trait;
 use crate::core::{Context, Result as ProxyResult};
+use async_trait::async_trait;
 
 /// Protocol handler trait - all protocol implementations must implement this trait
 ///
@@ -18,16 +18,10 @@ pub trait ProtocolHandler: Send + Sync {
     fn name(&self) -> &'static str;
 
     /// Handle inbound connection (client -> proxy)
-    async fn handle_inbound(
-        &self,
-        ctx: &mut Context,
-    ) -> ProxyResult<()>;
+    async fn handle_inbound(&self, ctx: &mut Context) -> ProxyResult<()>;
 
     /// Handle outbound connection (proxy -> remote)
-    async fn handle_outbound(
-        &self,
-        ctx: &mut Context,
-    ) -> ProxyResult<()>;
+    async fn handle_outbound(&self, ctx: &mut Context) -> ProxyResult<()>;
 }
 
 /// Protocol types supported by the proxy
@@ -115,9 +109,9 @@ pub mod unified_handler;
 pub use simple_handler::{Handler, HandlerConfig, HandlerStats, HandlerStatsExt};
 
 // Protocol submodules for future expansion
-pub mod socks5;
 pub mod http;
 pub mod shadowsocks;
+pub mod socks5;
 pub mod vless;
 
 #[cfg(test)]
@@ -139,7 +133,10 @@ mod tests {
         assert_eq!(ProtocolType::from_str("socks5"), Some(ProtocolType::Socks5));
         assert_eq!(ProtocolType::from_str("SOCKS5"), Some(ProtocolType::Socks5));
         assert_eq!(ProtocolType::from_str("http"), Some(ProtocolType::Http));
-        assert_eq!(ProtocolType::from_str("ss"), Some(ProtocolType::Shadowsocks));
+        assert_eq!(
+            ProtocolType::from_str("ss"),
+            Some(ProtocolType::Shadowsocks)
+        );
         assert_eq!(ProtocolType::from_str("vless"), Some(ProtocolType::Vless));
         assert_eq!(ProtocolType::from_str("unknown"), None);
     }

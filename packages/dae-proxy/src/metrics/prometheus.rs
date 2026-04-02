@@ -71,32 +71,64 @@ impl MetricsServer {
     pub fn register_all(&self) -> Result<(), MetricsError> {
         // Import the register functions from sibling modules
         // These register with the local registry
-        use crate::metrics::counter::{CONNECTION_COUNTER, BYTES_SENT_COUNTER, BYTES_RECEIVED_COUNTER, RULE_MATCH_COUNTER, DNS_RESOLUTION_COUNTER, ERROR_COUNTER, NODE_LATENCY_TEST_COUNTER};
-        use crate::metrics::gauge::{ACTIVE_CONNECTIONS_GAUGE, ACTIVE_TCP_CONNECTIONS_GAUGE, ACTIVE_UDP_CONNECTIONS_GAUGE, CONNECTION_POOL_SIZE_GAUGE, NODE_COUNT_GAUGE, NODE_LATENCY_GAUGE, MEMORY_USAGE_GAUGE, EBPF_MAP_ENTRIES_GAUGE};
-        use crate::metrics::histogram::{CONNECTION_DURATION_HISTOGRAM, REQUEST_SIZE_HISTOGRAM, RESPONSE_TIME_HISTOGRAM, DNS_RESOLUTION_LATENCY_HISTOGRAM, EBPF_LATENCY_HISTOGRAM, RULE_MATCH_LATENCY_HISTOGRAM, NODE_LATENCY_HISTOGRAM};
+        use crate::metrics::counter::{
+            BYTES_RECEIVED_COUNTER, BYTES_SENT_COUNTER, CONNECTION_COUNTER, DNS_RESOLUTION_COUNTER,
+            ERROR_COUNTER, NODE_LATENCY_TEST_COUNTER, RULE_MATCH_COUNTER,
+        };
+        use crate::metrics::gauge::{
+            ACTIVE_CONNECTIONS_GAUGE, ACTIVE_TCP_CONNECTIONS_GAUGE, ACTIVE_UDP_CONNECTIONS_GAUGE,
+            CONNECTION_POOL_SIZE_GAUGE, EBPF_MAP_ENTRIES_GAUGE, MEMORY_USAGE_GAUGE,
+            NODE_COUNT_GAUGE, NODE_LATENCY_GAUGE,
+        };
+        use crate::metrics::histogram::{
+            CONNECTION_DURATION_HISTOGRAM, DNS_RESOLUTION_LATENCY_HISTOGRAM,
+            EBPF_LATENCY_HISTOGRAM, NODE_LATENCY_HISTOGRAM, REQUEST_SIZE_HISTOGRAM,
+            RESPONSE_TIME_HISTOGRAM, RULE_MATCH_LATENCY_HISTOGRAM,
+        };
 
-        self.registry.register(Box::new(CONNECTION_COUNTER.clone()))?;
-        self.registry.register(Box::new((*BYTES_SENT_COUNTER).clone()))?;
-        self.registry.register(Box::new((*BYTES_RECEIVED_COUNTER).clone()))?;
-        self.registry.register(Box::new((*RULE_MATCH_COUNTER).clone()))?;
-        self.registry.register(Box::new((*DNS_RESOLUTION_COUNTER).clone()))?;
+        self.registry
+            .register(Box::new(CONNECTION_COUNTER.clone()))?;
+        self.registry
+            .register(Box::new((*BYTES_SENT_COUNTER).clone()))?;
+        self.registry
+            .register(Box::new((*BYTES_RECEIVED_COUNTER).clone()))?;
+        self.registry
+            .register(Box::new((*RULE_MATCH_COUNTER).clone()))?;
+        self.registry
+            .register(Box::new((*DNS_RESOLUTION_COUNTER).clone()))?;
         self.registry.register(Box::new((*ERROR_COUNTER).clone()))?;
-        self.registry.register(Box::new(NODE_LATENCY_TEST_COUNTER.clone()))?;
-        self.registry.register(Box::new(ACTIVE_CONNECTIONS_GAUGE.clone()))?;
-        self.registry.register(Box::new(ACTIVE_TCP_CONNECTIONS_GAUGE.clone()))?;
-        self.registry.register(Box::new(ACTIVE_UDP_CONNECTIONS_GAUGE.clone()))?;
-        self.registry.register(Box::new(CONNECTION_POOL_SIZE_GAUGE.clone()))?;
-        self.registry.register(Box::new((*NODE_COUNT_GAUGE).clone()))?;
-        self.registry.register(Box::new((*NODE_LATENCY_GAUGE).clone()))?;
-        self.registry.register(Box::new(MEMORY_USAGE_GAUGE.clone()))?;
-        self.registry.register(Box::new((*EBPF_MAP_ENTRIES_GAUGE).clone()))?;
-        self.registry.register(Box::new((*CONNECTION_DURATION_HISTOGRAM).clone()))?;
-        self.registry.register(Box::new((*REQUEST_SIZE_HISTOGRAM).clone()))?;
-        self.registry.register(Box::new((*RESPONSE_TIME_HISTOGRAM).clone()))?;
-        self.registry.register(Box::new(DNS_RESOLUTION_LATENCY_HISTOGRAM.clone()))?;
-        self.registry.register(Box::new((*EBPF_LATENCY_HISTOGRAM).clone()))?;
-        self.registry.register(Box::new(RULE_MATCH_LATENCY_HISTOGRAM.clone()))?;
-        self.registry.register(Box::new((*NODE_LATENCY_HISTOGRAM).clone()))?;
+        self.registry
+            .register(Box::new(NODE_LATENCY_TEST_COUNTER.clone()))?;
+        self.registry
+            .register(Box::new(ACTIVE_CONNECTIONS_GAUGE.clone()))?;
+        self.registry
+            .register(Box::new(ACTIVE_TCP_CONNECTIONS_GAUGE.clone()))?;
+        self.registry
+            .register(Box::new(ACTIVE_UDP_CONNECTIONS_GAUGE.clone()))?;
+        self.registry
+            .register(Box::new(CONNECTION_POOL_SIZE_GAUGE.clone()))?;
+        self.registry
+            .register(Box::new((*NODE_COUNT_GAUGE).clone()))?;
+        self.registry
+            .register(Box::new((*NODE_LATENCY_GAUGE).clone()))?;
+        self.registry
+            .register(Box::new(MEMORY_USAGE_GAUGE.clone()))?;
+        self.registry
+            .register(Box::new((*EBPF_MAP_ENTRIES_GAUGE).clone()))?;
+        self.registry
+            .register(Box::new((*CONNECTION_DURATION_HISTOGRAM).clone()))?;
+        self.registry
+            .register(Box::new((*REQUEST_SIZE_HISTOGRAM).clone()))?;
+        self.registry
+            .register(Box::new((*RESPONSE_TIME_HISTOGRAM).clone()))?;
+        self.registry
+            .register(Box::new(DNS_RESOLUTION_LATENCY_HISTOGRAM.clone()))?;
+        self.registry
+            .register(Box::new((*EBPF_LATENCY_HISTOGRAM).clone()))?;
+        self.registry
+            .register(Box::new(RULE_MATCH_LATENCY_HISTOGRAM.clone()))?;
+        self.registry
+            .register(Box::new((*NODE_LATENCY_HISTOGRAM).clone()))?;
 
         Ok(())
     }
@@ -146,9 +178,10 @@ async fn metrics_handler(State(state): State<MetricsState>) -> Response<Body> {
     match encoder.encode(&metric_families, &mut buffer) {
         Ok(()) => {
             let mut response = Response::new(Body::from(buffer));
-            response
-                .headers_mut()
-                .insert("Content-Type", HeaderValue::from_static("text/plain; version=0.0.4; charset=utf-8"));
+            response.headers_mut().insert(
+                "Content-Type",
+                HeaderValue::from_static("text/plain; version=0.0.4; charset=utf-8"),
+            );
             response
         }
         Err(e) => {
@@ -165,8 +198,7 @@ async fn health_handler() -> StatusCode {
 }
 
 /// Global metrics server handle for standalone use
-static METRICS_SERVER: std::sync::RwLock<Option<MetricsServer>> =
-    std::sync::RwLock::new(None);
+static METRICS_SERVER: std::sync::RwLock<Option<MetricsServer>> = std::sync::RwLock::new(None);
 
 /// Start the global metrics server
 pub async fn start_metrics_server(port: u16) -> Result<(), MetricsError> {
@@ -245,7 +277,7 @@ mod tests {
 
     #[test]
     fn test_gauge_inc_dec() {
-        use crate::metrics::gauge::{inc_active_connections, dec_active_connections};
+        use crate::metrics::gauge::{dec_active_connections, inc_active_connections};
         inc_active_connections();
         inc_active_connections();
         dec_active_connections();
@@ -294,5 +326,4 @@ mod tests {
         let response = metrics_handler(State(state)).await;
         assert_eq!(response.status(), StatusCode::OK);
     }
-
 }

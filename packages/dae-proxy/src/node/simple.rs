@@ -8,14 +8,14 @@ use std::sync::Arc;
 use std::time::{Duration, Instant};
 
 use async_trait::async_trait;
+use std::collections::HashMap;
 use tokio::net::TcpStream;
 use tokio::sync::RwLock;
-use std::collections::HashMap;
 
-use super::node::{Node, NodeError, NodeId};
+use super::health::{HealthCheckResult, HealthChecker, HealthCheckerConfig};
 use super::manager::{NodeManager, SelectionPolicy};
-use super::selector::{NodeSelector, DefaultNodeSelector};
-use super::health::{HealthChecker, HealthCheckResult, HealthCheckerConfig};
+use super::node::{Node, NodeError, NodeId};
+use super::selector::{DefaultNodeSelector, NodeSelector};
 
 // ============================================================================
 // SimpleNode - Basic node implementation
@@ -106,18 +106,14 @@ impl Node for SimpleNode {
     /// Ping the node by attempting a TCP connection and measuring time
     async fn ping(&self) -> Result<u32, NodeError> {
         let start = Instant::now();
-        
+
         match tokio::time::timeout(self.timeout, TcpStream::connect(self.address)).await {
             Ok(Ok(_)) => {
                 let elapsed = start.elapsed().as_millis() as u32;
                 Ok(elapsed)
             }
-            Ok(Err(e)) => {
-                Err(NodeError::ConnectionFailed(e.to_string()))
-            }
-            Err(_) => {
-                Err(NodeError::Timeout)
-            }
+            Ok(Err(e)) => Err(NodeError::ConnectionFailed(e.to_string())),
+            Err(_) => Err(NodeError::Timeout),
         }
     }
 
@@ -180,7 +176,7 @@ impl SimpleNodeManager {
         let node_id = node.id().clone();
         let mut nodes = self.nodes.write().await;
         nodes.insert(node_id.clone(), node);
-        
+
         // Initialize health state as healthy
         let mut health_states = self.health_states.write().await;
         health_states.insert(node_id, true);
@@ -190,10 +186,10 @@ impl SimpleNodeManager {
     pub async fn remove_node(&self, id: &NodeId) {
         let mut nodes = self.nodes.write().await;
         nodes.remove(id);
-        
+
         let mut latencies = self.latencies.write().await;
         latencies.remove(id);
-        
+
         let mut health_states = self.health_states.write().await;
         health_states.remove(id);
     }
@@ -220,7 +216,7 @@ impl SimpleNodeManager {
         drop(nodes);
 
         let results = HealthChecker::check_nodes(&node_list).await;
-        
+
         // Update health states
         let mut health_states = self.health_states.write().await;
         for result in &results {
@@ -268,11 +264,10 @@ impl NodeManager for SimpleNodeManager {
 
     async fn available_nodes(&self) -> Vec<Arc<dyn Node>> {
         let nodes: Vec<Arc<dyn Node>> = self.nodes.read().await.values().cloned().collect();
-        let availability = futures::future::join_all(
-            nodes.iter().map(|n| n.is_available())
-        ).await;
-        
-        nodes.into_iter()
+        let availability = futures::future::join_all(nodes.iter().map(|n| n.is_available())).await;
+
+        nodes
+            .into_iter()
             .zip(availability)
             .filter(|(_, available)| *available)
             .map(|(node, _)| node)
@@ -394,19 +389,19 @@ impl LatencyMonitor {
     /// interval and logging the results.
     pub async fn start(self) {
         tracing::info!("Starting latency monitor with interval {:?}", self.interval);
-        
+
         let mut interval_timer = tokio::time::interval(self.interval);
-        
+
         loop {
             interval_timer.tick().await;
-            
+
             let results = self.node_manager.run_latency_test().await;
-            
+
             if results.is_empty() {
                 tracing::debug!("Latency test: no nodes registered");
             } else {
                 tracing::debug!("Latency test completed: {} nodes tested", results.len());
-                
+
                 for (node_id, latency) in &results {
                     tracing::trace!("Node {} latency: {}ms", node_id, latency);
                 }
@@ -448,10 +443,10 @@ mod tests {
         // Create a node pointing to localhost (should fail or succeed depending on availability)
         let addr: SocketAddr = "127.0.0.1:1".parse().unwrap();
         let node = SimpleNode::new("test-node", "Test Node", "tcp", addr);
-        
+
         // This will likely timeout or connection refused since port 1 is unlikely open
         let result = node.ping().await;
-        
+
         // We just verify ping doesn't panic
         assert!(result.is_err() || result.is_ok());
     }
@@ -459,17 +454,17 @@ mod tests {
     #[tokio::test]
     async fn test_simple_node_manager_add_remove() {
         let manager = SimpleNodeManager::new();
-        
+
         let addr: SocketAddr = "127.0.0.1:8080".parse().unwrap();
         let node: Arc<dyn Node> = Arc::new(SimpleNode::new("node1", "Node 1", "tcp", addr));
-        
+
         manager.add_node(node.clone()).await;
-        
+
         assert_eq!(manager.node_count().await, 1);
         assert!(manager.contains_node(&"node1".to_string()).await);
-        
+
         manager.remove_node(&"node1".to_string()).await;
-        
+
         assert_eq!(manager.node_count().await, 0);
         assert!(!manager.contains_node(&"node1".to_string()).await);
     }
@@ -479,7 +474,7 @@ mod tests {
         let result = LatencyTestResult::success("node1".to_string(), 100);
         assert!(result.success);
         assert_eq!(result.latency_ms, 100);
-        
+
         let failure = LatencyTestResult::failure("node2".to_string());
         assert!(!failure.success);
         assert_eq!(failure.latency_ms, 0);
@@ -488,24 +483,24 @@ mod tests {
     #[tokio::test]
     async fn test_selection_policy_round_robin() {
         let manager = SimpleNodeManager::new();
-        
+
         let addr1: SocketAddr = "127.0.0.1:8080".parse().unwrap();
         let addr2: SocketAddr = "127.0.0.1:8081".parse().unwrap();
-        
+
         let node1: Arc<dyn Node> = Arc::new(SimpleNode::new("node1", "Node 1", "tcp", addr1));
         let node2: Arc<dyn Node> = Arc::new(SimpleNode::new("node2", "Node 2", "tcp", addr2));
-        
+
         manager.add_node(node1).await;
         manager.add_node(node2).await;
-        
+
         // Round-robin selection
         let sel1 = manager.select(&SelectionPolicy::RoundRobin).await;
         let sel2 = manager.select(&SelectionPolicy::RoundRobin).await;
         let sel3 = manager.select(&SelectionPolicy::RoundRobin).await;
-        
+
         assert!(sel1.is_some());
         assert!(sel2.is_some());
-        
+
         // Third selection wraps around
         assert!(sel3.is_some());
     }

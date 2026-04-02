@@ -28,7 +28,7 @@ impl DetectedProtocol {
         if first_bytes.is_empty() {
             return DetectedProtocol::Unknown;
         }
-        
+
         match first_bytes[0] {
             // SOCKS5 starts with version 0x05
             0x05 => DetectedProtocol::Socks5,
@@ -91,39 +91,43 @@ impl ProtocolDispatcher {
             http_handler: None,
         }
     }
-    
+
     /// Create with SOCKS5 handler
     pub fn with_socks5_handler(mut self, handler: Arc<crate::socks5::Socks5Handler>) -> Self {
         self.socks5_handler = Some(handler);
         self
     }
-    
+
     /// Create with HTTP handler
     pub fn with_http_handler(mut self, handler: Arc<crate::http_proxy::HttpProxyHandler>) -> Self {
         self.http_handler = Some(handler);
         self
     }
-    
+
     /// Set SOCKS5 handler
     pub fn set_socks5_handler(&mut self, handler: Arc<crate::socks5::Socks5Handler>) {
         self.socks5_handler = Some(handler);
     }
-    
+
     /// Set HTTP handler
     pub fn set_http_handler(&mut self, handler: Arc<crate::http_proxy::HttpProxyHandler>) {
         self.http_handler = Some(handler);
     }
-    
+
     /// Handle an incoming connection by detecting and routing to appropriate protocol
     pub async fn handle_connection(self: Arc<Self>, client: TcpStream) -> std::io::Result<()> {
-        let addr = client.peer_addr().unwrap_or(SocketAddr::from(([0, 0, 0, 0], 0)));
-        
+        let addr = client
+            .peer_addr()
+            .unwrap_or(SocketAddr::from(([0, 0, 0, 0], 0)));
+
         // Peek at first few bytes to detect protocol
         let mut peek_buf = [0u8; 16];
         let n = match tokio::time::timeout(
             std::time::Duration::from_millis(500),
-            client.peek(&mut peek_buf)
-        ).await {
+            client.peek(&mut peek_buf),
+        )
+        .await
+        {
             Ok(Ok(n)) => n,
             Ok(Err(e)) => {
                 debug!("Failed to peek client bytes from {}: {}", addr, e);
@@ -133,22 +137,22 @@ impl ProtocolDispatcher {
                 debug!("Protocol detection timeout for {}", addr);
                 return Err(std::io::Error::new(
                     std::io::ErrorKind::TimedOut,
-                    "protocol detection timeout"
+                    "protocol detection timeout",
                 ));
             }
         };
-        
+
         if n == 0 {
             debug!("Client {} closed connection during peek", addr);
             return Err(std::io::Error::new(
                 std::io::ErrorKind::UnexpectedEof,
-                "connection closed"
+                "connection closed",
             ));
         }
-        
+
         let protocol = DetectedProtocol::detect(&peek_buf[..n]);
         debug!("Detected protocol {:?} from {}", protocol, addr);
-        
+
         match protocol {
             DetectedProtocol::Socks5 => {
                 if let Some(ref handler) = self.socks5_handler {
@@ -164,12 +168,10 @@ impl ProtocolDispatcher {
                     self.reject_unknown(client, "HTTP proxy not enabled").await
                 }
             }
-            DetectedProtocol::Unknown => {
-                self.reject_unknown(client, "unsupported protocol").await
-            }
+            DetectedProtocol::Unknown => self.reject_unknown(client, "unsupported protocol").await,
         }
     }
-    
+
     /// Reject connection with unknown protocol
     async fn reject_unknown(&self, mut client: TcpStream, reason: &str) -> std::io::Result<()> {
         debug!("Rejecting unknown protocol: {}", reason);
@@ -177,17 +179,14 @@ impl ProtocolDispatcher {
             "HTTP/1.1 501 Not Implemented\r\nContent-Length: 0\r\nX-Error: {reason}\r\n\r\n"
         );
         client.write_all(response.as_bytes()).await?;
-        Err(std::io::Error::new(
-            std::io::ErrorKind::Unsupported,
-            reason
-        ))
+        Err(std::io::Error::new(std::io::ErrorKind::Unsupported, reason))
     }
-    
+
     /// Get SOCKS5 listen address if configured
     pub fn socks5_addr(&self) -> Option<SocketAddr> {
         self.config.socks5_addr
     }
-    
+
     /// Get HTTP listen address if configured
     pub fn http_addr(&self) -> Option<SocketAddr> {
         self.config.http_addr
@@ -210,51 +209,47 @@ impl CombinedProxyServer {
             socks5_server: None,
             http_server: None,
         };
-        
+
         // Create SOCKS5 server if configured
         if let Some(addr) = config.socks5_addr {
             let s5_server = crate::socks5::Socks5Server::new(addr).await?;
             server.socks5_server = Some(Arc::new(s5_server));
         }
-        
+
         // Create HTTP server if configured
         if let Some(addr) = config.http_addr {
             let http_server = crate::http_proxy::HttpProxyServer::new(addr).await?;
             server.http_server = Some(Arc::new(http_server));
         }
-        
+
         Ok(server)
     }
-    
+
     /// Start all servers
     pub async fn start(self: Arc<Self>) -> std::io::Result<()> {
         let mut handles = Vec::new();
-        
+
         // Start SOCKS5 server
         if let Some(ref server) = self.socks5_server {
             let srv = server.clone();
-            let handle = tokio::spawn(async move {
-                srv.start().await
-            });
+            let handle = tokio::spawn(async move { srv.start().await });
             handles.push(handle);
         }
-        
+
         // Start HTTP server
         if let Some(ref server) = self.http_server {
             let srv = server.clone();
-            let handle = tokio::spawn(async move {
-                srv.start().await
-            });
+            let handle = tokio::spawn(async move { srv.start().await });
             handles.push(handle);
         }
-        
+
         // Wait for all servers
         for handle in handles {
             if let Err(e) = handle.await {
                 error!("Server task panicked: {}", e);
             }
         }
-        
+
         Ok(())
     }
 }
@@ -262,13 +257,16 @@ impl CombinedProxyServer {
 #[cfg(test)]
 mod tests {
     use super::*;
-    
+
     #[test]
     fn test_detect_socks5() {
         assert_eq!(DetectedProtocol::detect(&[0x05]), DetectedProtocol::Socks5);
-        assert_eq!(DetectedProtocol::detect(&[0x05, 0x01, 0x00]), DetectedProtocol::Socks5);
+        assert_eq!(
+            DetectedProtocol::detect(&[0x05, 0x01, 0x00]),
+            DetectedProtocol::Socks5
+        );
     }
-    
+
     #[test]
     fn test_detect_http_connect() {
         assert_eq!(
@@ -276,7 +274,7 @@ mod tests {
             DetectedProtocol::HttpConnect
         );
     }
-    
+
     #[test]
     fn test_detect_http_get() {
         assert_eq!(
@@ -288,11 +286,14 @@ mod tests {
             DetectedProtocol::HttpOther
         );
     }
-    
+
     #[test]
     fn test_detect_unknown() {
         assert_eq!(DetectedProtocol::detect(&[0x00]), DetectedProtocol::Unknown);
         assert_eq!(DetectedProtocol::detect(&[]), DetectedProtocol::Unknown);
-        assert_eq!(DetectedProtocol::detect(b"\xff\xfe"), DetectedProtocol::Unknown);
+        assert_eq!(
+            DetectedProtocol::detect(b"\xff\xfe"),
+            DetectedProtocol::Unknown
+        );
     }
 }
