@@ -2,7 +2,7 @@
 # dae-rs - Multi-stage Dockerfile for production
 # ===================================================================
 # Stage 1: Build
-FROM rust:1.85 AS builder
+FROM rust:1.86 AS builder
 
 # Install build dependencies
 RUN apt-get update && apt-get install -y --no-install-recommends \
