@@ -61,13 +61,13 @@ jobs:
             # Use semver version without 'v' prefix
             type=semver,pattern={{major}}.{{minor}}
             # Use short commit hash as tag
-            type=sha,prefix=
+            type=sha,prefix=,format=short
             # Use branch name for PRs
             type=ref,event=branch
             # Use 'latest' for master/main on tags
             type=raw,value=latest,enable={{is_default_branch}}
-            # Enable datetime suffix for builds on branches
-            type=raw,value={{branch}}-{{date 'YYYYMMDD'}}-{{hash '%h'}},enable={{is_default_branch}}
+            # Branch-based tag for non-default branches
+            type=raw,value={{branch}},enable={{is_default_branch}}
 
       # Build and push with multi-platform support
       - name: Build and push
