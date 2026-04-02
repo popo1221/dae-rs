@@ -10,5 +10,5 @@
 pub mod obfs;
 pub mod v2ray;
 
-pub use obfs::{ObfsConfig, ObfsHttp, ObfsMode, ObfsTls, ObfsStream};
+pub use obfs::{ObfsConfig, ObfsHttp, ObfsMode, ObfsStream, ObfsTls};
 pub use v2ray::{V2rayConfig, V2rayMode, V2rayPlugin, V2rayStream};

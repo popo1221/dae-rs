@@ -122,14 +122,20 @@ impl FullConeNat {
         // Check if we already have a mapping for this internal endpoint
         if let Some(existing) = mappings.get(&internal) {
             if !existing.is_expired() {
-                debug!("Reusing existing NAT mapping for {} -> {}", internal, existing.external);
+                debug!(
+                    "Reusing existing NAT mapping for {} -> {}",
+                    internal, existing.external
+                );
                 return Ok(existing.external);
             }
         }
 
         // Check max mappings
         if mappings.len() >= self.config.max_mappings {
-            warn!("NAT: max mappings {} reached, cannot create new mapping", self.config.max_mappings);
+            warn!(
+                "NAT: max mappings {} reached, cannot create new mapping",
+                self.config.max_mappings
+            );
             return Err(std::io::Error::new(
                 std::io::ErrorKind::AddrInUse,
                 "NAT: max mappings reached",
@@ -160,7 +166,10 @@ impl FullConeNat {
         stats.mappings_created += 1;
         stats.active_mappings = mappings.len();
 
-        info!("NAT: created mapping {} -> {} (TTL: {:?})", internal, external, self.config.mapping_ttl);
+        info!(
+            "NAT: created mapping {} -> {} (TTL: {:?})",
+            internal, external, self.config.mapping_ttl
+        );
 
         Ok(external)
     }
@@ -266,7 +275,11 @@ impl FullConeNat {
     /// Get all active mappings
     pub fn get_active_mappings(&self) -> Vec<NatMapping> {
         let mappings = self.mappings.read().unwrap();
-        mappings.values().filter(|m| !m.is_expired()).cloned().collect()
+        mappings
+            .values()
+            .filter(|m| !m.is_expired())
+            .cloned()
+            .collect()
     }
 }
 
@@ -287,7 +300,11 @@ impl FullConeNatUdpHandler {
     }
 
     /// Handle outgoing UDP packet
-    pub fn handle_outgoing(&self, internal: SocketAddr, _target: SocketAddr) -> std::io::Result<SocketAddr> {
+    pub fn handle_outgoing(
+        &self,
+        internal: SocketAddr,
+        _target: SocketAddr,
+    ) -> std::io::Result<SocketAddr> {
         // Create mapping if not exists
         self.nat.create_mapping(internal)
     }

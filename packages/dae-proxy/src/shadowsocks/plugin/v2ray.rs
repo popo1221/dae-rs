@@ -109,14 +109,18 @@ impl V2rayPlugin {
     pub async fn connect(
         &self,
         server_addr: &str,
-    ) -> std::io::Result<(tokio_tungstenite::WebSocketStream<tokio_tungstenite::MaybeTlsStream<tokio::net::TcpStream>>,)> {
+    ) -> std::io::Result<(
+        tokio_tungstenite::WebSocketStream<
+            tokio_tungstenite::MaybeTlsStream<tokio::net::TcpStream>,
+        >,
+    )> {
         let url = self.build_url(server_addr);
         debug!("Connecting to {} with v2ray-plugin", url);
 
         // Connect WebSocket
-        let (ws_stream, _response) = connect_async(&url)
-            .await
-            .map_err(|e| std::io::Error::new(ErrorKind::Other, format!("WebSocket connect error: {}", e)))?;
+        let (ws_stream, _response) = connect_async(&url).await.map_err(|e| {
+            std::io::Error::new(ErrorKind::Other, format!("WebSocket connect error: {}", e))
+        })?;
 
         info!("v2ray-plugin WebSocket connected to {}", server_addr);
 
@@ -150,11 +154,17 @@ impl V2rayPlugin {
 
 /// v2ray-plugin stream handler
 pub struct V2rayStream {
-    ws: tokio_tungstenite::WebSocketStream<tokio_tungstenite::MaybeTlsStream<tokio::net::TcpStream>>,
+    ws: tokio_tungstenite::WebSocketStream<
+        tokio_tungstenite::MaybeTlsStream<tokio::net::TcpStream>,
+    >,
 }
 
 impl V2rayStream {
-    pub fn new(ws: tokio_tungstenite::WebSocketStream<tokio_tungstenite::MaybeTlsStream<tokio::net::TcpStream>>) -> Self {
+    pub fn new(
+        ws: tokio_tungstenite::WebSocketStream<
+            tokio_tungstenite::MaybeTlsStream<tokio::net::TcpStream>,
+        >,
+    ) -> Self {
         Self { ws }
     }
 
@@ -190,7 +200,10 @@ impl V2rayStream {
                     Ok(Message::Pong(_)) => {}
                     Ok(Message::Frame(_)) => {}
                     Err(e) => {
-                        return Err(std::io::Error::new(ErrorKind::Other, format!("recv error: {}", e)));
+                        return Err(std::io::Error::new(
+                            ErrorKind::Other,
+                            format!("recv error: {}", e),
+                        ));
                     }
                 }
             } else {
@@ -209,7 +222,10 @@ impl V2rayStream {
     }
 
     #[allow(dead_code)]
-    pub fn into_inner(self) -> tokio_tungstenite::WebSocketStream<tokio_tungstenite::MaybeTlsStream<tokio::net::TcpStream>> {
+    pub fn into_inner(
+        self,
+    ) -> tokio_tungstenite::WebSocketStream<tokio_tungstenite::MaybeTlsStream<tokio::net::TcpStream>>
+    {
         self.ws
     }
 }

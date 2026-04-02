@@ -24,9 +24,12 @@ pub use crate::http_proxy::{HttpProxyHandler, HttpProxyServer};
 pub use crate::protocol_dispatcher::{ProtocolDispatcher, ProtocolDispatcherConfig};
 pub use crate::proxy::{Proxy, ProxyConfig, ProxyError};
 pub use crate::shadowsocks::{
-    plugin::{ObfsConfig, ObfsHttp, ObfsMode, ObfsStream, ObfsTls, V2rayConfig, V2rayMode, V2rayPlugin, V2rayStream},
+    plugin::{
+        ObfsConfig, ObfsHttp, ObfsMode, ObfsStream, ObfsTls, V2rayConfig, V2rayMode, V2rayPlugin,
+        V2rayStream,
+    },
+    ssr::{SsrClientConfig, SsrHandler, SsrObfs, SsrObfsHandler, SsrProtocol, SsrServerConfig},
     ShadowsocksHandler, ShadowsocksServer, SsCipherType, SsClientConfig, SsServerConfig,
-    ssr::{SsrHandler, SsrObfsHandler, SsrObfs, SsrProtocol, SsrServerConfig, SsrClientConfig},
 };
 pub use crate::socks5::{Socks5Handler, Socks5Server};
 pub use crate::tcp::{TcpProxy, TcpProxyConfig};
@@ -97,6 +100,7 @@ pub use crate::protocol::unified_handler::{
 #[deprecated(since = "0.1.0", note = "Use UnifiedHandler instead")]
 pub use crate::protocol::ProtocolHandler;
 
+pub mod anytls;
 pub mod connection;
 pub mod connection_pool;
 pub mod control;
@@ -107,20 +111,19 @@ pub mod http_proxy;
 pub mod hysteria2;
 pub mod juicity;
 pub mod mac;
+pub mod nat;
 pub mod node;
 pub mod process;
 pub mod protocol;
 pub mod protocol_dispatcher;
 pub mod protocol_legacy;
 pub mod proxy;
+pub mod proxy_chain;
 pub mod rule_engine;
 pub mod rules;
 pub mod shadowsocks;
 pub mod socks5;
 pub mod tcp;
-pub mod anytls;
-pub mod proxy_chain;
-pub mod nat;
 pub mod transport;
 pub mod trojan_protocol; // Module structure following Zed's architecture
 pub mod udp;
