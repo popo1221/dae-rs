@@ -39,6 +39,7 @@ pub trait Transport: Send + Sync + Debug {
 
 // Re-export all transport types
 pub mod grpc;
+pub mod httpupgrade;
 pub mod tcp;
 pub mod tls;
 pub mod ws;
