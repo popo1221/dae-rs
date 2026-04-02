@@ -96,6 +96,10 @@ impl std::fmt::Display for ProtocolType {
 pub mod handler;
 pub use handler::ProtocolRegistry;
 
+// Simple Handler trait (Zed-inspired)
+pub mod simple_handler;
+pub use simple_handler::{Handler, HandlerConfig, HandlerStats, HandlerStatsExt};
+
 // Protocol submodules for future expansion
 pub mod socks5;
 pub mod http;
