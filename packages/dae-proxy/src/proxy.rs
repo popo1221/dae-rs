@@ -9,7 +9,7 @@ use crate::protocol_dispatcher::{CombinedProxyServer, ProtocolDispatcherConfig};
 use crate::shadowsocks::ShadowsocksServer;
 use crate::vless::{VlessServer, VlessServerConfig, VlessClientConfig};
 use crate::vmess::{VmessServer, VmessServerConfig};
-use crate::trojan::{TrojanServer, TrojanServerConfig, TrojanClientConfig};
+use crate::trojan_protocol::{TrojanServer, TrojanServerConfig, TrojanClientConfig};
 use crate::tcp::{TcpProxy, TcpProxyConfig};
 use crate::udp::{UdpProxy, UdpProxyConfig};
 use std::net::SocketAddr;

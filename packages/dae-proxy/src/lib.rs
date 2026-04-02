@@ -39,7 +39,8 @@ pub use crate::vmess::{
     VmessServerConfig, VmessClientConfig,
     VmessSecurity, VmessCommand, VmessAddressType, VmessTargetAddress,
 };
-pub use crate::trojan::{
+// Trojan protocol - re-exported from trojan_protocol for backward compatibility
+pub use crate::trojan_protocol::{
     TrojanHandler, TrojanServer,
     TrojanServerConfig, TrojanClientConfig, TrojanTlsConfig,
     TrojanCommand, TrojanAddressType, TrojanTargetAddress,
@@ -76,7 +77,7 @@ pub mod protocol_dispatcher;
 pub mod shadowsocks;
 pub mod vless;
 pub mod vmess;
-pub mod trojan;
+pub mod trojan_protocol; // Module structure following Zed's architecture
 pub mod juicity;
 pub mod rules;
 pub mod rule_engine;
