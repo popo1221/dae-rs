@@ -129,6 +129,7 @@ pub mod proxy_chain;
 pub mod rule_engine;
 pub mod rules;
 pub mod shadowsocks;
+pub mod socks4;
 pub mod socks5;
 pub mod tcp;
 pub mod transport;

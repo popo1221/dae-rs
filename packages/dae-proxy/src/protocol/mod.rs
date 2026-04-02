@@ -27,6 +27,8 @@ pub trait ProtocolHandler: Send + Sync {
 /// Protocol types supported by the proxy
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum ProtocolType {
+    /// SOCKS4/SOCKS4a protocol
+    Socks4,
     /// SOCKS5 protocol (RFC 1928)
     Socks5,
     /// HTTP proxy protocol (CONNECT tunnel)
@@ -51,6 +53,7 @@ impl ProtocolType {
     /// Returns the protocol name as a string
     pub fn as_str(&self) -> &'static str {
         match self {
+            ProtocolType::Socks4 => "socks4",
             ProtocolType::Socks5 => "socks5",
             ProtocolType::Http => "http",
             ProtocolType::Shadowsocks => "shadowsocks",
@@ -66,6 +69,7 @@ impl ProtocolType {
     /// Get protocol type from string name
     pub fn from_str(s: &str) -> Option<Self> {
         match s.to_lowercase().as_str() {
+            "socks4" | "socks4a" => Some(ProtocolType::Socks4),
             "socks5" | "socks" => Some(ProtocolType::Socks5),
             "http" | "https" => Some(ProtocolType::Http),
             "shadowsocks" | "ss" => Some(ProtocolType::Shadowsocks),

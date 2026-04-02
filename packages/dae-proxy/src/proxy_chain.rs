@@ -36,6 +36,8 @@ pub struct ProxyNode {
 pub enum ProxyNodeType {
     /// Direct connection (no proxy)
     Direct,
+    /// SOCKS4/SOCKS4a proxy
+    Socks4,
     /// SOCKS5 proxy
     Socks5,
     /// HTTP proxy
@@ -54,6 +56,7 @@ impl ProxyNodeType {
     pub fn from_str(s: &str) -> Option<Self> {
         match s.to_lowercase().as_str() {
             "direct" | "" => Some(ProxyNodeType::Direct),
+            "socks4" | "socks4a" => Some(ProxyNodeType::Socks4),
             "socks5" | "socks" => Some(ProxyNodeType::Socks5),
             "http" | "https" => Some(ProxyNodeType::Http),
             "ss" | "shadowsocks" => Some(ProxyNodeType::Shadowsocks),
