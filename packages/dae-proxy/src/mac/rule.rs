@@ -3,7 +3,6 @@
 //! Defines MAC address rule structures and the MAC rule set for matching.
 
 use std::fmt;
-use std::net::IpAddr;
 
 use crate::rule_engine::RuleAction;
 

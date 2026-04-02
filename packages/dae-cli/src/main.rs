@@ -9,17 +9,16 @@ use dae_proxy::{
     vless::{VlessServerConfig, VlessTlsConfig},
     vmess::{VmessServerConfig, VmessSecurity},
     trojan::{TrojanServerConfig, TrojanTlsConfig},
-    rule_engine::{RuleEngine, RuleEngineConfig, new_rule_engine},
-    control::{ControlServer, ControlState, connect_and_send, connect_and_get_status},
+    rule_engine::{RuleEngineConfig, new_rule_engine},
+    control::{ControlServer, ControlState, connect_and_send},
 };
 use dae_core::Engine;
-use dae_config::{Config, NodeConfig, NodeType, ProxyConfig as DaeProxyConfig};
-use dae_cli::api::{ApiServer, AppState};
+use dae_config::Config;
+use dae_cli::api::ApiServer;
 use std::path::PathBuf;
 use std::sync::Arc;
 use std::time::Duration;
 use tokio::signal;
-use tokio::sync::RwLock;
 use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
 
 #[derive(Parser, Debug)]
@@ -325,7 +324,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             trojan_port,
             trojan_password,
             rules_config,
-            daemon,
+            daemon: _daemon,
             pid_file,
             control_socket,
         }) => {
@@ -840,7 +839,7 @@ async fn run_proxy_with_signals(proxy: Arc<Proxy>, control_state: Arc<ControlSta
 }
 
 /// Run engine with signal handling
-async fn run_engine_with_signals(mut engine: Engine) {
+async fn run_engine_with_signals(engine: Engine) {
     tokio::select! {
         _ = tokio::signal::ctrl_c() => {
             tracing::info!("Received Ctrl+C, shutting down...");

@@ -349,6 +349,7 @@ impl UdpProxy {
     }
 
     /// Clean up expired sessions
+    #[allow(dead_code)]
     async fn cleanup_expired_sessions(self: Arc<Self>) {
         let timeout = self.config.per_session_timeout;
         

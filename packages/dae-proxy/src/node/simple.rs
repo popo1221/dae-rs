@@ -83,6 +83,7 @@ impl SimpleNode {
     }
 
     /// Update the last measured latency
+    #[allow(dead_code)]
     fn set_latency(&mut self, latency: u32) {
         self.last_latency = Some(latency);
     }

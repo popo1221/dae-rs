@@ -160,7 +160,7 @@ impl HotReload {
 
         info!("Started watching config file: {:?}", config_path);
 
-        let mut receiver = match self.receiver.take() {
+        let receiver = match self.receiver.take() {
             Some(rx) => rx,
             None => {
                 error!("Receiver already taken");
@@ -235,7 +235,7 @@ impl HotReload {
 
         info!("Started watching config file: {:?}", config_path);
 
-        let mut receiver = match self.receiver.take() {
+        let receiver = match self.receiver.take() {
             Some(rx) => rx,
             None => {
                 error!("Receiver already taken");

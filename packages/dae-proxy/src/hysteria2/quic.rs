@@ -10,12 +10,11 @@
 //! - Multiplexed streams
 //! - Built-in congestion control
 
-use std::net::{IpAddr, SocketAddr};
-use std::sync::Arc;
+use std::net::SocketAddr;
 use std::time::Duration;
 
 use tokio::net::UdpSocket;
-use tracing::{debug, error, info, warn};
+use tracing::{error, warn};
 
 /// QUIC endpoint configuration
 #[derive(Debug, Clone)]

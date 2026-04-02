@@ -19,11 +19,10 @@ use std::net::{IpAddr, Ipv4Addr, Ipv6Addr, SocketAddr};
 use std::sync::Arc;
 use std::time::Duration;
 
-use tokio::net::{TcpListener, TcpStream, UdpSocket};
+use tokio::net::{TcpListener, TcpStream};
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
-use tracing::{debug, error, info, warn};
+use tracing::{error, info, warn};
 
-use crate::core::{Context, Result as ProxyResult, Error as ProxyError};
 
 /// Hysteria2 configuration for server mode
 #[derive(Debug, Clone)]

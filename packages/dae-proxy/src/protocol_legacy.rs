@@ -1,6 +1,5 @@
 //! Proxy protocol implementations
 
-use std::sync::Arc;
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use tokio::net::TcpStream;
 

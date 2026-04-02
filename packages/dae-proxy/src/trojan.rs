@@ -9,11 +9,10 @@
 //! Client -> dae-rs (Trojan client) -> remote Trojan server -> target
 
 use std::net::{IpAddr, Ipv4Addr, Ipv6Addr, SocketAddr};
-use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::Arc;
 use std::time::Duration;
 
-use tokio::io::{AsyncReadExt, AsyncWriteExt};
+use tokio::io::AsyncReadExt;
 use tokio::net::{TcpListener, TcpStream, UdpSocket};
 use tracing::{debug, error, info};
 
@@ -269,7 +268,8 @@ impl TrojanHandler {
     }
 
     /// Get all backends
-    fn get_backends(&self) -> &[TrojanServerConfig] {
+    #[allow(dead_code)]
+    pub fn get_backends(&self) -> &[TrojanServerConfig] {
         &self.backends
     }
 

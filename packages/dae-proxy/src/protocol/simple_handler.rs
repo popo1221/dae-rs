@@ -49,7 +49,6 @@
 
 use async_trait::async_trait;
 use std::sync::atomic::{AtomicU64, Ordering};
-use std::sync::Arc;
 
 use crate::connection::Connection;
 use crate::proxy::ProxyError;

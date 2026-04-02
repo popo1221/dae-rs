@@ -8,7 +8,7 @@
 //! Protocol flow:
 //! Client -> dae-rs (Juicity client) -> remote Juicity server -> target
 
-use std::net::{IpAddr, Ipv4Addr, Ipv6Addr, SocketAddr};
+use std::net::{IpAddr, Ipv4Addr, SocketAddr};
 use std::sync::Arc;
 use std::time::Duration;
 

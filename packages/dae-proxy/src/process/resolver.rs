@@ -5,7 +5,7 @@
 //! network connections.
 
 use std::path::PathBuf;
-use std::io::{Read, BufRead, BufReader};
+use std::io::{BufRead, BufReader};
 use std::fs::File;
 
 

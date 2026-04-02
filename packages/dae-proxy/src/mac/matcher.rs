@@ -119,7 +119,7 @@ fn get_mac_from_arp_cache(ip: &IpAddr) -> Option<MacAddr> {
 /// the system tries to communicate with an IP.
 #[cfg(target_os = "linux")]
 pub fn probe_arp(ip: &IpAddr) -> Option<MacAddr> {
-    use std::net::Ipv4Addr;
+    
     use std::process::Command;
 
     if let IpAddr::V4(v4) = ip {

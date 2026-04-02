@@ -3,14 +3,13 @@
 //! Provides wrappers around eBPF maps for session, routing, and stats management.
 
 use crate::connection_pool::ConnectionKey;
-use crate::rule_engine::{RuleEngine, SharedRuleEngine, PacketInfo, RuleAction};
+use crate::rule_engine::{SharedRuleEngine, PacketInfo, RuleAction};
 use dae_ebpf_common::session::{SessionEntry, SessionKey};
 use dae_ebpf_common::routing::RoutingEntry;
 use dae_ebpf_common::stats::{StatsEntry, idx as stats_idx};
 use thiserror::Error;
 use tracing::{debug, info};
 use std::sync::Arc;
-use tokio::sync::RwLock;
 
 /// Error type for eBPF operations
 #[derive(Error, Debug)]

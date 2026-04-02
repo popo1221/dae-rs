@@ -6,7 +6,7 @@
 
 use std::collections::HashMap;
 use std::net::{IpAddr, ToSocketAddrs};
-use std::time::{Duration, Instant};
+use std::time::Instant;
 
 use tokio::sync::RwLock;
 use tracing::{debug, warn};
@@ -205,7 +205,7 @@ impl MacDnsResolver {
                 // Simple DNS resolution using std library
                 // In production, you'd use a proper DNS library like trust-dns
                 match domain.to_socket_addrs() {
-                    Ok(mut addrs) => addrs.map(|addr| addr.ip()).collect(),
+                    Ok(addrs) => addrs.map(|addr| addr.ip()).collect(),
                     Err(_) => {
                         // Fallback: try to resolve using the system resolver
                         return Err(DnsError::InvalidDomain(domain.to_string()));
