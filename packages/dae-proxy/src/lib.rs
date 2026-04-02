@@ -118,6 +118,8 @@ pub mod rules;
 pub mod shadowsocks;
 pub mod socks5;
 pub mod tcp;
+pub mod anytls;
+pub mod proxy_chain;
 pub mod transport;
 pub mod trojan_protocol; // Module structure following Zed's architecture
 pub mod udp;
