@@ -2,7 +2,7 @@
 # dae-rs - Multi-stage Dockerfile for production
 # ===================================================================
 # Stage 1: Build
-FROM rust:1.80-alpine AS builder
+FROM rust:1.85 AS builder
 
 # Install build dependencies for eBPF/XDP
 RUN apk add --no-cache \
