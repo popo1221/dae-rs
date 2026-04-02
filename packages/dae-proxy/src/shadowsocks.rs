@@ -16,6 +16,7 @@ use std::sync::Arc;
 use std::time::Duration;
 
 pub mod plugin;
+pub mod ssr;
 
 use tokio::io::AsyncReadExt;
 use tokio::net::{TcpListener, TcpStream, UdpSocket};

@@ -26,6 +26,7 @@ pub use crate::proxy::{Proxy, ProxyConfig, ProxyError};
 pub use crate::shadowsocks::{
     plugin::{ObfsConfig, ObfsHttp, ObfsMode, ObfsStream, ObfsTls, V2rayConfig, V2rayMode, V2rayPlugin, V2rayStream},
     ShadowsocksHandler, ShadowsocksServer, SsCipherType, SsClientConfig, SsServerConfig,
+    ssr::{SsrHandler, SsrObfsHandler, SsrObfs, SsrProtocol, SsrServerConfig, SsrClientConfig},
 };
 pub use crate::socks5::{Socks5Handler, Socks5Server};
 pub use crate::tcp::{TcpProxy, TcpProxyConfig};
