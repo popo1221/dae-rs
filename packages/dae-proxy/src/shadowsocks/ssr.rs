@@ -199,21 +199,13 @@ impl SsrHandler {
     /// 2. Send initial packet based on protocol type
     async fn protocol_handshake(&self, stream: &mut TcpStream) -> std::io::Result<()> {
         match self.config.server.protocol {
-            SsrProtocol::Origin => {
-                self.origin_handshake(stream).await
-            }
-            SsrProtocol::VerifyDeflate => {
-                self.verify_deflate_handshake(stream).await
-            }
-            SsrProtocol::TwoAuth => {
-                self.two_auth_handshake(stream).await
-            }
+            SsrProtocol::Origin => self.origin_handshake(stream).await,
+            SsrProtocol::VerifyDeflate => self.verify_deflate_handshake(stream).await,
+            SsrProtocol::TwoAuth => self.two_auth_handshake(stream).await,
             SsrProtocol::AuthSha1V2 | SsrProtocol::AuthAES128MD5 | SsrProtocol::AuthAES128SHA1 => {
                 self.auth_handshake(stream).await
             }
-            SsrProtocol::AuthChain => {
-                self.auth_chain_handshake(stream).await
-            }
+            SsrProtocol::AuthChain => self.auth_chain_handshake(stream).await,
         }
     }
 
@@ -288,7 +280,10 @@ impl SsrHandler {
         let mut resp = [0u8; 4];
         stream.read_exact(&mut resp).await?;
 
-        debug!("SSR auth handshake complete (connection_id={})", connection_id);
+        debug!(
+            "SSR auth handshake complete (connection_id={})",
+            connection_id
+        );
         Ok(())
     }
 
@@ -504,7 +499,9 @@ impl SsrObfsHandler {
 
 /// Find subslice in byte slice
 fn find_bytes(haystack: &[u8], needle: &[u8]) -> Option<usize> {
-    haystack.windows(needle.len()).position(|window| window == needle)
+    haystack
+        .windows(needle.len())
+        .position(|window| window == needle)
 }
 
 #[cfg(test)]
@@ -514,8 +511,14 @@ mod tests {
     #[test]
     fn test_ssr_protocol_from_str() {
         assert_eq!(SsrProtocol::from_str("origin"), Some(SsrProtocol::Origin));
-        assert_eq!(SsrProtocol::from_str("verify_deflate"), Some(SsrProtocol::VerifyDeflate));
-        assert_eq!(SsrProtocol::from_str("auth_sha1_v2"), Some(SsrProtocol::AuthSha1V2));
+        assert_eq!(
+            SsrProtocol::from_str("verify_deflate"),
+            Some(SsrProtocol::VerifyDeflate)
+        );
+        assert_eq!(
+            SsrProtocol::from_str("auth_sha1_v2"),
+            Some(SsrProtocol::AuthSha1V2)
+        );
         assert_eq!(SsrProtocol::from_str("unknown"), None);
     }
 

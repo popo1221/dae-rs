@@ -13,6 +13,4 @@
 
 pub mod full_cone;
 
-pub use full_cone::{
-    FullConeNat, FullConeNatConfig, FullConeNatUdpHandler, NatMapping, NatStats,
-};
+pub use full_cone::{FullConeNat, FullConeNatConfig, FullConeNatUdpHandler, NatMapping, NatStats};

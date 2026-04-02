@@ -160,10 +160,7 @@ impl ObfsTls {
 
         // Build TLS ClientHello obfuscation
         let client_hello = self.build_tls_client_hello()?;
-        debug!(
-            "Sending TLS obfuscation ClientHello to {}",
-            server_addr
-        );
+        debug!("Sending TLS obfuscation ClientHello to {}", server_addr);
         stream.write_all(&client_hello).await?;
         stream.flush().await?;
 
@@ -179,10 +176,7 @@ impl ObfsTls {
                     // Server closed connection - this is normal for some obfs implementations
                     debug!("Server closed connection after TLS obfuscation handshake");
                 } else {
-                    debug!(
-                        "Received {} bytes after TLS obfuscation handshake",
-                        n
-                    );
+                    debug!("Received {} bytes after TLS obfuscation handshake", n);
                 }
             }
             Ok(Err(e)) => {

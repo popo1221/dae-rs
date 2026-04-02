@@ -217,6 +217,24 @@ pub struct NodeConfig {
     /// VLESS/VMess specific: enable AEAD
     #[serde(default)]
     pub aead: Option<bool>,
+    /// Node capability attributes (optional, auto-detected if not set)
+    #[serde(default)]
+    pub capabilities: Option<NodeCapabilitiesConfig>,
+}
+
+/// Node capability configuration (simplified for config parsing)
+/// This is converted to full NodeCapabilities in dae-proxy
+#[derive(Debug, Clone, Deserialize, Default)]
+pub struct NodeCapabilitiesConfig {
+    /// Full-Cone NAT support (auto-detected if None)
+    #[serde(default)]
+    pub fullcone: Option<bool>,
+    /// UDP protocol support (auto-detected based on protocol if None)
+    #[serde(default)]
+    pub udp: Option<bool>,
+    /// V2Ray compatibility (auto-detected based on protocol if None)
+    #[serde(default)]
+    pub v2ray: Option<bool>,
 }
 
 impl NodeConfig {
@@ -614,6 +632,7 @@ impl Config {
                 tls: None,
                 tls_server_name: None,
                 aead: Some(ss.ota),
+                capabilities: None,
             });
         }
 
@@ -632,6 +651,7 @@ impl Config {
                 tls: vless.tls.as_ref().map(|t| t.enabled),
                 tls_server_name: vless.tls.and_then(|t| t.server_name),
                 aead: None,
+                capabilities: None,
             });
         }
 
@@ -650,6 +670,7 @@ impl Config {
                 tls: None,
                 tls_server_name: None,
                 aead: Some(vmess.enable_aead),
+                capabilities: None,
             });
         }
 
@@ -668,6 +689,7 @@ impl Config {
                 tls: trojan.tls.as_ref().map(|t| t.enabled),
                 tls_server_name: trojan.tls.and_then(|t| t.server_name),
                 aead: None,
+                capabilities: None,
             });
         }
 
@@ -950,6 +972,7 @@ mod tests {
             tls: None,
             tls_server_name: None,
             aead: None,
+            capabilities: None,
         };
         assert_eq!(node.display_addr(), "1.2.3.4:8388");
     }
@@ -971,6 +994,7 @@ mod tests {
                 tls: None,
                 tls_server_name: None,
                 aead: None,
+                capabilities: None,
             }],
             rules: RulesConfig::default(),
             logging: LoggingConfig::default(),
@@ -995,6 +1019,7 @@ mod tests {
                 tls: None,
                 tls_server_name: None,
                 aead: None,
+                capabilities: None,
             }],
             rules: RulesConfig::default(),
             logging: LoggingConfig::default(),
@@ -1053,6 +1078,7 @@ mod tests {
                     tls: None,
                     tls_server_name: None,
                     aead: None,
+                    capabilities: None,
                 },
                 NodeConfig {
                     name: "node2".to_string(),
@@ -1067,6 +1093,7 @@ mod tests {
                     tls: Some(true),
                     tls_server_name: None,
                     aead: None,
+                    capabilities: None,
                 },
             ],
             rules: RulesConfig::default(),

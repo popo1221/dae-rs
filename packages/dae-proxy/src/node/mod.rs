@@ -19,6 +19,7 @@
 //! - `*Manager`: Concrete implementation managing lifecycle
 //! - `*Handle`: Reference to a managed entity
 
+pub mod capability;
 pub mod health;
 pub mod manager;
 pub mod node;
@@ -29,6 +30,10 @@ pub mod simple;
 pub mod store;
 
 // Re-export common types
+pub use capability::{
+    infer_capabilities, CapabilityDetectionResult, CapabilityFilter, DetectionMethod,
+    NodeCapabilities,
+};
 pub use health::{HealthCheckResult, HealthChecker, HealthCheckerConfig};
 pub use manager::{NodeManager, SelectionPolicy};
 pub use node::{Node, NodeError, NodeId};

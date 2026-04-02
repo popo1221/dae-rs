@@ -175,12 +175,8 @@ impl ProxyChain {
                 let addr = format!("{target}:{target_port}");
                 TcpStream::connect(&addr).await
             }
-            ProxyNodeType::Socks5 => {
-                self.socks5_connect(node, target, target_port).await
-            }
-            ProxyNodeType::Http => {
-                self.http_connect(node, target, target_port).await
-            }
+            ProxyNodeType::Socks5 => self.socks5_connect(node, target, target_port).await,
+            ProxyNodeType::Http => self.http_connect(node, target, target_port).await,
             _ => {
                 // Other protocols would use their respective handlers
                 // For now, return unsupported
@@ -318,9 +314,15 @@ mod tests {
 
     #[test]
     fn test_proxy_node_type_from_str() {
-        assert_eq!(ProxyNodeType::from_str("socks5"), Some(ProxyNodeType::Socks5));
+        assert_eq!(
+            ProxyNodeType::from_str("socks5"),
+            Some(ProxyNodeType::Socks5)
+        );
         assert_eq!(ProxyNodeType::from_str("http"), Some(ProxyNodeType::Http));
-        assert_eq!(ProxyNodeType::from_str("direct"), Some(ProxyNodeType::Direct));
+        assert_eq!(
+            ProxyNodeType::from_str("direct"),
+            Some(ProxyNodeType::Direct)
+        );
         assert_eq!(ProxyNodeType::from_str("unknown"), None);
     }
 
@@ -328,7 +330,10 @@ mod tests {
     fn test_proxy_chain_direct() {
         let chain = ProxyChain::direct();
         assert_eq!(chain.nodes.len(), 1);
-        assert_eq!(chain.current_node().unwrap().node_type, ProxyNodeType::Direct);
+        assert_eq!(
+            chain.current_node().unwrap().node_type,
+            ProxyNodeType::Direct
+        );
     }
 
     #[test]

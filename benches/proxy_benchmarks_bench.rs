@@ -12,13 +12,8 @@ use dae_proxy::{
     rule_engine::{PacketInfo, RuleEngine, RuleEngineConfig},
     rules::{DomainRule, GeoIpRule, IpCidrRule, Rule, RuleGroup, RuleMatchAction},
     socks5::Socks5Address,
-    SsCipherType,
+    SsCipherType, VlessAddressType,
 };
-
-#[path = "../packages/dae-proxy/src/shadowsocks.rs"]
-mod shadowsocks;
-#[path = "../packages/dae-proxy/src/vless.rs"]
-mod vless;
 
 // ============================================================================
 // Benchmark Helpers
@@ -219,17 +214,17 @@ fn vless_handshake_benchmark(c: &mut Criterion) {
             |b, &typ| {
                 b.iter(|| match typ {
                     "ipv4" => {
-                        let addr = vless::VlessAddressType::IPv4([8, 8, 8, 8]);
+                        let addr = VlessAddressType::IPv4([8, 8, 8, 8]);
                         black_box(addr);
                     }
                     "ipv6" => {
-                        let addr = vless::VlessAddressType::IPv6([
+                        let addr = VlessAddressType::IPv6([
                             0x2001, 0x4860, 0x4860, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000,
                         ]);
                         black_box(addr);
                     }
                     "domain" => {
-                        let addr = vless::VlessAddressType::Domain("example.com".to_string());
+                        let addr = VlessAddressType::Domain("example.com".to_string());
                         black_box(addr);
                     }
                     _ => {}
