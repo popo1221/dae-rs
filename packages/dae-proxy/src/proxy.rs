@@ -331,7 +331,13 @@ impl Proxy {
             udp_timeout: config.pool.udp_timeout,
         };
 
-        let server = TrojanServer::with_config(trojan_client_config).await?;
+        // Use multiple backends if available
+        let server = if !config.trojan_backends.is_empty() {
+            info!("Creating Trojan server with {} backends", config.trojan_backends.len());
+            TrojanServer::with_backends(trojan_client_config, config.trojan_backends.clone()).await?
+        } else {
+            TrojanServer::with_config(trojan_client_config).await?
+        };
         Ok(Some(Arc::new(server)))
     }
 

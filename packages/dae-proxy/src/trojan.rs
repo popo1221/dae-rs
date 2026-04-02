@@ -9,6 +9,7 @@
 //! Client -> dae-rs (Trojan client) -> remote Trojan server -> target
 
 use std::net::{IpAddr, Ipv4Addr, Ipv6Addr, SocketAddr};
+use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::Arc;
 use std::time::Duration;
 
@@ -222,12 +223,33 @@ impl TrojanTargetAddress {
 /// Trojan handler that implements the client-side protocol
 pub struct TrojanHandler {
     config: TrojanClientConfig,
+    /// Multiple backends for failover
+    backends: Vec<TrojanServerConfig>,
+    /// Current backend index for round-robin
+    current_index: std::sync::atomic::AtomicUsize,
 }
 
 impl TrojanHandler {
-    /// Create a new Trojan handler
+    /// Create a new Trojan handler with single backend
     pub fn new(config: TrojanClientConfig) -> Self {
-        Self { config }
+        Self {
+            backends: vec![config.server.clone()],
+            current_index: std::sync::atomic::AtomicUsize::new(0),
+            config,
+        }
+    }
+
+    /// Create a new Trojan handler with multiple backends
+    pub fn with_backends(config: TrojanClientConfig, backends: Vec<TrojanServerConfig>) -> Self {
+        Self {
+            backends: if backends.is_empty() {
+                vec![config.server.clone()]
+            } else {
+                backends
+            },
+            current_index: std::sync::atomic::AtomicUsize::new(0),
+            config,
+        }
     }
 
     /// Create with default configuration
@@ -235,7 +257,26 @@ impl TrojanHandler {
     pub fn new_default() -> Self {
         Self {
             config: TrojanClientConfig::default(),
+            backends: vec![TrojanServerConfig::default()],
+            current_index: std::sync::atomic::AtomicUsize::new(0),
         }
+    }
+
+    /// Get the next backend using round-robin
+    fn next_backend(&self) -> &TrojanServerConfig {
+        let idx = self.current_index.fetch_add(1, std::sync::atomic::Ordering::Relaxed) % self.backends.len();
+        &self.backends[idx]
+    }
+
+    /// Get all backends
+    fn get_backends(&self) -> &[TrojanServerConfig] {
+        &self.backends
+    }
+
+    /// Get the number of configured backends
+    #[allow(dead_code)]
+    pub fn backend_count(&self) -> usize {
+        self.backends.len()
     }
 
     /// Get the listen address
@@ -370,18 +411,23 @@ impl TrojanHandler {
                     _ => format!("{}:{}", address, port),
                 };
 
-                info!("Trojan TCP: {} -> {} (via {}:{})",
-                    client_addr, address_str,
-                    self.config.server.addr, self.config.server.port);
-
-                // Connect to Trojan server
-                let remote_addr = format!("{}:{}", self.config.server.addr, self.config.server.port);
+                // Select backend using round-robin
+                let backend = self.next_backend();
+                let remote_addr = format!("{}:{}", backend.addr, backend.port);
                 let timeout = self.config.tcp_timeout;
 
+                info!("Trojan TCP: {} -> {} (via {}:{}, {} backends available)",
+                    client_addr, address_str, backend.addr, backend.port, self.backend_count());
+
+                // Connect to the selected backend
                 let remote = match tokio::time::timeout(timeout, TcpStream::connect(&remote_addr)).await {
                     Ok(Ok(s)) => s,
-                    Ok(Err(e)) => return Err(e),
+                    Ok(Err(e)) => {
+                        error!("Failed to connect to Trojan backend {}:{}: {}", backend.addr, backend.port, e);
+                        return Err(e);
+                    }
                     Err(_) => {
+                        error!("Timeout connecting to Trojan backend {}:{}", backend.addr, backend.port);
                         return Err(std::io::Error::new(
                             std::io::ErrorKind::TimedOut,
                             "connection to Trojan server timed out"
@@ -482,6 +528,20 @@ impl TrojanServer {
         let listen_addr = config.listen_addr;
         let handler = Arc::new(TrojanHandler::new(config));
         let listener = TcpListener::bind(listen_addr).await?;
+        Ok(Self {
+            handler,
+            listener,
+            listen_addr,
+        })
+    }
+
+    /// Create with multiple backends for failover
+    #[allow(dead_code)]
+    pub async fn with_backends(config: TrojanClientConfig, backends: Vec<TrojanServerConfig>) -> std::io::Result<Self> {
+        let listen_addr = config.listen_addr;
+        let handler = Arc::new(TrojanHandler::with_backends(config, backends));
+        let listener = TcpListener::bind(listen_addr).await?;
+        info!("Trojan server created with {} backends", handler.backend_count());
         Ok(Self {
             handler,
             listener,
