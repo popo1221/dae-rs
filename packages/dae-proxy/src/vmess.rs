@@ -625,4 +625,89 @@ mod tests {
         let result = VmessTargetAddress::parse_from_bytes(&payload);
         assert!(result.is_none());
     }
+
+    #[test]
+    fn test_vmess_security_all_variants() {
+        // Check that from_str returns Some for valid security types
+        assert!(VmessSecurity::from_str("aes-128-cfb").is_some());
+        assert!(VmessSecurity::from_str("chacha20-poly1305").is_some());
+        assert!(VmessSecurity::from_str("auto").is_some());
+        assert!(VmessSecurity::from_str("invalid-scheme").is_none());
+    }
+
+    #[test]
+    fn test_vmess_security_to_string() {
+        assert_eq!(VmessSecurity::Aes128GcmAead.to_string(), "aes-128-gcm-aead");
+        assert_eq!(VmessSecurity::ChaCha20Poly1305Aead.to_string(), "chacha20-poly1305-aead");
+        // None maps to "none" not "auto"
+        assert_eq!(VmessSecurity::None.to_string(), "none");
+    }
+
+    #[test]
+    fn test_vmess_address_type() {
+        assert_eq!(VmessAddressType::Ipv4 as u8, 0x01);
+        assert_eq!(VmessAddressType::Domain as u8, 0x02);
+        assert_eq!(VmessAddressType::Ipv6 as u8, 0x03);
+    }
+
+    #[test]
+    fn test_target_address_debug() {
+        let addr = VmessTargetAddress::Ipv4(IpAddr::V4(Ipv4Addr::new(1, 2, 3, 4)));
+        let debug_str = format!("{:?}", addr);
+        assert!(debug_str.contains("Ipv4"));
+    }
+
+    #[test]
+    fn test_target_address_clone() {
+        let addr = VmessTargetAddress::Domain("test.com".to_string(), 443);
+        let cloned = addr.clone();
+        match (&addr, &cloned) {
+            (VmessTargetAddress::Domain(d1, p1), VmessTargetAddress::Domain(d2, p2)) => {
+                assert_eq!(d1, d2);
+                assert_eq!(p1, p2);
+            }
+            _ => panic!("Clone mismatch"),
+        }
+    }
+
+    #[test]
+    fn test_target_address_to_bytes_ipv6() {
+        let addr = VmessTargetAddress::Ipv6(IpAddr::V6(Ipv6Addr::new(0, 0, 0, 0, 0, 0, 0, 1)));
+        let bytes = addr.to_bytes();
+        assert_eq!(bytes[0], 0x03); // ATYP_IPV6
+    }
+
+    #[test]
+    fn test_vmess_client_config_default() {
+        let config = VmessClientConfig::default();
+        assert!(config.server.enable_aead);
+        assert_eq!(config.server.security, VmessSecurity::Aes128GcmAead);
+    }
+
+    #[test]
+    fn test_vmess_client_config_clone() {
+        let config = VmessClientConfig::default();
+        let cloned = config.clone();
+        assert_eq!(cloned.server.user_id, config.server.user_id);
+    }
+
+    #[test]
+    fn test_vmess_handler_timestamp_range() {
+        let ts1 = VmessHandler::timestamp();
+        let ts2 = VmessHandler::timestamp();
+        // Timestamps should be increasing or same
+        assert!(ts2 >= ts1);
+    }
+
+    #[test]
+    fn test_vmess_address_type_variants() {
+        let addr_type = VmessAddressType::Ipv4;
+        assert_eq!(addr_type as u8, 0x01);
+    }
+
+    #[test]
+    fn test_vmess_security_from_str_case_insensitive() {
+        assert!(VmessSecurity::from_str("AES-128-GCM-AEAD").is_some());
+        assert!(VmessSecurity::from_str("ChaCha20-Poly1305-AEAD").is_some());
+    }
 }
