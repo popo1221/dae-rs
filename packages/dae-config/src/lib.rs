@@ -653,6 +653,7 @@ impl Config {
                 tls: None,
                 tls_server_name: None,
                 aead: Some(ss.ota),
+                capabilities: None,
             });
         }
 
@@ -671,6 +672,7 @@ impl Config {
                 tls: vless.tls.as_ref().map(|t| t.enabled),
                 tls_server_name: vless.tls.and_then(|t| t.server_name),
                 aead: None,
+                capabilities: None,
             });
         }
 
@@ -689,6 +691,7 @@ impl Config {
                 tls: None,
                 tls_server_name: None,
                 aead: Some(vmess.enable_aead),
+                capabilities: None,
             });
         }
 
@@ -707,6 +710,7 @@ impl Config {
                 tls: trojan.tls.as_ref().map(|t| t.enabled),
                 tls_server_name: trojan.tls.and_then(|t| t.server_name),
                 aead: None,
+                capabilities: None,
             });
         }
 
@@ -989,6 +993,7 @@ mod tests {
             tls: None,
             tls_server_name: None,
             aead: None,
+            capabilities: None,
         };
         assert_eq!(node.display_addr(), "1.2.3.4:8388");
     }
@@ -1010,6 +1015,7 @@ mod tests {
                 tls: None,
                 tls_server_name: None,
                 aead: None,
+                capabilities: None,
             }],
             rules: RulesConfig::default(),
             logging: LoggingConfig::default(),
@@ -1034,6 +1040,7 @@ mod tests {
                 tls: None,
                 tls_server_name: None,
                 aead: None,
+                capabilities: None,
             }],
             rules: RulesConfig::default(),
             logging: LoggingConfig::default(),
@@ -1092,6 +1099,7 @@ mod tests {
                     tls: None,
                     tls_server_name: None,
                     aead: None,
+                    capabilities: None,
                 },
                 NodeConfig {
                     name: "node2".to_string(),
@@ -1106,6 +1114,7 @@ mod tests {
                     tls: Some(true),
                     tls_server_name: None,
                     aead: None,
+                    capabilities: None,
                 },
             ],
             rules: RulesConfig::default(),
