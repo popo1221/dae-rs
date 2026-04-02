@@ -128,4 +128,11 @@ mod tests {
         let config = AnyTlsServerConfig::default();
         assert_eq!(config.listen_port, 443);
     }
+
+    #[test]
+    fn test_anytls_client_config_clone() {
+        let config = AnyTlsClientConfig::default();
+        let cloned = config.clone();
+        assert_eq!(cloned.server_port, config.server_port);
+    }
 }
