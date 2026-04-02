@@ -157,9 +157,7 @@ impl ProxyChain {
         }
 
         // All proxies failed
-        Err(last_error.unwrap_or_else(|| {
-            std::io::Error::other("proxy chain: all nodes failed")
-        }))
+        Err(last_error.unwrap_or_else(|| std::io::Error::other("proxy chain: all nodes failed")))
     }
 
     /// Connect through a single proxy node
@@ -257,9 +255,8 @@ impl ProxyChain {
         let mut stream = TcpStream::connect(&addr).await?;
 
         // Send HTTP CONNECT request
-        let connect_req = format!(
-            "CONNECT {target}:{target_port} HTTP/1.1\r\nHost: {target}:{target_port}\r\n"
-        );
+        let connect_req =
+            format!("CONNECT {target}:{target_port} HTTP/1.1\r\nHost: {target}:{target_port}\r\n");
 
         stream.write_all(connect_req.as_bytes()).await?;
 

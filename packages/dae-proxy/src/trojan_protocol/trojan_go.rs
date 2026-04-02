@@ -8,8 +8,6 @@
 use std::io::ErrorKind;
 use std::time::Duration;
 
-use tokio::io::{AsyncReadExt, AsyncWriteExt};
-use tokio::net::TcpStream;
 use tokio_tungstenite::{connect_async, tungstenite::protocol::Message};
 use tracing::{debug, error, info, warn};
 
@@ -119,10 +117,7 @@ impl TrojanGoWsHandler {
 
         // Connect WebSocket
         let (ws_stream, response) = connect_async(&url).await.map_err(|e| {
-            std::io::Error::new(
-                ErrorKind::Other,
-                format!("Trojan-go WebSocket connect error: {}", e),
-            )
+            std::io::Error::other(format!("Trojan-go WebSocket connect error: {e}"))
         })?;
 
         // Log response status
@@ -156,10 +151,10 @@ impl TrojanGoWsHandler {
         };
 
         match self.config.mode {
-            TrojanGoMode::WebSocket => Ok(format!("ws://{}:{}{}", host, port, path)),
+            TrojanGoMode::WebSocket => Ok(format!("ws://{host}:{port}{path}")),
             TrojanGoMode::WebSocketTLS => {
                 let sni = self.config.tls_sni.as_deref().unwrap_or(host);
-                Ok(format!("wss://{}:{}{}", sni, port, path))
+                Ok(format!("wss://{sni}:{port}{path}"))
             }
         }
     }
@@ -185,9 +180,9 @@ impl TrojanGoWsStream {
     pub async fn send(&mut self, data: &[u8]) -> std::io::Result<()> {
         // Trojan-go uses binary WebSocket messages
         self.ws
-            .send(Message::Binary(data.to_vec().into()))
+            .send(Message::Binary(data.to_vec()))
             .await
-            .map_err(|e| std::io::Error::new(ErrorKind::Other, format!("send error: {}", e)))?;
+            .map_err(|e| std::io::Error::other(format!("send error: {e}")))?;
         Ok(())
     }
 
@@ -225,14 +220,11 @@ impl TrojanGoWsStream {
                     }
                     Err(e) => {
                         error!("Trojan-go WebSocket error: {}", e);
-                        return Err(std::io::Error::new(
-                            ErrorKind::Other,
-                            format!("recv error: {}", e),
-                        ));
+                        return Err(std::io::Error::other(format!("recv error: {e}")));
                     }
                 }
             } else {
-                return Err(std::io::Error::new(ErrorKind::Other, "stream ended"));
+                return Err(std::io::Error::other("stream ended"));
             }
         }
     }
@@ -242,7 +234,7 @@ impl TrojanGoWsStream {
         self.ws
             .close(None)
             .await
-            .map_err(|e| std::io::Error::new(ErrorKind::Other, format!("close error: {}", e)))?;
+            .map_err(|e| std::io::Error::other(format!("close error: {e}")))?;
         Ok(())
     }
 

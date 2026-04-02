@@ -543,8 +543,6 @@ impl VlessHandler {
         request: &[u8; 48],
         destination: &str,
     ) -> std::io::Result<Vec<u8>> {
-        
-
         let mut client_hello = Vec::new();
 
         // TLS Record Layer: Handshake (0x16)

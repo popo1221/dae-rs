@@ -43,10 +43,10 @@ impl std::fmt::Display for LoopDetectionResult {
                 upstream,
                 suggestion,
             } => {
-                write!(f, "Upstream {} is a client - {}", upstream, suggestion)
+                write!(f, "Upstream {upstream} is a client - {suggestion}")
             }
             LoopDetectionResult::SourceIsReachable { source, suggestion } => {
-                write!(f, "Source {} is reachable - {}", source, suggestion)
+                write!(f, "Source {source} is reachable - {suggestion}")
             }
         }
     }
@@ -113,7 +113,7 @@ impl DnsLoopDetector {
             );
 
             // Record detected loop
-            let key = format!("upstream:{}", upstream_ip);
+            let key = format!("upstream:{upstream_ip}");
             let mut loops = self.detected_loops.write().await;
             if !loops.contains(&key) {
                 loops.insert(key.clone());
@@ -146,7 +146,7 @@ impl DnsLoopDetector {
             );
 
             // Record detected loop
-            let key = format!("source:{}", source_ip);
+            let key = format!("source:{source_ip}");
             let mut loops = self.detected_loops.write().await;
             if !loops.contains(&key) {
                 loops.insert(key.clone());
