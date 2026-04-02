@@ -17,7 +17,7 @@ use dae_proxy::{
     control::{connect_and_send, ControlServer},
     shadowsocks::{SsCipherType, SsServerConfig},
     trojan_protocol::{TrojanServerConfig, TrojanTlsConfig},
-    vless::{VlessServerConfig, VlessTlsConfig},
+    vless::{VlessRealityConfig, VlessServerConfig, VlessTlsConfig},
     vmess::{VmessSecurity, VmessServerConfig},
     Proxy, ProxyConfig,
 };
@@ -237,6 +237,7 @@ async fn run_proxy(
                         port,
                         uuid: uuid.clone(),
                         tls: VlessTlsConfig::default(),
+                        reality: None,
                     });
                 }
             }

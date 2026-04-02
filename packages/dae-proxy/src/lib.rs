@@ -30,8 +30,8 @@ pub use crate::socks5::{Socks5Handler, Socks5Server};
 pub use crate::tcp::{TcpProxy, TcpProxyConfig};
 pub use crate::udp::{UdpProxy, UdpProxyConfig};
 pub use crate::vless::{
-    VlessAddressType, VlessClientConfig, VlessCommand, VlessHandler, VlessServer,
-    VlessServerConfig, VlessTargetAddress, VlessTlsConfig,
+    VlessAddressType, VlessClientConfig, VlessCommand, VlessHandler, VlessRealityConfig,
+    VlessServer, VlessServerConfig, VlessTargetAddress, VlessTlsConfig,
 };
 pub use crate::vmess::{
     VmessAddressType, VmessClientConfig, VmessCommand, VmessHandler, VmessSecurity, VmessServer,
