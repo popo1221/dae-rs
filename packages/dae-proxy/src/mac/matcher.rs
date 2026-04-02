@@ -16,17 +16,6 @@ use super::MacAddr;
 ///
 /// # Returns
 /// `true` if the MAC address matches the pattern (applying mask if specified)
-///
-/// # Example
-/// ```
-/// // Exact match
-/// match_mac_with_mask(&mac_a, &mac_b, &None)  // false
-///
-/// // OUI prefix match (first 3 bytes)
-/// let oui = MacAddr::parse("AA:BB:CC:00:00:00").unwrap();
-/// let mask = MacAddr::parse("FF:FF:FF:00:00:00").unwrap();
-/// match_mac_with_mask(&mac_a, &oui, &Some(mask))  // true if first 3 bytes match
-/// ```
 pub fn match_mac_with_mask(mac: &MacAddr, pattern: &MacAddr, mask: &Option<MacAddr>) -> bool {
     match mask {
         Some(m) => {
