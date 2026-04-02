@@ -13,6 +13,9 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     libelf1 \
     libpcap-dev \
     curl \
+    build-essential \
+    pkg-config \
+    libssl-dev \
     && rm -rf /var/lib/apt/lists/*
 
 # Install Rust (for building in container if needed)
