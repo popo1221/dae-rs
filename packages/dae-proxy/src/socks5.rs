@@ -821,4 +821,102 @@ mod tests {
         assert_eq!(Socks5Reply::CommandNotSupported.to_u8(), 0x07);
         assert_eq!(Socks5Reply::AddressTypeNotSupported.to_u8(), 0x08);
     }
+
+    #[test]
+    fn test_socks5_command_all_variants() {
+        assert!(matches!(Socks5Command::from_u8(0x01), Some(Socks5Command::Connect)));
+        assert!(matches!(Socks5Command::from_u8(0x02), Some(Socks5Command::Bind)));
+        assert!(matches!(Socks5Command::from_u8(0x03), Some(Socks5Command::UdpAssociate)));
+        assert!(Socks5Command::from_u8(0x00).is_none());
+        assert!(Socks5Command::from_u8(0x04).is_none());
+        assert!(Socks5Command::from_u8(0xFF).is_none());
+    }
+
+    #[test]
+    fn test_socks5_address_ipv6() {
+        let addr = Socks5Address::IPv6(
+            Ipv6Addr::new(0, 0, 0, 0, 0, 0, 0, 1),
+            8080,
+        );
+        let debug_str = format!("{:?}", addr);
+        assert!(debug_str.contains("IPv6"));
+    }
+
+    #[test]
+    fn test_socks5_address_domain() {
+        let addr = Socks5Address::Domain("example.com".to_string(), 443);
+        let debug_str = format!("{:?}", addr);
+        assert!(debug_str.contains("example.com"));
+    }
+
+    #[test]
+    fn test_socks5_address_to_socket_addr_ipv4() {
+        let addr = Socks5Address::IPv4(Ipv4Addr::new(127, 0, 0, 1), 8080);
+        let socket: SocketAddr = addr.to_socket_addr().unwrap();
+        assert_eq!(socket.port(), 8080);
+    }
+
+    #[test]
+    fn test_socks5_address_to_socket_addr_ipv6() {
+        let addr = Socks5Address::IPv6(Ipv6Addr::new(0, 0, 0, 0, 0, 0, 0, 1), 8080);
+        let socket: SocketAddr = addr.to_socket_addr().unwrap();
+        assert_eq!(socket.port(), 8080);
+    }
+
+    #[test]
+    fn test_socks5_address_to_socket_addr_domain_fails() {
+        let addr = Socks5Address::Domain("example.com".to_string(), 443);
+        let socket = addr.to_socket_addr();
+        assert!(socket.is_none());
+    }
+
+    #[test]
+    fn test_socks5_consts() {
+        assert_eq!(consts::VER, 0x05);
+        assert_eq!(consts::NO_AUTH, 0x00);
+        assert_eq!(consts::USERNAME_PASSWORD, 0x02);
+        assert_eq!(consts::CMD_CONNECT, 0x01);
+        assert_eq!(consts::ATYP_IPV4, 0x01);
+        assert_eq!(consts::ATYP_DOMAIN, 0x03);
+        assert_eq!(consts::ATYP_IPV6, 0x04);
+        assert_eq!(consts::REP_SUCCESS, 0x00);
+    }
+
+    #[test]
+    fn test_socks5_address_clone() {
+        let addr = Socks5Address::IPv4(Ipv4Addr::new(1, 2, 3, 4), 5678);
+        let cloned = addr.clone();
+        assert_eq!(format!("{:?}", addr), format!("{:?}", cloned));
+    }
+
+    #[test]
+    fn test_socks5_address_ipv6_write_format() {
+        let addr = Socks5Address::IPv6(
+            Ipv6Addr::new(0x2001, 0xdb8, 0, 0, 0, 0, 0, 1),
+            443,
+        );
+        // Verify debug format works
+        let debug_str = format!("{:?}", addr);
+        assert!(debug_str.contains("IPv6"));
+    }
+
+    #[test]
+    fn test_socks5_reply_to_u8_all() {
+        assert_eq!(Socks5Reply::Success.to_u8(), 0x00);
+        assert_eq!(Socks5Reply::GeneralFailure.to_u8(), 0x01);
+        assert_eq!(Socks5Reply::ConnectionNotAllowed.to_u8(), 0x02);
+        assert_eq!(Socks5Reply::NetworkUnreachable.to_u8(), 0x03);
+        assert_eq!(Socks5Reply::HostUnreachable.to_u8(), 0x04);
+        assert_eq!(Socks5Reply::ConnectionRefused.to_u8(), 0x05);
+        assert_eq!(Socks5Reply::TtlExpired.to_u8(), 0x06);
+        assert_eq!(Socks5Reply::CommandNotSupported.to_u8(), 0x07);
+        assert_eq!(Socks5Reply::AddressTypeNotSupported.to_u8(), 0x08);
+    }
+
+    #[test]
+    fn test_socks5_handler_config_default() {
+        let config = Socks5HandlerConfig::default();
+        let debug_str = format!("{:?}", config);
+        assert!(debug_str.contains("Socks5HandlerConfig"));
+    }
 }
