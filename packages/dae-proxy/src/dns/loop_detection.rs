@@ -32,17 +32,17 @@ pub enum LoopDetectionResult {
         suggestion: String,
     },
     /// Source IP is also reachable through dae-rs
-    SourceIsReachable {
-        source: IpAddr,
-        suggestion: String,
-    },
+    SourceIsReachable { source: IpAddr, suggestion: String },
 }
 
 impl std::fmt::Display for LoopDetectionResult {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             LoopDetectionResult::NoLoop => write!(f, "No loop detected"),
-            LoopDetectionResult::UpstreamIsClient { upstream, suggestion } => {
+            LoopDetectionResult::UpstreamIsClient {
+                upstream,
+                suggestion,
+            } => {
                 write!(f, "Upstream {upstream} is a client - {suggestion}")
             }
             LoopDetectionResult::SourceIsReachable { source, suggestion } => {
@@ -316,7 +316,7 @@ mod tests {
         let (addr, mask) = parse_cidr_impl("10.0.0.0/8").unwrap();
         assert_eq!(addr, Ipv4Addr::new(10, 0, 0, 0));
         assert_eq!(mask, 0xFF000000);
-        
+
         // Test 192.168.1.0/24
         let (addr, mask) = parse_cidr_impl("192.168.1.0/24").unwrap();
         assert_eq!(addr, Ipv4Addr::new(192, 168, 1, 0));

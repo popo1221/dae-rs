@@ -321,6 +321,7 @@ impl TrojanHandler {
 
 #[cfg(test)]
 mod tests {
+    use super::super::config::TrojanTlsConfig;
     use super::*;
 
     #[test]
@@ -366,5 +367,32 @@ mod tests {
 
         // Both should be different
         assert_ne!(backend1.addr, backend2.addr);
+    }
+
+    #[test]
+    fn test_trojan_client_config_default() {
+        let config = TrojanClientConfig::default();
+        assert_eq!(config.listen_addr, SocketAddr::from(([127, 0, 0, 1], 1080)));
+    }
+
+    #[test]
+    fn test_trojan_server_config_default() {
+        let config = TrojanServerConfig::default();
+        assert_eq!(config.addr, "127.0.0.1");
+        assert_eq!(config.port, 443);
+    }
+
+    #[test]
+    fn test_trojan_server_config_custom() {
+        let config = TrojanServerConfig {
+            addr: "192.168.1.1".to_string(),
+            port: 8443,
+            password: "my_secret".to_string(),
+            tls: TrojanTlsConfig::default(),
+        };
+        assert_eq!(config.addr, "192.168.1.1");
+        assert_eq!(config.port, 8443);
+        assert_eq!(config.password, "my_secret");
+        assert!(config.tls.enabled);
     }
 }

@@ -130,8 +130,6 @@ mod tests {
         assert!(match_process_name("*chrome*", "google-chrome"));
         assert!(match_process_name("chr*me", "chrome"));
         assert!(match_process_name("chr*me", "chr123ome"));
-        // Note: glob matching is strict - "chromium-browser" does contain "chrome" but let glob decide
-        // We test more straightforward cases above
     }
 
     #[test]
@@ -156,5 +154,36 @@ mod tests {
 
         let info = info.with_path(PathBuf::from("/usr/bin/chrome"));
         assert_eq!(info.path, Some(PathBuf::from("/usr/bin/chrome")));
+    }
+
+    #[test]
+    fn test_process_info_with_cmdline() {
+        let info = ProcessInfo::new(1234, "chrome".to_string());
+        let info = info.with_cmdline(vec!["chrome".to_string(), "--disable-gpu".to_string()]);
+        assert!(info.cmdline.is_some());
+        assert_eq!(info.cmdline.as_ref().unwrap().len(), 2);
+    }
+
+    #[test]
+    fn test_middle_wildcard_pattern() {
+        // Middle wildcard with multiple chars
+        assert!(match_process_name("abc*xyz", "abcHelloWorldxyz"));
+        assert!(!match_process_name("abc*xyz", "abcHello"));
+    }
+
+    #[test]
+    fn test_process_info_clone() {
+        let info = ProcessInfo::new(5678, "firefox".to_string());
+        let cloned = info.clone();
+        assert_eq!(cloned.pid, 5678);
+        assert_eq!(cloned.name, "firefox");
+    }
+
+    #[test]
+    fn test_process_info_debug() {
+        let info = ProcessInfo::new(1234, "chrome".to_string());
+        let debug_str = format!("{:?}", info);
+        assert!(debug_str.contains("chrome"));
+        assert!(debug_str.contains("1234"));
     }
 }

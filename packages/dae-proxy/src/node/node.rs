@@ -48,3 +48,44 @@ impl NodeError {
         matches!(self, NodeError::Timeout)
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_node_error_timeout_is_retryable() {
+        let err = NodeError::Timeout;
+        assert!(err.is_retryable());
+    }
+
+    #[test]
+    fn test_node_error_connection_failed_not_retryable() {
+        let err = NodeError::ConnectionFailed("connection refused".to_string());
+        assert!(!err.is_retryable());
+    }
+
+    #[test]
+    fn test_node_error_unavailable_not_retryable() {
+        let err = NodeError::Unavailable;
+        assert!(!err.is_retryable());
+    }
+
+    #[test]
+    fn test_node_error_display_timeout() {
+        let err = NodeError::Timeout;
+        assert_eq!(format!("{}", err), "timeout");
+    }
+
+    #[test]
+    fn test_node_error_display_connection_failed() {
+        let err = NodeError::ConnectionFailed("refused".to_string());
+        assert!(format!("{}", err).contains("refused"));
+    }
+
+    #[test]
+    fn test_node_error_display_unavailable() {
+        let err = NodeError::Unavailable;
+        assert_eq!(format!("{}", err), "node unavailable");
+    }
+}

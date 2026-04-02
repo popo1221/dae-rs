@@ -808,4 +808,17 @@ mod tests {
         assert_eq!(buf[1..5], [192, 168, 1, 1]);
         assert_eq!(buf[5..7], [0x1F, 0x90]); // 8080 in big endian
     }
+
+    #[test]
+    fn test_socks5_reply_all_variants() {
+        assert_eq!(Socks5Reply::Success.to_u8(), 0x00);
+        assert_eq!(Socks5Reply::GeneralFailure.to_u8(), 0x01);
+        assert_eq!(Socks5Reply::ConnectionNotAllowed.to_u8(), 0x02);
+        assert_eq!(Socks5Reply::NetworkUnreachable.to_u8(), 0x03);
+        assert_eq!(Socks5Reply::HostUnreachable.to_u8(), 0x04);
+        assert_eq!(Socks5Reply::ConnectionRefused.to_u8(), 0x05);
+        assert_eq!(Socks5Reply::TtlExpired.to_u8(), 0x06);
+        assert_eq!(Socks5Reply::CommandNotSupported.to_u8(), 0x07);
+        assert_eq!(Socks5Reply::AddressTypeNotSupported.to_u8(), 0x08);
+    }
 }

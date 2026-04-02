@@ -57,3 +57,57 @@ pub trait NodeManager: Send + Sync {
     /// Run latency tests for all nodes and return results
     async fn run_latency_test(&self) -> HashMap<NodeId, u32>;
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_selection_policy_lowest_latency() {
+        let policy = SelectionPolicy::LowestLatency;
+        assert!(matches!(policy, SelectionPolicy::LowestLatency));
+    }
+
+    #[test]
+    fn test_selection_policy_specific() {
+        let policy = SelectionPolicy::Specific("node1".to_string());
+        assert!(matches!(policy, SelectionPolicy::Specific(_)));
+        if let SelectionPolicy::Specific(id) = policy {
+            assert_eq!(id, "node1");
+        }
+    }
+
+    #[test]
+    fn test_selection_policy_random() {
+        let policy = SelectionPolicy::Random;
+        assert!(matches!(policy, SelectionPolicy::Random));
+    }
+
+    #[test]
+    fn test_selection_policy_round_robin() {
+        let policy = SelectionPolicy::RoundRobin;
+        assert!(matches!(policy, SelectionPolicy::RoundRobin));
+    }
+
+    #[test]
+    fn test_selection_policy_prefer_direct() {
+        let policy = SelectionPolicy::PreferDirect;
+        assert!(matches!(policy, SelectionPolicy::PreferDirect));
+    }
+
+    #[test]
+    fn test_selection_policy_clone() {
+        let policy1 = SelectionPolicy::Specific("node1".to_string());
+        let policy2 = policy1.clone();
+
+        if let SelectionPolicy::Specific(id1) = policy1 {
+            if let SelectionPolicy::Specific(id2) = policy2 {
+                assert_eq!(id1, id2);
+            } else {
+                panic!("Expected Specific");
+            }
+        } else {
+            panic!("Expected Specific");
+        }
+    }
+}

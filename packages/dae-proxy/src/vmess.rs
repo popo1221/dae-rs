@@ -573,4 +573,56 @@ mod tests {
         // Should be roughly current time (after 2020)
         assert!(ts > 1577836800);
     }
+
+    #[test]
+    fn test_target_address_to_bytes_domain() {
+        let addr = VmessTargetAddress::Domain("example.com".to_string(), 443);
+        let bytes = addr.to_bytes();
+        assert_eq!(bytes[0], 0x02); // ATYP_DOMAIN
+        assert_eq!(bytes[1], 11); // length
+    }
+
+    #[test]
+    fn test_target_address_parse_ipv6() {
+        let payload = [
+            0x03, // ATYP_IPV6 (VMess uses 0x03 for IPv6)
+            0x20, 0x01, 0x0d, 0xb8, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+            0x00, 0x01, 0x00, 0x50, // [2001:db8::1]:80
+        ];
+        let result = VmessTargetAddress::parse_from_bytes(&payload);
+        assert!(result.is_some());
+        let (addr, port) = result.unwrap();
+        match addr {
+            VmessTargetAddress::Ipv6(ip) => {
+                if let IpAddr::V6(ipv6) = ip {
+                    assert_eq!(ipv6.segments()[0], 0x2001);
+                }
+            }
+            _ => panic!("Expected Ipv6"),
+        }
+        assert_eq!(port, 80);
+    }
+
+    #[test]
+    fn test_target_address_parse_invalid_type() {
+        let payload = [0x05, 0x00]; // Invalid type
+        let result = VmessTargetAddress::parse_from_bytes(&payload);
+        assert!(result.is_none());
+    }
+
+    #[test]
+    fn test_target_address_parse_truncated() {
+        // IPv4 requires 7 bytes, only 3 provided
+        let payload = [0x01, 192, 168];
+        let result = VmessTargetAddress::parse_from_bytes(&payload);
+        assert!(result.is_none());
+    }
+
+    #[test]
+    fn test_target_address_parse_domain_truncated() {
+        // Domain with length 11 but only 2 bytes provided
+        let payload = [0x02, 0x0b, 0x65]; // "e" but no full domain
+        let result = VmessTargetAddress::parse_from_bytes(&payload);
+        assert!(result.is_none());
+    }
 }

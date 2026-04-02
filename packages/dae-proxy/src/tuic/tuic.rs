@@ -11,7 +11,7 @@ use tokio::net::{TcpListener, TcpStream};
 use tokio::sync::RwLock;
 use tracing::{debug, error, info, warn};
 
-use crate::core::{Context, Result as ProxyResult, Error};
+use crate::core::{Context, Error, Result as ProxyResult};
 
 /// TUIC protocol version
 pub const TUIC_VERSION: u8 = 0x05;
@@ -147,7 +147,9 @@ impl TuicConfig {
     /// Validate the configuration
     pub fn validate(&self) -> Result<(), TuicError> {
         if self.token.is_empty() {
-            return Err(TuicError::InvalidConfig("token cannot be empty".to_string()));
+            return Err(TuicError::InvalidConfig(
+                "token cannot be empty".to_string(),
+            ));
         }
         if self.uuid.is_empty() {
             return Err(TuicError::InvalidConfig("uuid cannot be empty".to_string()));
@@ -299,17 +301,23 @@ async fn handle_client(
             Ok(command) => {
                 match command {
                     TuicCommand::Connect(connect) => {
-                        debug!("Connect request: {}:{} session={}",
-                            connect.host, connect.port, connect.session_id);
+                        debug!(
+                            "Connect request: {}:{} session={}",
+                            connect.host, connect.port, connect.session_id
+                        );
 
                         let session = TuicSession::new(connect.session_id, remote);
                         session.target_addr = Some((connect.host.clone(), connect.port));
                         session.connected = true;
 
-                        sessions.write().await.insert(connect.session_id, session.clone());
+                        sessions
+                            .write()
+                            .await
+                            .insert(connect.session_id, session.clone());
 
                         // Respond to connect
-                        TuicCodec::write_connect_response(&mut stream, connect.session_id, true).await?;
+                        TuicCodec::write_connect_response(&mut stream, connect.session_id, true)
+                            .await?;
 
                         // Handle the connection...
                         handle_tcp_relay(stream, session).await?;
@@ -317,7 +325,8 @@ async fn handle_client(
                     }
                     TuicCommand::Heartbeat(heartbeat) => {
                         debug!("Heartbeat: timestamp={}", heartbeat.timestamp);
-                        TuicCodec::write_heartbeat_response(&mut stream, heartbeat.timestamp).await?;
+                        TuicCodec::write_heartbeat_response(&mut stream, heartbeat.timestamp)
+                            .await?;
                     }
                     TuicCommand::Disconnect(session_id) => {
                         debug!("Disconnect: session_id={}", session_id);
@@ -394,7 +403,9 @@ impl TuicClient {
         // Read auth response
         let auth_success = TuicCodec::read_auth_response(&mut stream).await?;
         if !auth_success {
-            return Err(TuicError::AuthFailed("Server rejected authentication".to_string()));
+            return Err(TuicError::AuthFailed(
+                "Server rejected authentication".to_string(),
+            ));
         }
 
         info!("TUIC client connected to server");
@@ -417,7 +428,11 @@ impl TuicClient {
         session.session_id = session_id;
 
         let connect_request = TuicConnectRequest {
-            addr_type: if host.parse::<std::net::IpAddr>().is_ok() { 0x01 } else { 0x02 },
+            addr_type: if host.parse::<std::net::IpAddr>().is_ok() {
+                0x01
+            } else {
+                0x02
+            },
             host,
             port,
             session_id,
@@ -479,9 +494,18 @@ mod tests {
     #[test]
     fn test_tuic_command_type_conversion() {
         assert_eq!(TuicCommandType::from_u8(0x01), Some(TuicCommandType::Auth));
-        assert_eq!(TuicCommandType::from_u8(0x02), Some(TuicCommandType::Connect));
-        assert_eq!(TuicCommandType::from_u8(0x03), Some(TuicCommandType::Disconnect));
-        assert_eq!(TuicCommandType::from_u8(0x04), Some(TuicCommandType::Heartbeat));
+        assert_eq!(
+            TuicCommandType::from_u8(0x02),
+            Some(TuicCommandType::Connect)
+        );
+        assert_eq!(
+            TuicCommandType::from_u8(0x03),
+            Some(TuicCommandType::Disconnect)
+        );
+        assert_eq!(
+            TuicCommandType::from_u8(0x04),
+            Some(TuicCommandType::Heartbeat)
+        );
         assert_eq!(TuicCommandType::from_u8(0xFF), None);
 
         assert_eq!(TuicCommandType::Auth.as_u8(), 0x01);
@@ -506,5 +530,66 @@ mod tests {
         assert_eq!(session.session_id, 12345);
         assert!(!session.connected);
         assert!(session.target_addr.is_none());
+    }
+
+    #[test]
+    fn test_tuic_session_with_target() {
+        let mut session = TuicSession::new(12345, "127.0.0.1:8080".parse().unwrap());
+        session.target_addr = Some(("example.com".to_string(), 443));
+        session.connected = true;
+
+        assert!(session.target_addr.is_some());
+        let (host, port) = session.target_addr.unwrap();
+        assert_eq!(host, "example.com");
+        assert_eq!(port, 443);
+        assert!(session.connected);
+    }
+
+    #[test]
+    fn test_tuic_config_default() {
+        let config = TuicConfig::default();
+        assert_eq!(config.server_name, "tuic.cloud");
+        assert_eq!(config.congestion_control, "bbr");
+        assert_eq!(config.max_idle_timeout, 15);
+        assert_eq!(config.max_udp_packet_size, 1400);
+        assert_eq!(config.flow_control_window, 8388608);
+    }
+
+    #[test]
+    fn test_tuic_config_with_values() {
+        let config = TuicConfig::new("my_token".to_string(), "my_uuid".to_string());
+        assert_eq!(config.token, "my_token");
+        assert_eq!(config.uuid, "my_uuid");
+    }
+
+    #[test]
+    fn test_tuic_error_display() {
+        let err = TuicError::InvalidProtocol("bad proto".to_string());
+        assert!(format!("{}", err).contains("bad proto"));
+
+        let err = TuicError::InvalidCommand("bad cmd".to_string());
+        assert!(format!("{}", err).contains("bad cmd"));
+
+        let err = TuicError::AuthFailed("bad auth".to_string());
+        assert!(format!("{}", err).contains("bad auth"));
+
+        let err = TuicError::InvalidConfig("bad config".to_string());
+        assert!(format!("{}", err).contains("bad config"));
+    }
+
+    #[test]
+    fn test_tuic_command_type_all_variants() {
+        // Test all command type conversions
+        for v in 0x00..=0xFF {
+            let result = TuicCommandType::from_u8(v);
+            match v {
+                0x01 => assert_eq!(result, Some(TuicCommandType::Auth)),
+                0x02 => assert_eq!(result, Some(TuicCommandType::Connect)),
+                0x03 => assert_eq!(result, Some(TuicCommandType::Disconnect)),
+                0x04 => assert_eq!(result, Some(TuicCommandType::Heartbeat)),
+                0x05 => assert_eq!(result, Some(TuicCommandType::UdpPacket)),
+                _ => assert_eq!(result, None),
+            }
+        }
     }
 }

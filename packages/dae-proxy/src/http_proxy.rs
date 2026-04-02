@@ -413,4 +413,37 @@ mod tests {
         assert_eq!(base64_decode("SGVsbG8=").unwrap(), "Hello");
         assert_eq!(base64_decode("V29ybGQ=").unwrap(), "World");
     }
+
+    #[test]
+    fn test_http_connect_request_invalid() {
+        // Empty string has no parts, fails len < 2
+        let req = HttpConnectRequest::parse("");
+        assert!(req.is_none());
+
+        // Single word, fails len < 2
+        let req = HttpConnectRequest::parse("CONNECT");
+        assert!(req.is_none());
+    }
+
+    #[test]
+    fn test_basic_auth_invalid_header() {
+        let auth = BasicAuth::from_header("Bearer token");
+        assert!(auth.is_none());
+
+        let auth = BasicAuth::from_header("NotBase64");
+        assert!(auth.is_none());
+    }
+
+    #[test]
+    fn test_basic_auth_empty() {
+        let auth = BasicAuth::from_header("Basic ");
+        assert!(auth.is_none());
+    }
+
+    #[test]
+    fn test_basic_auth_reject_empty_credentials() {
+        // Empty username should fail
+        let auth = BasicAuth::from_header("Basic ");
+        assert!(auth.is_none());
+    }
 }
