@@ -9,8 +9,10 @@
 use std::io::ErrorKind;
 use std::time::Duration;
 
+use tokio::io::{AsyncReadExt, AsyncWriteExt};
+use tokio::net::TcpStream;
 use tokio_tungstenite::{connect_async, tungstenite::protocol::Message};
-use tracing::{debug, info};
+use tracing::{debug, info, warn};
 
 use futures_util::{SinkExt, StreamExt};
 
@@ -116,9 +118,9 @@ impl V2rayPlugin {
         debug!("Connecting to {} with v2ray-plugin", url);
 
         // Connect WebSocket
-        let (ws_stream, _response) = connect_async(&url)
-            .await
-            .map_err(|e| std::io::Error::other(format!("WebSocket connect error: {e}")))?;
+        let (ws_stream, _response) = connect_async(&url).await.map_err(|e| {
+            std::io::Error::new(ErrorKind::Other, format!("WebSocket connect error: {}", e))
+        })?;
 
         info!("v2ray-plugin WebSocket connected to {}", server_addr);
 
@@ -168,9 +170,9 @@ impl V2rayStream {
 
     pub async fn send(&mut self, data: &[u8]) -> std::io::Result<()> {
         self.ws
-            .send(Message::Binary(data.to_vec()))
+            .send(Message::Binary(data.to_vec().into()))
             .await
-            .map_err(|e| std::io::Error::other(format!("send error: {e}")))?;
+            .map_err(|e| std::io::Error::new(ErrorKind::Other, format!("send error: {}", e)))?;
         Ok(())
     }
 
@@ -192,17 +194,20 @@ impl V2rayStream {
                     Ok(Message::Close(_)) => return Ok(0),
                     Ok(Message::Ping(data)) => {
                         if self.ws.send(Message::Pong(data)).await.is_err() {
-                            return Err(std::io::Error::other("pong failed"));
+                            return Err(std::io::Error::new(ErrorKind::Other, "pong failed"));
                         }
                     }
                     Ok(Message::Pong(_)) => {}
                     Ok(Message::Frame(_)) => {}
                     Err(e) => {
-                        return Err(std::io::Error::other(format!("recv error: {e}")));
+                        return Err(std::io::Error::new(
+                            ErrorKind::Other,
+                            format!("recv error: {}", e),
+                        ));
                     }
                 }
             } else {
-                return Err(std::io::Error::other("stream ended"));
+                return Err(std::io::Error::new(ErrorKind::Other, "stream ended"));
             }
         }
     }
@@ -212,7 +217,7 @@ impl V2rayStream {
         self.ws
             .close(None)
             .await
-            .map_err(|e| std::io::Error::other(format!("close error: {e}")))?;
+            .map_err(|e| std::io::Error::new(ErrorKind::Other, format!("close error: {}", e)))?;
         Ok(())
     }
 

@@ -37,6 +37,12 @@ pub struct PacketInfo {
     pub packet_size: usize,
     /// Connection key hash (for session matching)
     pub connection_hash: Option<u64>,
+    /// Node capability: fullcone NAT support
+    pub node_fullcone: Option<bool>,
+    /// Node capability: UDP support
+    pub node_udp: Option<bool>,
+    /// Node capability: V2Ray compatibility
+    pub node_v2ray: Option<bool>,
 }
 
 impl Default for PacketInfo {
@@ -54,6 +60,9 @@ impl Default for PacketInfo {
             is_outbound: true,
             packet_size: 0,
             connection_hash: None,
+            node_fullcone: None,
+            node_udp: None,
+            node_v2ray: None,
         }
     }
 }
@@ -102,6 +111,37 @@ impl PacketInfo {
     /// Set DNS query type
     pub fn with_dns_type(mut self, qtype: u16) -> Self {
         self.dns_query_type = Some(qtype);
+        self
+    }
+
+    /// Set node fullcone capability
+    pub fn with_node_fullcone(mut self, fullcone: bool) -> Self {
+        self.node_fullcone = Some(fullcone);
+        self
+    }
+
+    /// Set node UDP capability
+    pub fn with_node_udp(mut self, udp: bool) -> Self {
+        self.node_udp = Some(udp);
+        self
+    }
+
+    /// Set node V2Ray compatibility
+    pub fn with_node_v2ray(mut self, v2ray: bool) -> Self {
+        self.node_v2ray = Some(v2ray);
+        self
+    }
+
+    /// Set all node capabilities at once
+    pub fn with_node_capabilities(
+        mut self,
+        fullcone: Option<bool>,
+        udp: Option<bool>,
+        v2ray: Option<bool>,
+    ) -> Self {
+        self.node_fullcone = fullcone;
+        self.node_udp = udp;
+        self.node_v2ray = v2ray;
         self
     }
 }

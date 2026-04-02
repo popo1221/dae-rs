@@ -181,6 +181,42 @@ impl Default for LoggingConfig {
     }
 }
 
+/// Node capabilities - detected features of a proxy node
+#[derive(Debug, Clone, Default, Deserialize)]
+pub struct NodeCapabilities {
+    /// Full-Cone NAT support (for VMess/VLESS)
+    #[serde(default)]
+    pub fullcone: Option<bool>,
+    /// UDP protocol support
+    #[serde(default)]
+    pub udp: Option<bool>,
+    /// V2Ray compatibility (for VMess/VLESS)
+    #[serde(default)]
+    pub v2ray: Option<bool>,
+}
+
+impl NodeCapabilities {
+    /// Create new empty capabilities
+    pub fn new() -> Self {
+        Self::default()
+    }
+
+    /// Check if fullcone is enabled (None means unknown/auto-detect)
+    pub fn is_fullcone_enabled(&self) -> bool {
+        self.fullcone.unwrap_or(false)
+    }
+
+    /// Check if UDP is supported (None means unknown/auto-detect)
+    pub fn is_udp_supported(&self) -> bool {
+        self.udp.unwrap_or(true) // Default to true if not specified
+    }
+
+    /// Check if V2Ray compatible (None means unknown/auto-detect)
+    pub fn is_v2ray_compatible(&self) -> bool {
+        self.v2ray.unwrap_or(true) // Default to true if not specified
+    }
+}
+
 /// Upstream node/proxy server configuration
 #[derive(Debug, Clone, Deserialize)]
 pub struct NodeConfig {
@@ -217,24 +253,9 @@ pub struct NodeConfig {
     /// VLESS/VMess specific: enable AEAD
     #[serde(default)]
     pub aead: Option<bool>,
-    /// Node capability attributes (optional, auto-detected if not set)
+    /// Node capabilities (fullcone, udp, v2ray)
     #[serde(default)]
-    pub capabilities: Option<NodeCapabilitiesConfig>,
-}
-
-/// Node capability configuration (simplified for config parsing)
-/// This is converted to full NodeCapabilities in dae-proxy
-#[derive(Debug, Clone, Deserialize, Default)]
-pub struct NodeCapabilitiesConfig {
-    /// Full-Cone NAT support (auto-detected if None)
-    #[serde(default)]
-    pub fullcone: Option<bool>,
-    /// UDP protocol support (auto-detected based on protocol if None)
-    #[serde(default)]
-    pub udp: Option<bool>,
-    /// V2Ray compatibility (auto-detected based on protocol if None)
-    #[serde(default)]
-    pub v2ray: Option<bool>,
+    pub capabilities: Option<NodeCapabilities>,
 }
 
 impl NodeConfig {

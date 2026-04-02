@@ -130,6 +130,29 @@ pub fn validate_rule(rule: &RuleConfigItem) -> Result<(), RuleValidationError> {
                 .collect();
             types.map(|_| ())
         }
+        // Node capability rules (fullcone, udp, v2ray)
+        "fullcone" | "full-cone" | "fullcone(enabled)" => {
+            // Value should be "true", "false", "1", "0", "enabled", "disabled"
+            let value = rule.value.to_lowercase();
+            match value.as_str() {
+                "true" | "false" | "1" | "0" | "enabled" | "disabled" => Ok(()),
+                _ => Err(RuleValidationError::InvalidRuleValue(value)),
+            }
+        }
+        "udp" | "udp(enabled)" => {
+            let value = rule.value.to_lowercase();
+            match value.as_str() {
+                "true" | "false" | "1" | "0" | "enabled" | "disabled" => Ok(()),
+                _ => Err(RuleValidationError::InvalidRuleValue(value)),
+            }
+        }
+        "v2ray" | "v2ray(compatible)" => {
+            let value = rule.value.to_lowercase();
+            match value.as_str() {
+                "true" | "false" | "1" | "0" | "enabled" | "disabled" | "compatible" => Ok(()),
+                _ => Err(RuleValidationError::InvalidRuleValue(value)),
+            }
+        }
         _ => Err(RuleValidationError::InvalidRuleType(rule.rule_type.clone())),
     }?;
 
