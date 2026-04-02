@@ -2,19 +2,19 @@
 # dae-rs - Multi-stage Dockerfile for production
 # ===================================================================
 # Stage 1: Build
-FROM rust:1.85 AS builder
+FROM rust:1.80 AS builder
 
-# Install build dependencies for eBPF/XDP
-RUN apk add --no-cache \
+# Install build dependencies
+RUN apt-get update && apt-get install -y --no-install-recommends \
     clang \
     llvm \
-    elfutils-dev \
-    linux-headers \
-    musl-dev \
+    libelf-dev \
+    libpcap-dev \
     make \
     git \
-    openssl-dev \
-    pkgconfig
+    pkg-config \
+    libssl-dev \
+    && rm -rf /var/lib/apt/lists/*
 
 # Set working directory
 WORKDIR /build
@@ -28,7 +28,7 @@ COPY benches/ ./benches/
 RUN cargo build --release --package dae-cli
 
 # ===================================================================
-# Stage 2: Runtime - Minimal Ubuntu-based image
+# Stage 2: Runtime - Ubuntu-based for broad compatibility
 # ===================================================================
 FROM ubuntu:22.04 AS runtime
 
@@ -40,10 +40,7 @@ LABEL description="High-performance transparent proxy in Rust with eBPF"
 RUN apt-get update && apt-get install -y --no-install-recommends \
     ca-certificates \
     libelf1 \
-    libpcap-dev \
-    iptables \
-    ipset \
-    kmod \
+    libpcap1 \
     && rm -rf /var/lib/apt/lists/*
 
 # Create non-root user for dae
