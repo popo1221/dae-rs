@@ -117,6 +117,7 @@ impl CongestionControl {
 
 /// Juicity connection state
 #[derive(Debug, Clone)]
+#[allow(dead_code)]
 struct Connection {
     /// Connection ID
     id: u32,
@@ -130,6 +131,7 @@ struct Connection {
     is_udp: bool,
 }
 
+#[allow(dead_code)]
 impl Connection {
     fn new(id: u32, session_id: u32, remote_addr: SocketAddr, is_udp: bool) -> Self {
         Self {
@@ -339,14 +341,14 @@ impl ProtocolHandler for JuicityHandler {
         "juicity"
     }
 
-    async fn handle_inbound(&self, ctx: &mut Context) -> ProxyResult<()> {
+    async fn handle_inbound(&self, _ctx: &mut Context) -> ProxyResult<()> {
         // In a full implementation, this would handle inbound connections
         // For now, this is a placeholder
         debug!("Juicity inbound handler called");
         Ok(())
     }
 
-    async fn handle_outbound(&self, ctx: &mut Context) -> ProxyResult<()> {
+    async fn handle_outbound(&self, _ctx: &mut Context) -> ProxyResult<()> {
         // In a full implementation, this would handle outbound connections
         // For now, this is a placeholder
         debug!("Juicity outbound handler called");
@@ -356,6 +358,7 @@ impl ProtocolHandler for JuicityHandler {
 
 /// Juicity server for handling incoming connections
 pub struct JuicityServer {
+    #[allow(dead_code)]
     handler: Arc<JuicityHandler>,
     listen_addr: SocketAddr,
 }
@@ -409,7 +412,7 @@ impl JuicityClient {
 
     /// Connect to a remote Juicity server (placeholder)
     #[allow(dead_code)]
-    pub async fn connect(&self, target: JuicityAddress) -> Result<JuicityConnection, JuicityError> {
+    pub async fn connect(&self, _target: JuicityAddress) -> Result<JuicityConnection, JuicityError> {
         let remote_addr = format!("{}:{}", self.config.server_addr, self.config.server_port);
         info!("Connecting to Juicity server at {}", remote_addr);
 

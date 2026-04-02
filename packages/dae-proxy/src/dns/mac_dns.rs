@@ -198,7 +198,7 @@ impl MacDnsResolver {
         
         let addresses: Vec<IpAddr> = match addr_string.to_socket_addrs() {
             Ok(mut addrs) => {
-                let sock_addr = addrs.next().ok_or_else(|| {
+                let _sock_addr = addrs.next().ok_or_else(|| {
                     DnsError::ResolutionFailed(format!("No address for DNS server: {}", server))
                 })?;
                 

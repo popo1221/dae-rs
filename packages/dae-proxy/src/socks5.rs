@@ -18,6 +18,7 @@ mod consts {
     
     // Authentication methods
     pub const NO_AUTH: u8 = 0x00;
+    #[allow(dead_code)]
     pub const GSSAPI: u8 = 0x01;
     pub const USERNAME_PASSWORD: u8 = 0x02;
     pub const NO_ACCEPTABLE: u8 = 0xFF;

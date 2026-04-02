@@ -83,6 +83,7 @@ impl Default for UdpProxyConfig {
 /// UDP proxy that manages UDP sessions
 pub struct UdpProxy {
     config: UdpProxyConfig,
+    #[allow(dead_code)]
     connection_pool: SharedConnectionPool,
     sessions: RwLock<HashMap<ConnectionKey, Arc<UdpSessionData>>>,
     session_handle: Option<Arc<RwLock<EbpfSessionHandle>>>,

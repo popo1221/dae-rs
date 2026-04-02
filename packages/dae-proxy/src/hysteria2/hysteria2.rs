@@ -274,7 +274,7 @@ impl Hysteria2Handler {
         let password = String::from_utf8_lossy(&data[3..3 + password_len]).to_string();
         
         let local_addr = if data.len() > 3 + password_len {
-            let (_, size) = Hysteria2Address::parse(&data[3 + password_len..])?;
+            let (_, _size) = Hysteria2Address::parse(&data[3 + password_len..])?;
             // For now, skip local_addr parsing - it requires more complex handling
             None
         } else {

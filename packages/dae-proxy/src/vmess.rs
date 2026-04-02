@@ -18,9 +18,11 @@ use tokio::net::{TcpListener, TcpStream, UdpSocket};
 use tracing::{debug, error, info};
 
 /// VMess protocol version
+#[allow(dead_code)]
 const VMESS_VERSION: u8 = 0x01;
 
 /// VMess AEAD protocol version (2022)
+#[allow(dead_code)]
 const VMESS_AEAD_VERSION: &[u8] = b"VMessAEAD";
 
 /// VMess address type
@@ -273,6 +275,7 @@ impl VmessHandler {
     }
 
     /// Get current timestamp (seconds since epoch)
+    #[allow(dead_code)]
     fn timestamp() -> u64 {
         SystemTime::now()
             .duration_since(UNIX_EPOCH)
@@ -281,6 +284,7 @@ impl VmessHandler {
     }
 
     /// Generate VMess header authentication
+    #[allow(dead_code)]
     fn generate_auth(auth_key: &[u8], timestamp: u64) -> Vec<u8> {
         use std::collections::hash_map::DefaultHasher;
         use std::hash::{Hash, Hasher};

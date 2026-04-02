@@ -342,7 +342,7 @@ impl RuleEngine {
         // The LookupResult contains fields based on the database type
         // For GeoLite2/GeoIP2 Country database, we need to access the country field
         match reader.lookup(*ip) {
-            Ok(result) => {
+            Ok(_result) => {
                 // In maxminddb 0.27, the LookupResult provides field access
                 // through traits. For country data, we need to use the proper
                 // deserialization. For now, return None and let the caller

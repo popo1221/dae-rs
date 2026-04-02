@@ -388,7 +388,7 @@ impl EbpfRuleEngineHandle {
         let action = self.match_packet(info.clone()).await;
 
         // Write routing decision to eBPF map if available
-        if let Some(ref routing) = self.maps.routing {
+        if self.maps.routing.is_some() {
             let entry = RoutingEntry::new(
                 route_id,
                 action.to_ebpf_action(),

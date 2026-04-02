@@ -17,7 +17,9 @@ mod consts {
     pub const HTTP_OK: &[u8] = b"HTTP/1.1 200 Connection Established\r\n\r\n";
     pub const HTTP_BAD_GATEWAY: &[u8] = b"HTTP/1.1 502 Bad Gateway\r\nContent-Length: 0\r\n\r\n";
     pub const HTTP_PROXY_AUTH_REQUIRED: &[u8] = b"HTTP/1.1 407 Proxy Authentication Required\r\nProxy-Authenticate: Basic realm=\"proxy\"\r\nContent-Length: 0\r\n\r\n";
+    #[allow(dead_code)]
     pub const HTTP_METHOD_CONNECT: &str = "CONNECT";
+    #[allow(dead_code)]
     pub const HTTP_AUTH_PREFIX: &str = "Proxy-Authorization:";
 }
 
@@ -210,7 +212,7 @@ impl HttpProxyHandler {
             line.clear();
             match reader.read_line(&mut line).await {
                 Ok(0) => return Ok(()), // Connection closed
-                Ok(n) => {
+                Ok(_n) => {
                     let line = line.trim_end();
                     if line.is_empty() {
                         break; // End of headers

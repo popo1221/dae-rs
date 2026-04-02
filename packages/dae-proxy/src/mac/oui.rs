@@ -108,7 +108,7 @@ impl OuiDatabase {
 
         // Common OUI prefixes and their vendors
         // Format: (OUI bytes, "Vendor Name")
-        let oui_data = include_bytes!("oui_data.rs");
+        let _oui_data = include_bytes!("oui_data.rs");
 
         // Parse the generated data
         let data_str = include_str!("oui_data.rs");
