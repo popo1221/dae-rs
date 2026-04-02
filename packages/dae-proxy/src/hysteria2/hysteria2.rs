@@ -116,7 +116,7 @@ impl Hysteria2Address {
                     return Err(Hysteria2Error::InvalidAddress("IPv4 requires 7 bytes".to_string()));
                 }
                 let ip = IpAddr::V4(Ipv4Addr::new(data[1], data[2], data[3], data[4]));
-                let port = u16::from_be_bytes([data[5], data[6]]);
+                let _port = u16::from_be_bytes([data[5], data[6]]);
                 Ok((Hysteria2Address::Ip(ip), 7))
             }
             0x02 => {
@@ -147,7 +147,7 @@ impl Hysteria2Address {
                     u16::from_be_bytes([data[13], data[14]]),
                     u16::from_be_bytes([data[15], data[16]]),
                 ));
-                let port = u16::from_be_bytes([data[17], data[18]]);
+                let _port = u16::from_be_bytes([data[17], data[18]]);
                 Ok((Hysteria2Address::Ip(ip), 19))
             }
             _ => Err(Hysteria2Error::InvalidAddress(format!("Unknown address type: {}", addr_type))),

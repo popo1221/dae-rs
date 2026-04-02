@@ -197,6 +197,7 @@ impl ProtocolDispatcher {
 
 /// Combined proxy server that handles both SOCKS5 and HTTP on separate ports
 pub struct CombinedProxyServer {
+    #[allow(dead_code)]
     config: ProtocolDispatcherConfig,
     socks5_server: Option<Arc<crate::socks5::Socks5Server>>,
     http_server: Option<Arc<crate::http_proxy::HttpProxyServer>>,

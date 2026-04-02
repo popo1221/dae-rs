@@ -119,7 +119,7 @@ impl DefaultNodeSelector {
         
         let available: Vec<_> = nodes.iter()
             .zip(availability.iter())
-            .filter(|(_, &is_avail)| is_avail)
+            .filter(|&(_, &is_avail)| is_avail)
             .map(|(n, _)| n.clone())
             .collect::<Vec<_>>();
         

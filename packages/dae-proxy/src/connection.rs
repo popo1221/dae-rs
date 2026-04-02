@@ -54,9 +54,11 @@ pub struct Connection {
     created_at: Instant,
     /// Last activity timestamp
     last_activity: Instant,
-    /// Keepalive interval
+    /// Keepalive interval (for future TCP keepalive support)
+    #[allow(dead_code)]
     keepalive_interval: Duration,
-    /// Keepalive timer
+    /// Keepalive timer (for future TCP keepalive support)
+    #[allow(dead_code)]
     keepalive_timer: Option<Interval>,
 }
 

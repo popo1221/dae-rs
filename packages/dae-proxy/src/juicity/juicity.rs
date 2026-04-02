@@ -183,13 +183,13 @@ impl JuicityHandler {
     /// Generate a new connection ID
     fn new_connection_id() -> u32 {
         use rand::Rng;
-        rand::thread_rng().gen()
+        rand::thread_rng().r#gen()
     }
 
     /// Generate a new session ID
     fn new_session_id() -> u32 {
         use rand::Rng;
-        rand::thread_rng().gen()
+        rand::thread_rng().r#gen()
     }
 
     /// Handle a Juicity TCP connection from client

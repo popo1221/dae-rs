@@ -317,7 +317,7 @@ impl VlessHandler {
                         // IPv4
                         if addl_buf.len() < 10 { return Err(std::io::Error::new(std::io::ErrorKind::InvalidData, "buffer too small")); }
                         let ip = IpAddr::V4(Ipv4Addr::new(addl_buf[5], addl_buf[6], addl_buf[7], addl_buf[8]));
-                        let port = u16::from_be_bytes([addl_buf[9], addl_buf[10]]);
+                        let _port = u16::from_be_bytes([addl_buf[9], addl_buf[10]]);
                         VlessTargetAddress::Ipv4(ip)
                     }
                     0x02 => {
@@ -343,7 +343,7 @@ impl VlessHandler {
                             u16::from_be_bytes([addl_buf[17], addl_buf[18]]),
                             u16::from_be_bytes([addl_buf[19], addl_buf[20]]),
                         ));
-                        let port = u16::from_be_bytes([addl_buf[21], addl_buf[22]]);
+                        let _port = u16::from_be_bytes([addl_buf[21], addl_buf[22]]);
                         VlessTargetAddress::Ipv6(ip)
                     }
                     _ => {

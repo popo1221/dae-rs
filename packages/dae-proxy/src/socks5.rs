@@ -555,7 +555,7 @@ impl Socks5Handler {
             Some(addr) => addr,
             None => {
                 // Need DNS resolution for domain names
-                if let Socks5Address::Domain(ref domain, port) = dst_addr {
+                if let Socks5Address::Domain(domain, port) = dst_addr {
                     match tokio::net::lookup_host(format!("{}:{}", domain, port)).await {
                         Ok(mut addrs) => {
                             match addrs.next() {

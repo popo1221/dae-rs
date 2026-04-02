@@ -152,6 +152,7 @@ impl QuicStream {
 /// This is a placeholder for QUIC endpoint functionality.
 /// Full implementation would use quinn::Endpoint.
 pub struct QuicEndpoint {
+    #[allow(dead_code)]
     config: QuicConfig,
 }
 
@@ -164,7 +165,7 @@ impl QuicEndpoint {
     /// Connect to a remote server
     pub async fn connect(
         &self,
-        remote_addr: SocketAddr,
+        _remote_addr: SocketAddr,
     ) -> Result<QuicConnection, QuicError> {
         // Placeholder - full implementation would use quinn::Endpoint::connect()
         warn!("QUIC connect not fully implemented - requires quinn integration");
@@ -179,7 +180,7 @@ impl QuicEndpoint {
     }
     
     /// Bind to a local address for UDP
-    pub async fn bind(&self, local_addr: SocketAddr) -> Result<(), QuicError> {
+    pub async fn bind(&self, _local_addr: SocketAddr) -> Result<(), QuicError> {
         // Placeholder
         Ok(())
     }
@@ -188,9 +189,13 @@ impl QuicEndpoint {
 /// QUIC connection wrapper
 pub struct QuicConnection {
     state: QuicState,
+    #[allow(dead_code)]
     local_addr: SocketAddr,
+    #[allow(dead_code)]
     remote_addr: SocketAddr,
+    #[allow(dead_code)]
     max_stream_data: u64,
+    #[allow(dead_code)]
     max_data: u64,
 }
 
