@@ -403,11 +403,16 @@ fn unix_time_secs() -> u64 {
 }
 
 /// Convert ConnectionKey to SessionKey for eBPF
+///
+/// Note: SessionKey uses u32 for IPs. For IPv6 connections, we store
+/// the lower 32 bits of the IPv6 address. This means some IPv6 connections
+/// may have hash collisions on the eBPF side, but user-space tracking
+/// (ConnectionKey with full IPv6 support) remains correct.
 impl From<&ConnectionKey> for SessionKey {
     fn from(key: &ConnectionKey) -> Self {
         SessionKey::new(
-            key.src_ip,
-            key.dst_ip,
+            key.src_ip.to_u32_lossy(),
+            key.dst_ip.to_u32_lossy(),
             key.src_port,
             key.dst_port,
             key.proto,

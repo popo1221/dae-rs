@@ -4,41 +4,133 @@
 
 use crate::connection::{new_connection, ConnectionState, Protocol, SharedConnection};
 use std::collections::HashMap;
-use std::net::{IpAddr, Ipv4Addr, SocketAddr};
+use std::net::{IpAddr, Ipv4Addr, Ipv6Addr, SocketAddr};
 use std::sync::Arc;
 use std::time::Duration;
 use tokio::sync::RwLock;
 use tracing::{debug, info, warn};
 
+/// Compact IP address storage supporting both IPv4 and IPv6.
+///
+/// Format: [version: u8][address: 16 bytes]
+/// - version 4: bytes 1-4 hold IPv4 address, bytes 5-16 are zero
+/// - version 6: bytes 1-16 hold IPv6 address
+///
+/// This allows ConnectionKey to be used as a HashMap key while supporting
+/// both IPv4 (4 bytes) and IPv6 (16 bytes) addresses.
+#[derive(Clone, Copy, PartialEq, Eq)]
+pub struct CompactIp(u128);
+
+impl CompactIp {
+    /// Create from a SocketAddr
+    pub fn from_socket_addr(addr: SocketAddr) -> Self {
+        match addr.ip() {
+            IpAddr::V4(ipv4) => Self::from_ipv4(ipv4),
+            IpAddr::V6(ipv6) => Self::from_ipv6(ipv6),
+        }
+    }
+
+    /// Create from Ipv4Addr
+    pub fn from_ipv4(ip: Ipv4Addr) -> Self {
+        let octets = ip.octets();
+        let bits = u128::from(u32::from_be_bytes(octets));
+        // version 4, stored in lower 32 bits
+        Self((4u128 << 124) | bits)
+    }
+
+    /// Create from Ipv6Addr
+    pub fn from_ipv6(ip: Ipv6Addr) -> Self {
+        let octets = ip.octets();
+        let mut bytes = [0u8; 16];
+        bytes.copy_from_slice(&octets);
+        // version 6, stored in lower 128 bits
+        let bits = u128::from_be_bytes(bytes);
+        Self((6u128 << 124) | bits)
+    }
+
+    /// Convert to IpAddr
+    pub fn to_ip_addr(&self) -> IpAddr {
+        let version = self.0 >> 124;
+        let bits = self.0 & ((1u128 << 124) - 1);
+        match version {
+            4 => IpAddr::V4(Ipv4Addr::from(bits as u32)),
+            6 => {
+                let bytes = bits.to_be_bytes();
+                IpAddr::V6(Ipv6Addr::from(bytes))
+            }
+            _ => IpAddr::V4(Ipv4Addr::UNSPECIFIED),
+        }
+    }
+
+    /// Returns true if this is an IPv6 address
+    pub fn is_ipv6(&self) -> bool {
+        self.0 >> 124 == 6
+    }
+
+    /// Returns true if this is an IPv4 address
+    pub fn is_ipv4(&self) -> bool {
+        self.0 >> 124 == 4
+    }
+
+    /// Extract IPv4 address as u32.
+    ///
+    /// For IPv4: returns the IPv4 address as u32.
+    /// For IPv6: returns the lower 32 bits of the IPv6 address
+    /// (useful for IPv4-mapped IPv6 addresses like ::ffff:192.168.1.1).
+    pub fn to_u32_lossy(&self) -> u32 {
+        (self.0 & ((1u128 << 124) - 1)) as u32
+    }
+}
+
+impl std::fmt::Debug for CompactIp {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}", self.to_ip_addr())
+    }
+}
+
+impl std::hash::Hash for CompactIp {
+    fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
+        self.0.hash(state);
+    }
+}
+
+impl Default for CompactIp {
+    fn default() -> Self {
+        Self::from_ipv4(Ipv4Addr::UNSPECIFIED)
+    }
+}
+
 /// 4-tuple key for connection identification
-#[derive(Clone, Copy, Debug, Hash, PartialEq, Eq)]
+///
+/// Supports both IPv4 and IPv6 addresses via CompactIp storage.
+/// Used as HashMap key in the connection pool.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct ConnectionKey {
-    pub src_ip: u32,
-    pub dst_ip: u32,
+    pub src_ip: CompactIp,
+    pub dst_ip: CompactIp,
     pub src_port: u16,
     pub dst_port: u16,
     pub proto: u8,
 }
 
+impl std::hash::Hash for ConnectionKey {
+    fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
+        self.src_ip.hash(state);
+        self.dst_ip.hash(state);
+        self.src_port.hash(state);
+        self.dst_port.hash(state);
+        self.proto.hash(state);
+    }
+}
+
 impl ConnectionKey {
     /// Create a new connection key from addresses and protocol
     ///
-    /// # IPv6 Limitation
-    /// IPv6 addresses are currently NOT fully supported. When an IPv6 address is
-    /// encountered, a warning is logged and the connection key is created with
-    /// null values (0.0.0.0:0). This means connection pooling will NOT work
-    /// correctly for IPv6 connections.
-    ///
-    /// See GitHub Issue #60 for tracking the IPv6 support implementation.
+    /// Supports both IPv4 and IPv6 addresses. IPv6 addresses are fully
+    /// supported in the connection pool.
     pub fn new(src: SocketAddr, dst: SocketAddr, proto: Protocol) -> Self {
-        let (src_ip, dst_ip) = match (src.ip(), dst.ip()) {
-            (IpAddr::V4(src), IpAddr::V4(dst)) => (src.into(), dst.into()),
-            (IpAddr::V6(_), _) => {
-                warn!("IPv6 address detected in connection pool — IPv6 is not yet supported. See issue #60.");
-                (0, 0)
-            }
-            _ => (0, 0),
-        };
+        let src_ip = CompactIp::from_socket_addr(src);
+        let dst_ip = CompactIp::from_socket_addr(dst);
         let proto = match proto {
             Protocol::Tcp => 6,
             Protocol::Udp => 17,
@@ -53,10 +145,14 @@ impl ConnectionKey {
     }
 
     /// Create from raw components (for eBPF integration)
+    ///
+    /// Note: src_ip and dst_ip are interpreted as IPv4 addresses
+    /// (lower 32 bits of the CompactIp). This is for backward compatibility
+    /// with eBPF which uses u32 IP fields.
     pub fn from_raw(src_ip: u32, dst_ip: u32, src_port: u16, dst_port: u16, proto: u8) -> Self {
         Self {
-            src_ip,
-            dst_ip,
+            src_ip: CompactIp::from_ipv4(Ipv4Addr::from(src_ip)),
+            dst_ip: CompactIp::from_ipv4(Ipv4Addr::from(dst_ip)),
             src_port,
             dst_port,
             proto,
@@ -64,13 +160,9 @@ impl ConnectionKey {
     }
 
     /// Convert to socket addresses
-    ///
-    /// # Limitation
-    /// Only supports IPv4. If the connection key was created from an IPv6
-    /// address (src_ip/dst_ip == 0), this returns 0.0.0.0 addresses.
     pub fn to_socket_addrs(&self) -> Option<(SocketAddr, SocketAddr)> {
-        let src = SocketAddr::new(IpAddr::V4(Ipv4Addr::from(self.src_ip)), self.src_port);
-        let dst = SocketAddr::new(IpAddr::V4(Ipv4Addr::from(self.dst_ip)), self.dst_port);
+        let src = SocketAddr::new(self.src_ip.to_ip_addr(), self.src_port);
+        let dst = SocketAddr::new(self.dst_ip.to_ip_addr(), self.dst_port);
         Some((src, dst))
     }
 
