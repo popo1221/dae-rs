@@ -184,8 +184,8 @@ impl Proxy {
     pub async fn new(config: ProxyConfig) -> std::io::Result<Self> {
         info!("Initializing proxy with config: {:?}", config);
 
-        // Initialize eBPF maps
-        let maps = EbpfMaps::new();
+        // Initialize eBPF maps (in-memory implementation)
+        let maps = EbpfMaps::new_in_memory();
         let session_handle = Arc::new(RwLock::new(EbpfSessionHandle::new(maps.clone())));
         let routing_handle = Arc::new(EbpfRoutingHandle::new(maps.clone()));
         let stats_handle = Arc::new(RwLock::new(EbpfStatsHandle::new(maps)));

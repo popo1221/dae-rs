@@ -2,24 +2,27 @@
 //!
 //! Provides wrappers around eBPF maps for session, routing, and stats management.
 //!
-//! # ⚠️ Implementation Status
+//! # Implementation
 //!
-//! This module is a **STUB**. All operations are no-ops that log but do nothing:
-//! - `insert()` returns `Ok(())`
-//! - `lookup()` always returns `None`
-//! - `remove()` returns `Ok(())`
+//! This module provides **in-memory HashMap implementations** as a working
+//! fallback when kernel BPF maps via `aya` are not available.
 //!
-//! To implement properly, this module needs the `aya` crate with actual BPF map
-//! operations (e.g., `aya::maps::HashMap`, `aya::maps::LpmTrie`).
+//! - [`SessionMapHandle`] — `Arc<StdRwLock<HashMap<ConnectionKey, SessionEntry>>>`
+//! - [`RoutingMapHandle`] — `Arc<StdRwLock<HashMap<u32, RoutingEntry>>>` (exact-match)
+//! - [`StatsMapHandle`] — `Arc<StdRwLock<HashMap<u32, StatsEntry>>>`
 //!
-//! See issue #62 on GitHub for tracking the full implementation.
+//! Use [`EbpfMaps::new_in_memory()`] to get initialized maps.
+//!
+//! For production kernel BPF integration, replace these with aya map types
+//! (e.g., `aya::maps::HashMap`, `aya::maps::LpmTrie`).
 
 use crate::connection_pool::ConnectionKey;
 use crate::rule_engine::{PacketInfo, RuleAction, SharedRuleEngine};
 use dae_ebpf_common::routing::RoutingEntry;
 use dae_ebpf_common::session::{SessionEntry, SessionKey};
 use dae_ebpf_common::stats::{idx as stats_idx, StatsEntry};
-use std::sync::Arc;
+use std::collections::HashMap;
+use std::sync::{Arc, RwLock as StdRwLock};
 use thiserror::Error;
 use tracing::{debug, info};
 
@@ -51,8 +54,8 @@ pub type Result<T> = std::result::Result<T, EbpfError>;
 
 /// eBPF map handles wrapper
 ///
-/// ⚠️ STUB — all fields are None by default. See module-level documentation.
-#[allow(dead_code)]
+/// Provides in-memory map implementations as a fallback when aya BPF maps
+/// are not available. For production with kernel BPF, replace with aya maps.
 #[derive(Clone)]
 pub struct EbpfMaps {
     /// Session map handle
@@ -64,7 +67,16 @@ pub struct EbpfMaps {
 }
 
 impl EbpfMaps {
-    /// Create new eBPF maps wrapper
+    /// Create new eBPF maps wrapper with in-memory HashMap backends
+    pub fn new_in_memory() -> Self {
+        Self {
+            sessions: Some(SessionMapHandle::new()),
+            routing: Some(RoutingMapHandle::new()),
+            stats: Some(StatsMapHandle::new()),
+        }
+    }
+
+    /// Create new eBPF maps wrapper (legacy, creates None stubs)
     pub fn new() -> Self {
         Self {
             sessions: None,
@@ -85,40 +97,54 @@ impl Default for EbpfMaps {
     }
 }
 
-/// Session map handle wrapper
+/// Session map handle wrapper — in-memory HashMap implementation
 ///
-/// ⚠️ STUB — all operations are no-ops. See module-level documentation.
-#[allow(dead_code)]
+/// Uses `Arc<StdRwLock<HashMap>>` for concurrent access and cloneability.
+/// Suitable for user-space proxying. For kernel BPF integration,
+/// replace with aya `HashMap`.
 #[derive(Clone)]
 pub struct SessionMapHandle {
-    _private: (),
+    inner: Arc<StdRwLock<HashMap<ConnectionKey, SessionEntry>>>,
 }
 
 impl SessionMapHandle {
-    /// Create a new session map handle (placeholder for aya map integration)
+    /// Create a new session map handle with in-memory storage
     pub fn new() -> Self {
-        Self { _private: () }
+        Self {
+            inner: Arc::new(StdRwLock::new(HashMap::new())),
+        }
     }
 
     /// Insert or update a session
     pub fn insert(&self, key: &ConnectionKey, value: &SessionEntry) -> Result<()> {
-        debug!("Session insert: {:?} -> {:?}", key, value);
-        // In real implementation, this would use aya map operations
+        let mut map = self.inner.write().unwrap();
+        map.insert(*key, *value);
+        debug!("Session insert: {:?} state={}", key, value.state);
         Ok(())
     }
 
     /// Lookup a session by key
     pub fn lookup(&self, key: &ConnectionKey) -> Result<Option<SessionEntry>> {
-        debug!("Session lookup: {:?}", key);
-        // In real implementation, this would use aya map operations
-        Ok(None)
+        let map = self.inner.read().unwrap();
+        Ok(map.get(key).copied())
     }
 
     /// Remove a session
     pub fn remove(&self, key: &ConnectionKey) -> Result<()> {
+        let mut map = self.inner.write().unwrap();
+        map.remove(key);
         debug!("Session remove: {:?}", key);
-        // In real implementation, this would use aya map operations
         Ok(())
+    }
+
+    /// Get the number of active sessions
+    pub fn len(&self) -> usize {
+        self.inner.read().unwrap().len()
+    }
+
+    /// Check if the map is empty
+    pub fn is_empty(&self) -> bool {
+        self.inner.read().unwrap().is_empty()
     }
 }
 
@@ -128,26 +154,49 @@ impl Default for SessionMapHandle {
     }
 }
 
-/// Routing map handle wrapper
+/// Routing map handle wrapper — in-memory HashMap implementation
 ///
-/// ⚠️ STUB — all operations are no-ops. See module-level documentation.
-#[allow(dead_code)]
+/// Uses `Arc<StdRwLock<HashMap>>` for concurrent access and cloneability.
+/// Note: this is a simple exact-match map, not an LPM (Longest Prefix Match)
+/// Trie. For proper CIDR routing rules, a Trie-based implementation is needed.
 #[derive(Clone)]
 pub struct RoutingMapHandle {
-    _private: (),
+    inner: Arc<StdRwLock<HashMap<u32, RoutingEntry>>>,
 }
 
 impl RoutingMapHandle {
-    /// Create a new routing map handle
+    /// Create a new routing map handle with in-memory storage
     pub fn new() -> Self {
-        Self { _private: () }
+        Self {
+            inner: Arc::new(StdRwLock::new(HashMap::new())),
+        }
     }
 
-    /// Lookup routing for an IP address
+    /// Insert a routing entry
+    pub fn insert(&self, ip: u32, entry: RoutingEntry) -> Result<()> {
+        let mut map = self.inner.write().unwrap();
+        map.insert(ip, entry);
+        debug!("Routing insert: IP {:x}", ip);
+        Ok(())
+    }
+
+    /// Lookup routing for an IP address (exact match)
     pub fn lookup(&self, ip: u32) -> Result<Option<RoutingEntry>> {
-        debug!("Routing lookup for IP: {:x}", ip);
-        // In real implementation, this would use aya LpmTrie map operations
-        Ok(None)
+        let map = self.inner.read().unwrap();
+        Ok(map.get(&ip).copied())
+    }
+
+    /// Remove a routing entry
+    pub fn remove(&self, ip: u32) -> Result<()> {
+        let mut map = self.inner.write().unwrap();
+        map.remove(&ip);
+        debug!("Routing remove: IP {:x}", ip);
+        Ok(())
+    }
+
+    /// Get the number of routing entries
+    pub fn len(&self) -> usize {
+        self.inner.read().unwrap().len()
     }
 }
 
@@ -157,32 +206,51 @@ impl Default for RoutingMapHandle {
     }
 }
 
-/// Stats map handle wrapper
+/// Stats map handle wrapper — in-memory HashMap implementation
 ///
-/// ⚠️ STUB — all operations are no-ops. See module-level documentation.
-#[allow(dead_code)]
+/// Uses `Arc<StdRwLock<HashMap>>` for concurrent access and cloneability.
+/// Note: stats counters are updated under write lock, which may cause
+/// contention under very high concurrency. For production, consider atomic
+/// counters or PerCPU maps (as in real aya BPF maps).
 #[derive(Clone)]
 pub struct StatsMapHandle {
-    _private: (),
+    inner: Arc<StdRwLock<HashMap<u32, StatsEntry>>>,
 }
 
 impl StatsMapHandle {
-    /// Create a new stats map handle
+    /// Create a new stats map handle with in-memory storage
     pub fn new() -> Self {
-        Self { _private: () }
+        Self {
+            inner: Arc::new(StdRwLock::new(HashMap::new())),
+        }
     }
 
     /// Increment a stats counter
     pub fn increment(&self, idx: u32, bytes: u64) -> Result<()> {
-        debug!("Stats increment: idx={}, bytes={}", idx, bytes);
-        // In real implementation, this would atomically update the counter
+        let mut map = self.inner.write().unwrap();
+        let entry = map.entry(idx).or_default();
+        entry.bytes += bytes;
+        entry.packets += 1;
+        debug!("Stats increment: idx={}, bytes={}, total_bytes={}", idx, bytes, entry.bytes);
         Ok(())
     }
 
     /// Get stats for an index
     pub fn get(&self, idx: u32) -> Result<Option<StatsEntry>> {
-        debug!("Stats get: idx={}", idx);
-        Ok(None)
+        let map = self.inner.read().unwrap();
+        Ok(map.get(&idx).copied())
+    }
+
+    /// Set a stats entry directly (for bulk updates)
+    pub fn set(&self, idx: u32, entry: StatsEntry) -> Result<()> {
+        let mut map = self.inner.write().unwrap();
+        map.insert(idx, entry);
+        Ok(())
+    }
+
+    /// Get all stats as a HashMap snapshot
+    pub fn get_all(&self) -> HashMap<u32, StatsEntry> {
+        self.inner.read().unwrap().clone()
     }
 }
 
@@ -294,8 +362,8 @@ impl EbpfStatsHandle {
     }
 
     /// Increment stats counter
-    pub fn increment_stats(&mut self, idx: u32, bytes: u64) -> Result<()> {
-        if let Some(ref mut stats) = self.maps.stats {
+    pub fn increment_stats(&self, idx: u32, bytes: u64) -> Result<()> {
+        if let Some(ref stats) = self.maps.stats {
             stats.increment(idx, bytes)?;
         }
         Ok(())
@@ -311,17 +379,17 @@ impl EbpfStatsHandle {
     }
 
     /// Increment TCP stats
-    pub fn increment_tcp(&mut self, bytes: u64) -> Result<()> {
+    pub fn increment_tcp(&self, bytes: u64) -> Result<()> {
         self.increment_stats(stats_idx::TCP, bytes)
     }
 
     /// Increment UDP stats
-    pub fn increment_udp(&mut self, bytes: u64) -> Result<()> {
+    pub fn increment_udp(&self, bytes: u64) -> Result<()> {
         self.increment_stats(stats_idx::UDP, bytes)
     }
 
     /// Increment overall stats
-    pub fn increment_overall(&mut self, bytes: u64) -> Result<()> {
+    pub fn increment_overall(&self, bytes: u64) -> Result<()> {
         self.increment_stats(stats_idx::OVERALL, bytes)
     }
 }
