@@ -178,10 +178,12 @@ mod tests {
             if let SelectionPolicy::Specific(id2) = policy2 {
                 assert_eq!(id1, id2);
             } else {
-                panic!("Expected Specific");
+                // This should never happen - policy2 was cloned from policy1 which is Specific
+                unreachable!("clone() produced wrong variant");
             }
         } else {
-            panic!("Expected Specific");
+            // This should never happen - policy1 was directly set to Specific
+            unreachable!("initial policy was not Specific");
         }
     }
 }
