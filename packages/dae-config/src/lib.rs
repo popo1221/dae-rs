@@ -686,21 +686,37 @@ fn default_vmess_security() -> String {
 }
 
 impl Config {
-    /// Load configuration from file (auto-detect format)
+    /// Load configuration from file (auto-detect format by extension)
     pub fn from_file(path: &str) -> Result<Self, Box<dyn std::error::Error>> {
         let content = std::fs::read_to_string(path)?;
+        let path_lower = path.to_lowercase();
 
-        // Try new format first
+        // Detect format by file extension
+        if path_lower.ends_with(".yaml") || path_lower.ends_with(".yml") {
+            return Self::from_yaml_str(&content);
+        }
+
+        // TOML format (default)
         if let Ok(config) = toml::from_str::<Config>(&content) {
             return Ok(config);
         }
 
-        // Try legacy format
+        // Try legacy TOML format
         if let Ok(config) = toml::from_str::<LegacyConfig>(&content) {
             return Self::from_legacy(config);
         }
 
         Err("Unable to parse configuration file".into())
+    }
+
+    /// Load configuration from YAML string
+    pub fn from_yaml_str(content: &str) -> Result<Self, Box<dyn std::error::Error>> {
+        // Try new format first
+        if let Ok(config) = serde_yaml::from_str::<Config>(content) {
+            return Ok(config);
+        }
+
+        Err("Unable to parse YAML configuration".into())
     }
 
     /// Load configuration from TOML string (auto-detect format)
