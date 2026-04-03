@@ -9,6 +9,66 @@ use std::sync::Arc;
 
 pub use super::node::{Node, NodeError, NodeId};
 
+/// Connection fingerprint for hash-based policies
+#[derive(Debug, Clone, Default)]
+pub struct ConnectionFingerprint {
+    /// Source IP (network byte order, u32 for IPv4)
+    pub src_ip: u32,
+    /// Destination IP (network byte order, u32 for IPv4)
+    pub dst_ip: u32,
+    /// Source port
+    pub src_port: u16,
+    /// Destination port
+    pub dst_port: u16,
+    /// Protocol (6=TCP, 17=UDP)
+    pub proto: u8,
+    /// URL or hostname for URL-based hashing (optional)
+    pub url: Option<String>,
+}
+
+impl ConnectionFingerprint {
+    /// Create from 5-tuple
+    pub fn from_5tuple(src_ip: u32, dst_ip: u32, src_port: u16, dst_port: u16, proto: u8) -> Self {
+        Self {
+            src_ip,
+            dst_ip,
+            src_port,
+            dst_port,
+            proto,
+            url: None,
+        }
+    }
+
+    /// Create from source IP only (for sticky session)
+    pub fn from_src_ip(src_ip: u32) -> Self {
+        Self {
+            src_ip,
+            dst_ip: 0,
+            src_port: 0,
+            dst_port: 0,
+            proto: 0,
+            url: None,
+        }
+    }
+
+    /// Calculate hash for consistent hashing
+    /// Uses FNV-1a hash algorithm
+    pub fn hash(&self) -> u64 {
+        use std::collections::hash_map::DefaultHasher;
+        use std::hash::{Hash, Hasher};
+        let mut s = DefaultHasher::new();
+        self.src_ip.hash(&mut s);
+        self.dst_ip.hash(&mut s);
+        self.src_port.hash(&mut s);
+        self.dst_port.hash(&mut s);
+        self.proto.hash(&mut s);
+        if let Some(ref url) = self.url {
+            url.hash(&mut s);
+        }
+        s.finish()
+    }
+}
+
 /// Selection policy for node selection
 #[derive(Debug, Clone)]
 pub enum SelectionPolicy {
@@ -18,10 +78,16 @@ pub enum SelectionPolicy {
     Specific(NodeId),
     /// Select a random available node
     Random,
-    /// Select nodes in round-robin fashion
+    /// Select nodes in round-robin fashion (requires atomic counter in selector)
     RoundRobin,
     /// Prefer direct routing (no proxy)
     PreferDirect,
+    /// Consistent hashing - same fingerprint always routes to same node
+    ConsistentHashing(ConnectionFingerprint),
+    /// Sticky session - based on source IP hash
+    StickySession(ConnectionFingerprint),
+    /// URL hash - based on HTTP host/URL hash
+    UrlHash(ConnectionFingerprint),
 }
 
 /// NodeManager trait - manages node lifecycle and selection

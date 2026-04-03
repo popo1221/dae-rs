@@ -5,8 +5,9 @@
 
 use async_trait::async_trait;
 use std::sync::Arc;
+use std::sync::atomic::{AtomicU32, Ordering};
 
-use super::manager::SelectionPolicy;
+use super::manager::{ConnectionFingerprint, SelectionPolicy};
 use super::node::Node;
 
 /// NodeSelector trait - implements selection logic for nodes
@@ -25,12 +26,20 @@ pub trait NodeSelector: Send + Sync {
 
 /// Default node selector implementation
 pub struct DefaultNodeSelector {
-    // Round-robin state stored externally in NodeManager
+    /// Round-robin counter (atomic for thread safety)
+    rr_counter: Arc<AtomicU32>,
 }
 
 impl DefaultNodeSelector {
     pub fn new() -> Self {
-        Self {}
+        Self {
+            rr_counter: Arc::new(AtomicU32::new(0)),
+        }
+    }
+
+    /// Get a clone of the round-robin counter (for external sync)
+    pub fn rr_counter(&self) -> Arc<AtomicU32> {
+        self.rr_counter.clone()
     }
 }
 
@@ -51,8 +60,11 @@ impl NodeSelector for DefaultNodeSelector {
             SelectionPolicy::LowestLatency => self.select_lowest_latency(nodes).await,
             SelectionPolicy::Specific(node_id) => self.select_specific(nodes, node_id).await,
             SelectionPolicy::Random => self.select_random(nodes).await,
-            SelectionPolicy::RoundRobin => self.select_first_available(nodes).await,
+            SelectionPolicy::RoundRobin => self.select_round_robin(nodes).await,
             SelectionPolicy::PreferDirect => self.select_prefer_direct(nodes).await,
+            SelectionPolicy::ConsistentHashing(fp) => self.select_consistent_hash(nodes, fp).await,
+            SelectionPolicy::StickySession(fp) => self.select_sticky_session(nodes, fp).await,
+            SelectionPolicy::UrlHash(fp) => self.select_url_hash(nodes, fp).await,
         }
     }
 }
@@ -153,6 +165,94 @@ impl DefaultNodeSelector {
 
         // Fallback to any available
         self.select_first_available(nodes).await
+    }
+
+    /// Select node using round-robin with atomic counter
+    async fn select_round_robin(&self, nodes: &[Arc<dyn Node>]) -> Option<Arc<dyn Node>> {
+        let available = self.collect_available(nodes).await;
+        if available.is_empty() {
+            return None;
+        }
+
+        let count = available.len() as u32;
+        let idx = self.rr_counter.fetch_add(1, Ordering::Relaxed) % count;
+        Some(available[idx as usize].clone())
+    }
+
+    /// Select node using consistent hashing (ketama-like)
+    /// Same fingerprint always routes to the same node (or next available)
+    async fn select_consistent_hash(
+        &self,
+        nodes: &[Arc<dyn Node>],
+        fp: &ConnectionFingerprint,
+    ) -> Option<Arc<dyn Node>> {
+        let available = self.collect_available(nodes).await;
+        if available.is_empty() {
+            return None;
+        }
+
+        let count = available.len() as u64;
+        let hash = fp.hash();
+
+        // Try the hash position first, then wrap around
+        let mut idx = (hash % count) as usize;
+        for _ in 0..count {
+            if available[idx].is_available().await {
+                return Some(available[idx].clone());
+            }
+            idx = (idx + 1) % count as usize;
+        }
+
+        None
+    }
+
+    /// Select node using sticky session (based on source IP hash)
+    async fn select_sticky_session(
+        &self,
+        nodes: &[Arc<dyn Node>],
+        fp: &ConnectionFingerprint,
+    ) -> Option<Arc<dyn Node>> {
+        let available = self.collect_available(nodes).await;
+        if available.is_empty() {
+            return None;
+        }
+
+        let count = available.len() as u64;
+        let hash = fp.hash();
+        let idx = (hash % count) as usize;
+
+        // Sticky: always try the same index first
+        if available[idx].is_available().await {
+            return Some(available[idx].clone());
+        }
+
+        // Fallback to consistent hash if primary is down
+        drop(available);
+        self.select_consistent_hash(nodes, fp).await
+    }
+
+    /// Select node using URL hash
+    async fn select_url_hash(
+        &self,
+        nodes: &[Arc<dyn Node>],
+        fp: &ConnectionFingerprint,
+    ) -> Option<Arc<dyn Node>> {
+        // URL hash uses the same mechanism as consistent hash
+        // The fingerprint's url field carries the hash input
+        self.select_consistent_hash(nodes, fp).await
+    }
+
+    /// Collect available nodes
+    async fn collect_available(&self, nodes: &[Arc<dyn Node>]) -> Vec<Arc<dyn Node>> {
+        let availability: Vec<bool> =
+            futures::future::join_all(nodes.iter().map(|n| n.is_available())).await;
+
+        nodes
+            .iter()
+            .zip(availability.iter())
+            .filter(|&(_, &is_avail)| is_avail)
+            .map(|(n, _)| n.clone())
+            .collect::<Vec<_>>()
     }
 }
 

@@ -1,0 +1,139 @@
+# dae-rs Tracking Configuration Examples
+#
+# This file demonstrates how to configure the tracking system in dae-rs.
+
+# =============================================================================
+# Basic Tracking Configuration
+# =============================================================================
+
+[tracking]
+# Enable or disable tracking
+enabled = true
+
+# Export interval in seconds (how often to export metrics)
+export_interval = 10
+
+# Maximum connection entries to track
+max_connections = 65536
+
+# Maximum rule entries to track
+max_rules = 1024
+
+# Connection tracking TTL in seconds
+connection_ttl = 3600
+
+# =============================================================================
+# Export Configuration
+# =============================================================================
+
+[tracking.export]
+# Enable Prometheus export
+prometheus = true
+prometheus_port = 9090
+prometheus_path = "/metrics"
+
+# Enable JSON API
+json_api = true
+json_api_port = 8080
+json_api_path = "/api/stats"
+
+# Enable WebSocket for real-time updates
+websocket = true
+websocket_path = "/ws/stats"
+
+# =============================================================================
+# Sampling Configuration
+# =============================================================================
+
+[tracking.sampling]
+# Sample 1 in N packets for detailed tracking
+packet_sample_rate = 100
+
+# Sample 1 in N connections for latency tracking
+latency_sample_rate = 10
+
+# =============================================================================
+# Protocol-Specific Tracking
+# =============================================================================
+
+[tracking.protocols.tcp]
+# Enable TCP connection tracking
+enabled = true
+# Track TCP RTT
+track_rtt = true
+
+[tracking.protocols.udp]
+# Enable UDP session tracking
+enabled = true
+# Track UDP NAT sessions
+track_nat = true
+
+[tracking.protocols.dns]
+# Enable DNS query tracking
+enabled = true
+# Track DNS resolution times
+track_resolution = true
+
+# =============================================================================
+# Rule Tracking Configuration
+# =============================================================================
+
+[tracking.rules]
+# Enable per-rule statistics
+enabled = true
+# Track matched bytes per rule
+track_bytes = true
+# Maximum rules to track
+max_tracked_rules = 1024
+
+# =============================================================================
+# Node Tracking Configuration
+# =============================================================================
+
+[tracking.nodes]
+# Enable per-node statistics
+enabled = true
+# Track latency percentiles (p50, p90, p99)
+track_percentiles = true
+# Latency histogram buckets
+latency_buckets = [10, 25, 50, 100, 200, 500, 1000]
+
+# =============================================================================
+# Example: Full Configuration
+# =============================================================================
+
+# [tracking]
+# enabled = true
+# export_interval = 10
+# 
+# [tracking.export]
+# prometheus = true
+# prometheus_port = 9090
+# prometheus_path = "/metrics"
+# json_api = true
+# json_api_port = 8080
+# websocket = true
+# 
+# [tracking.sampling]
+# packet_sample_rate = 100
+# latency_sample_rate = 10
+# 
+# [tracking.protocols.tcp]
+# enabled = true
+# track_rtt = true
+# 
+# [tracking.protocols.udp]
+# enabled = true
+# track_nat = true
+# 
+# [tracking.protocols.dns]
+# enabled = true
+# track_resolution = true
+# 
+# [tracking.rules]
+# enabled = true
+# track_bytes = true
+# 
+# [tracking.nodes]
+# enabled = true
+# track_percentiles = true

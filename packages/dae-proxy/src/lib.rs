@@ -143,6 +143,7 @@ pub mod tcp;
 pub mod transport;
 pub mod trojan_protocol; // Module structure following Zed's architecture
 pub mod tun;
+pub mod tracking;
 pub mod udp;
 pub mod vless;
 pub mod vmess;

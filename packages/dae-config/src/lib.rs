@@ -6,7 +6,9 @@ use thiserror::Error;
 
 pub mod rules;
 pub mod subscription;
+pub mod tracking;
 pub use rules::{RuleConfig, RuleConfigItem, RuleGroupConfig};
+pub use tracking::TrackingConfig;
 
 /// Configuration validation errors
 #[derive(Error, Debug)]
@@ -104,6 +106,9 @@ pub struct Config {
     /// Transparent proxy configuration (TUN device)
     #[serde(default)]
     pub transparent_proxy: TransparentProxyConfig,
+    /// Tracking/monitoring configuration
+    #[serde(default)]
+    pub tracking: TrackingConfig,
 }
 
 /// Proxy configuration
@@ -833,6 +838,7 @@ impl Config {
                 structured: true,
             },
             transparent_proxy: TransparentProxyConfig::default(),
+            tracking: TrackingConfig::default(),
         })
     }
 

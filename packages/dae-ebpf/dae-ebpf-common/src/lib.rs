@@ -17,6 +17,7 @@ pub mod dns;
 pub mod routing;
 pub mod session;
 pub mod stats;
+pub mod tracking;
 
 // Re-export commonly used types
 pub use config::{ConfigEntry, GLOBAL_CONFIG_KEY};
