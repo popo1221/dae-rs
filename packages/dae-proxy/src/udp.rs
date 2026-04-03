@@ -382,5 +382,29 @@ mod tests {
         let config = UdpProxyConfig::default();
         assert_eq!(config.listen_addr.port(), 1080);
         assert_eq!(config.session_timeout, Duration::from_secs(300));
+        assert_eq!(config.per_session_timeout, Duration::from_secs(30));
+        assert_eq!(config.max_packet_size, 64 * 1024);
+    }
+
+    #[test]
+    fn test_udp_proxy_config_custom() {
+        let config = UdpProxyConfig {
+            listen_addr: "0.0.0.0:5353".parse().unwrap(),
+            session_timeout: Duration::from_secs(600),
+            per_session_timeout: Duration::from_secs(60),
+            max_packet_size: 32 * 1024,
+        };
+        assert_eq!(config.listen_addr.port(), 5353);
+        assert_eq!(config.session_timeout, Duration::from_secs(600));
+        assert_eq!(config.per_session_timeout, Duration::from_secs(60));
+        assert_eq!(config.max_packet_size, 32 * 1024);
+    }
+
+    #[test]
+    fn test_udp_proxy_config_debug() {
+        let config = UdpProxyConfig::default();
+        let debug_str = format!("{:?}", config);
+        assert!(debug_str.contains("UdpProxyConfig"));
+        assert!(debug_str.contains("1080"));
     }
 }
