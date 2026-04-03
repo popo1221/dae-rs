@@ -17,13 +17,13 @@ use dae_proxy::{
     control::{connect_and_send, ControlServer},
     shadowsocks::{SsCipherType, SsServerConfig},
     trojan_protocol::{TrojanServerConfig, TrojanTlsConfig},
+    tun::TunConfig,
     vless::{VlessServerConfig, VlessTlsConfig},
     vmess::{VmessSecurity, VmessServerConfig},
     Proxy, ProxyConfig,
 };
 use std::net::SocketAddr;
 use std::path::PathBuf;
-use std::str::FromStr;
 use std::sync::Arc;
 use std::time::Duration;
 use tokio::signal;
@@ -192,6 +192,28 @@ async fn run_proxy(
     proxy_config.ebpf.enabled = loaded_config.proxy.ebpf_enabled;
     proxy_config.xdp_interface = loaded_config.proxy.ebpf_interface.clone();
 
+    // Transparent proxy (TUN) settings
+    let tun_config = if loaded_config.transparent_proxy.enabled {
+        Some(TunConfig {
+            enabled: true,
+            interface: loaded_config.transparent_proxy.tun_interface.clone(),
+            tun_ip: loaded_config.transparent_proxy.tun_ip.clone(),
+            tun_netmask: loaded_config.transparent_proxy.tun_netmask.clone(),
+            mtu: loaded_config.transparent_proxy.mtu,
+            dns_hijack: loaded_config
+                .transparent_proxy
+                .dns_hijack
+                .iter()
+                .filter_map(|s| s.parse().ok())
+                .collect(),
+            tcp_timeout: Duration::from_secs(loaded_config.transparent_proxy.tcp_timeout),
+            udp_timeout: Duration::from_secs(loaded_config.transparent_proxy.udp_timeout),
+            ..Default::default()
+        })
+    } else {
+        None
+    };
+
     // Timeouts
     proxy_config.pool.tcp_timeout = Duration::from_secs(loaded_config.proxy.tcp_timeout);
     proxy_config.pool.udp_timeout = Duration::from_secs(loaded_config.proxy.udp_timeout);
@@ -275,6 +297,24 @@ async fn run_proxy(
     // Create and start proxy
     let proxy = Arc::new(Proxy::new(proxy_config).await?);
 
+    // Create TUN proxy if enabled
+    // Note: TUN requires a separate initialization loop to read packets from TUN device
+    // This is prepared infrastructure for when TUN packet processing is fully implemented
+    #[allow(unused_variables)]
+    let tun_initialized: bool = if let Some(ref tun_cfg) = tun_config {
+        tracing::info!(
+            "TUN transparent proxy configured: {} ({}/{})",
+            tun_cfg.tun_ip, tun_cfg.tun_netmask, tun_cfg.interface
+        );
+        tracing::info!(
+            "DNS hijack targets: {:?}",
+            tun_cfg.dns_hijack
+        );
+        true
+    } else {
+        false
+    };
+
     if daemon {
         if let Some(ref pid_path) = pid_file {
             std::fs::write(pid_path, std::process::id().to_string())?;
@@ -301,6 +341,7 @@ async fn run_proxy(
             tracing::info!("Shutting down...");
             control_state.set_running(false).await;
             proxy.stop().await;
+            // Note: TUN proxy will be stopped when the task handle is dropped
         }
     }
 

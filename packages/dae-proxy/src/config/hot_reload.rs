@@ -413,6 +413,7 @@ mod tests {
             nodes: vec![],
             rules: dae_config::RulesConfig::default(),
             logging: dae_config::LoggingConfig::default(),
+            transparent_proxy: dae_config::TransparentProxyConfig::default(),
         });
         assert!(format!("{event:?}").contains("Reloaded"));
 

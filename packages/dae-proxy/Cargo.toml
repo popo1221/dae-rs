@@ -32,6 +32,8 @@ curve25519-dalek = { version = "4", features = ["rand_core"] }
 rand_core = "0.6"
 hmac = "0.12"
 sha2 = "0.10"
+bitflags = "2"
+tokio-tun = "0.9"
 
 # Metrics and observability
 prometheus = "0.13"

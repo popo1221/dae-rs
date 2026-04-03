@@ -85,6 +85,13 @@ pub use crate::trojan_protocol::{
     TrojanServerConfig, TrojanTargetAddress, TrojanTlsConfig,
 };
 
+// TUN transparent proxy exports
+pub use crate::tun::{
+    DnsHijackEntry, DnsHijacker, RouteResult, SharedDnsHijacker, TcpFlags, TcpHeader,
+    TcpTunSession, TunConfig, TunPacket, TunProxy, TunStats, UdpHeader,
+};
+pub use crate::tun::new_dns_hijacker;
+
 // Protocol layer abstractions
 //
 // # Unified Handler Architecture (Zed-inspired)
@@ -135,6 +142,7 @@ pub mod socks5;
 pub mod tcp;
 pub mod transport;
 pub mod trojan_protocol; // Module structure following Zed's architecture
+pub mod tun;
 pub mod udp;
 pub mod vless;
 pub mod vmess;
