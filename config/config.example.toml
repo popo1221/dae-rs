@@ -1,0 +1,66 @@
+# dae-rs 示例配置文件
+# 
+# 使用方式:
+# 1. 复制此文件为 config.toml
+# 2. 填写实际的节点信息
+# 3. 运行: dae run -c config.toml
+
+[proxy]
+socks5_listen = "0.0.0.0:1080"
+http_listen = "0.0.0.0:8080"
+tcp_timeout = 60
+udp_timeout = 30
+ebpf_enabled = false
+ebpf_interface = "eth0"
+
+[transparent_proxy]
+enabled = false
+tun_interface = "dae0"
+tun_ip = "10.0.0.1"
+tun_netmask = "255.255.255.0"
+mtu = 1500
+auto_route = true
+dns_hijack = ["8.8.8.8", "8.8.4.4"]
+dns_upstream = ["8.8.8.8:53", "8.8.4.4:53"]
+
+# === Trojan 节点 ===
+[[nodes]]
+name = "香港节点"
+type = "trojan"
+server = "your-server.com"
+port = 443
+trojan_password = "your-trojan-password"
+tls = true
+tls_server_name = "your-server.com"
+
+# === Shadowsocks 节点 ===
+# [[nodes]]
+# name = "日本节点"
+# type = "shadowsocks"
+# server = "jp.example.com"
+# port = 8388
+# method = "chacha20-ietf-poly1305"
+# password = "your-ss-password"
+
+# === VLESS 节点 ===
+# [[nodes]]
+# name = "美国节点"
+# type = "vless"
+# server = "us.example.com"
+# port = 443
+# uuid = "your-vless-uuid"
+# tls = true
+
+# === VMess 节点 ===
+# [[nodes]]
+# name = "台湾节点"
+# type = "vmess"
+# server = "tw.example.com"
+# port = 443
+# uuid = "your-vmess-uuid"
+# security = "aes-128-gcm-aead"
+# tls = true
+
+[logging]
+level = "info"
+file = "/var/log/dae-rs.log"

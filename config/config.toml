@@ -1,0 +1,102 @@
+# dae-rs configuration (TOML format)
+# 配置文件格式说明:
+# - 支持 .toml / .yml / .yaml 格式
+# - 节点类型: trojan, shadowsocks, vless, vmess
+# - 密码使用环境变量: ${TROJAN_PASSWORD} 或直接填写（仅本地开发用）
+
+[proxy]
+socks5_listen = "0.0.0.0:1080"
+http_listen = "0.0.0.0:8080"
+tcp_timeout = 60
+udp_timeout = 30
+ebpf_enabled = false
+ebpf_interface = "eth0"
+
+[transparent_proxy]
+enabled = false
+tun_interface = "dae0"
+tun_ip = "10.0.0.1"
+tun_netmask = "255.255.255.0"
+mtu = 1500
+auto_route = true
+
+# DNS hijack servers (comma-separated in TOML array)
+dns_hijack = ["8.8.8.8", "8.8.4.4"]
+dns_upstream = ["8.8.8.8:53", "8.8.4.4:53"]
+
+# === 上游节点配置 ===
+# 注意: 生产环境请使用环境变量或安全的密钥管理服务
+# 密码占位符: ${TROJAN_PASSWORD} 或填写实际密码（仅本地开发）
+
+[[nodes]]
+name = "香港-IPLC-CC5B-HK-1"
+type = "trojan"
+server = "iplc-cc5b-hk-1.tr202503.com"
+port = 7001
+trojan_password = "${TROJAN_PASSWORD}"
+tls = true
+tls_server_name = "trojan.example.com"
+
+[[nodes]]
+name = "香港-IPLC-CC5B-HK-2"
+type = "trojan"
+server = "iplc-cc5b-hk-2.tr202503.com"
+port = 7001
+trojan_password = "${TROJAN_PASSWORD}"
+tls = true
+
+[[nodes]]
+name = "日本-IPLC-CC5B-JP-1"
+type = "trojan"
+server = "iplc-cc5b-jp-1.tr202503.com"
+port = 7001
+trojan_password = "${TROJAN_PASSWORD}"
+tls = true
+
+[[nodes]]
+name = "美国-IPLC-CC5B-US-1"
+type = "trojan"
+server = "iplc-cc5b-us-1.tr202503.com"
+port = 7001
+trojan_password = "${TROJAN_PASSWORD}"
+tls = true
+
+[[nodes]]
+name = "荷兰-CC5B-NL-1"
+type = "trojan"
+server = "nl-1.tr202503.com"
+port = 7001
+trojan_password = "${TROJAN_PASSWORD}"
+tls = true
+
+# Shadowsocks 示例
+# [[nodes]]
+# name = "日本-Shadowsocks"
+# type = "shadowsocks"
+# server = "jp.example.com"
+# port = 8388
+# method = "chacha20-ietf-poly1305"
+# password = "${SS_PASSWORD}"
+
+# VLESS 示例
+# [[nodes]]
+# name = "香港-VLESS"
+# type = "vless"
+# server = "vless.example.com"
+# port = 443
+# uuid = "${VLESS_UUID}"
+# tls = true
+
+# VMess 示例
+# [[nodes]]
+# name = "日本-VMESS"
+# type = "vmess"
+# server = "vmess.example.com"
+# port = 443
+# uuid = "${VMESS_UUID}"
+# security = "aes-128-gcm-aead"
+# tls = true
+
+[logging]
+level = "info"
+file = "/var/log/dae-rs.log"
