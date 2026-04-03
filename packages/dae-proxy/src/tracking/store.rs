@@ -7,9 +7,21 @@
 //! Actual implementation would require adding dependencies like dashmap to Cargo.toml.
 
 use crate::tracking::types::*;
+use axum::{
+    body::Body,
+    extract::State,
+    http::{HeaderValue, StatusCode},
+    response::Response,
+    routing::get,
+    Router,
+};
 use std::collections::HashMap;
+use std::net::SocketAddr;
 use std::sync::{Arc, RwLock};
 use std::time::{Duration, Instant, SystemTime};
+use tokio::net::TcpListener;
+use tower_http::cors::{Any, CorsLayer};
+use tracing::info;
 
 /// Maximum entries in connection tracking
 const MAX_CONNECTION_ENTRIES: usize = 65536;
@@ -310,6 +322,139 @@ impl TrackingStore {
     pub fn uptime_secs(&self) -> u64 {
         self.start_time.elapsed().as_secs()
     }
+
+    /// Start an HTTP server for metrics export (Prometheus + JSON API)
+    ///
+    /// # Arguments
+    /// * `port` - Port to listen on
+    /// * `metrics_path` - Path for Prometheus metrics endpoint
+    /// * `prometheus_mode` - If true, serve Prometheus text format; otherwise JSON
+    /// * `websocket` - If true, also enable WebSocket updates
+    pub async fn start_http_server(
+        port: u16,
+        metrics_path: &str,
+        prometheus_mode: bool,
+        websocket: bool,
+        store: Arc<TrackingStore>,
+    ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+        let addr: SocketAddr = ([0, 0, 0, 0], port).into();
+        let listener = TcpListener::bind(addr).await?;
+        info!("Tracking HTTP server listening on {}", addr);
+
+        // Build router based on mode
+        let app = if prometheus_mode {
+            let state = MetricsHttpState {
+                store,
+                prometheus_mode: true,
+                websocket_enabled: websocket,
+            };
+            Router::new()
+                .route(metrics_path, get(tracking_metrics_handler))
+                .route("/health", get(health_handler))
+                .with_state(state)
+                .layer(
+                    CorsLayer::new()
+                        .allow_origin(Any)
+                        .allow_methods(Any)
+                        .allow_headers(Any),
+                )
+        } else {
+            let state = MetricsHttpState {
+                store,
+                prometheus_mode: false,
+                websocket_enabled: websocket,
+            };
+            Router::new()
+                .route(metrics_path, get(tracking_json_handler))
+                .route("/health", get(health_handler))
+                .with_state(state)
+                .layer(
+                    CorsLayer::new()
+                        .allow_origin(Any)
+                        .allow_methods(Any)
+                        .allow_headers(Any),
+                )
+        };
+
+        axum::serve(listener, app).await?;
+        Ok(())
+    }
+}
+
+/// HTTP state for tracking metrics server
+#[derive(Clone)]
+struct MetricsHttpState {
+    store: Arc<TrackingStore>,
+    prometheus_mode: bool,
+    websocket_enabled: bool,
+}
+
+/// Prometheus-format metrics handler
+async fn tracking_metrics_handler(
+    State(state): State<MetricsHttpState>,
+) -> Response<Body> {
+    let metrics = state.store.export_prometheus();
+    let mut response = Response::new(Body::from(metrics));
+    response.headers_mut().insert(
+        "Content-Type",
+        HeaderValue::from_static("text/plain; version=0.0.4; charset=utf-8"),
+    );
+    response
+}
+
+/// JSON API handler
+async fn tracking_json_handler(
+    State(state): State<MetricsHttpState>,
+) -> Response<Body> {
+    let store = &state.store;
+    let overall = store.get_overall();
+    let protocols = store.get_protocol_stats();
+    let uptime = store.uptime_secs();
+
+    let json = format!(
+        r#"{{
+  "uptime_secs": {},
+  "overall": {{
+    "packets_total": {},
+    "bytes_total": {},
+    "connections_total": {},
+    "connections_active": {},
+    "dropped_total": {},
+    "routed_total": {},
+    "unmatched_total": {}
+  }},
+  "protocols": {{
+    "tcp": {{"packets": {}, "bytes": {}}},
+    "udp": {{"packets": {}, "bytes": {}}}
+  }},
+  "prometheus": "{}"
+}}"#,
+        uptime,
+        overall.packets_total,
+        overall.bytes_total,
+        overall.connections_total,
+        overall.connections_active,
+        overall.dropped_total,
+        overall.routed_total,
+        overall.unmatched_total,
+        protocols.tcp.packets,
+        protocols.tcp.bytes,
+        protocols.udp.packets,
+        protocols.udp.bytes,
+        store.export_prometheus()
+    );
+
+    let mut response = Response::new(Body::from(json));
+    response.headers_mut().insert(
+        "Content-Type",
+        HeaderValue::from_static("application/json; charset=utf-8"),
+    );
+    response
+}
+
+/// Health check handler
+async fn health_handler() -> StatusCode {
+    StatusCode::OK
 }
 
 impl Default for TrackingStore {

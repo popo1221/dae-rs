@@ -287,6 +287,9 @@ async fn run_proxy(
         }
     }
 
+    // Tracking configuration
+    proxy_config.tracking = loaded_config.tracking.clone();
+
     // Create control server
     let control_server = Arc::new(ControlServer::new(&control_socket));
     let control_state = control_server.state();

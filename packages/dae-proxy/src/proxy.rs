@@ -8,10 +8,12 @@ use crate::ebpf_integration::{EbpfMaps, EbpfRoutingHandle, EbpfSessionHandle, Eb
 use crate::protocol_dispatcher::{CombinedProxyServer, ProtocolDispatcherConfig};
 use crate::shadowsocks::ShadowsocksServer;
 use crate::tcp::{TcpProxy, TcpProxyConfig};
+use crate::tracking::store::TrackingStore;
 use crate::trojan_protocol::{TrojanClientConfig, TrojanServer, TrojanServerConfig};
 use crate::udp::{UdpProxy, UdpProxyConfig};
 use crate::vless::{VlessClientConfig, VlessServer, VlessServerConfig};
 use crate::vmess::{VmessServer, VmessServerConfig};
+use dae_config::TrackingConfig;
 use std::net::SocketAddr;
 use std::path::PathBuf;
 use std::sync::Arc;
@@ -59,6 +61,8 @@ pub struct ProxyConfig {
     pub xdp_object: PathBuf,
     /// XDP interface
     pub xdp_interface: String,
+    /// Tracking/monitoring configuration
+    pub tracking: TrackingConfig,
     /// SOCKS5 listen address (None to disable)
     pub socks5_listen: Option<SocketAddr>,
     /// HTTP proxy listen address (None to disable)
@@ -106,6 +110,7 @@ impl Default for ProxyConfig {
             trojan_listen: None,
             trojan_server: None,
             trojan_backends: Vec::new(),
+            tracking: TrackingConfig::default(),
         }
     }
 }
@@ -171,6 +176,7 @@ pub struct Proxy {
     vless_server: Option<Arc<VlessServer>>,
     vmess_server: Option<Arc<VmessServer>>,
     trojan_server: Option<Arc<TrojanServer>>,
+    tracking_store: Option<Arc<TrackingStore>>,
 }
 
 impl Proxy {
@@ -215,6 +221,14 @@ impl Proxy {
         // Create Trojan server if configured
         let trojan_server = Self::create_trojan_server(&config).await?;
 
+        // Initialize tracking store if enabled
+        let tracking_store = if config.tracking.enabled {
+            info!("Tracking enabled, initializing tracking store");
+            Some(TrackingStore::shared())
+        } else {
+            None
+        };
+
         Ok(Self {
             config,
             tcp_proxy,
@@ -230,6 +244,7 @@ impl Proxy {
             vless_server,
             vmess_server,
             trojan_server,
+            tracking_store,
         })
     }
 
@@ -479,6 +494,64 @@ impl Proxy {
             handles.push(trojan_handle);
         }
 
+        // Start tracking HTTP server if enabled
+        if let Some(ref store) = self.tracking_store {
+            let export_cfg = &self.config.tracking.export;
+            if export_cfg.prometheus || export_cfg.json_api || export_cfg.websocket {
+                let prom_port = export_cfg.prometheus_port;
+                let json_port = export_cfg.json_api_port;
+                let prom_path = export_cfg.prometheus_path.clone();
+                let json_path = export_cfg.json_api_path.clone();
+                let store_clone = store.clone();
+                let enable_ws = export_cfg.websocket;
+                let track_store = store_clone.clone();
+
+                if export_cfg.prometheus {
+                    info!("Starting tracking Prometheus metrics server on :{}/{}", prom_port, prom_path);
+                    let prom_store = store_clone.clone();
+                    tokio::spawn(async move {
+                        if let Err(e) = TrackingStore::start_http_server(
+                            prom_port,
+                            &prom_path,
+                            true,
+                            false,
+                            prom_store,
+                        )
+                        .await
+                        {
+                            error!("Tracking Prometheus server error: {}", e);
+                        }
+                    });
+                }
+
+                if export_cfg.json_api {
+                    info!("Starting tracking JSON API server on :{}/{}", json_port, json_path);
+                    let json_store = store_clone.clone();
+                    tokio::spawn(async move {
+                        if let Err(e) = TrackingStore::start_http_server(
+                            json_port,
+                            &json_path,
+                            false,
+                            enable_ws,
+                            json_store,
+                        )
+                        .await
+                        {
+                            error!("Tracking JSON API server error: {}", e);
+                        }
+                    });
+                }
+
+                // Record initial stats if we have the store
+                track_store.record_routed(0);
+            } else if self.config.tracking.enabled {
+                // Tracking is enabled but no export configured - just log it
+                info!(
+                    "Tracking enabled (no HTTP export configured), metrics available via store"
+                );
+            }
+        }
+
         info!("Proxy services started");
 
         // Wait for shutdown signal
@@ -528,6 +601,12 @@ impl Proxy {
     /// Get stats handle for external access
     pub fn stats_handle(&self) -> &Arc<RwLock<EbpfStatsHandle>> {
         &self.stats_handle
+    }
+
+    /// Get tracking store for external access
+    #[allow(dead_code)]
+    pub fn tracking_store(&self) -> Option<&Arc<TrackingStore>> {
+        self.tracking_store.as_ref()
     }
 }
 
