@@ -419,9 +419,17 @@ impl VmessHandler {
             match VmessTargetAddress::parse_from_bytes(&decrypted_header) {
                 Some((addr, port)) => (addr, port),
                 None => {
-                    // Fall back: try to find address in the decrypted data
-                    // The header format is: version + option + port(2) + atyp + addr + extras
-                    // Find the address type marker (0x01=IPv4, 0x02=domain, 0x03=IPv6)
+                    // Fallback: some VMess implementations may have non-standard header formatting.
+                    // We try to find an address type marker (0x01=IPv4, 0x02=domain, 0x03=IPv6)
+                    // in the decrypted data. This is a best-effort approach for compatibility.
+                    //
+                    // Note: This fallback is fragile because random bytes in the header
+                    // could accidentally match address type markers. We log a warning
+                    // when this fallback is used so operators can investigate.
+                    warn!(
+                        "VMess TCP: {} standard header parsing failed, trying fallback heuristic (may indicate non-standard implementation)",
+                        client_addr
+                    );
                     if let Some(pos) = decrypted_header
                         .iter()
                         .position(|&b| matches!(b, 0x01 | 0x02 | 0x03))
@@ -429,10 +437,11 @@ impl VmessHandler {
                         if let Some(result) =
                             VmessTargetAddress::parse_from_bytes(&decrypted_header[pos..])
                         {
+                            debug!("VMess TCP: {} fallback parsing succeeded at pos {}", client_addr, pos);
                             (result.0, result.1)
                         } else {
                             error!(
-                                "VMess TCP: {} failed to parse decrypted header",
+                                "VMess TCP: {} fallback parsing also failed",
                                 client_addr
                             );
                             return Err(std::io::Error::new(

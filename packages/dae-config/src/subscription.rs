@@ -976,11 +976,16 @@ fn parse_ss_uri(uri: &str, name: Option<String>) -> Result<NodeConfig, Subscript
     })?;
 
     // Handle query params if present (e.g., ?plugin=...)
+    // TODO(#79): Implement simple-obfs/v2ray-plugin option parsing.
+    // Plugin options are passed as base64-encoded query parameters:
+    // - simple-obfs: plugin=simple-obfs;host=example.com;tls
+    // - v2ray-plugin: plugin=v2ray-plugin;server;tls;host=example.com;path=/
+    // For now, we only capture the raw plugin string without parsing options.
     let _plugin = if let Some(query_pos) = server_part.find('?') {
         let query = &server_part[query_pos + 1..];
         for param in query.split('&') {
             if param.starts_with("plugin=") {
-                // Could parse plugin options here if needed
+                // Plugin option parsing not implemented yet - see issue #79
             }
         }
         Some(query)

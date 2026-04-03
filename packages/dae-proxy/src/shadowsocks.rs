@@ -4,6 +4,11 @@
 //! Supports AEAD ciphers: chacha20-ietf-poly1305, aes-256-gcm, aes-128-gcm
 //! Implements OTA (One-Time Auth) compatibility mode.
 //!
+//! # ⚠️ Limitations
+//!
+//! **Stream ciphers (rc4-md5, aes-ctr, etc.) are not supported.**
+//! Only AEAD ciphers are implemented. See GitHub Issue #78 for details.
+//!
 //! Supports obfuscation plugins:
 //! - simple-obfs (HTTP and TLS obfuscation)
 //! - v2ray-plugin (WebSocket-based obfuscation)

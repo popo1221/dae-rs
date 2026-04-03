@@ -235,6 +235,9 @@ impl ConnectionPool {
         }
 
         let (src, dst) = key.to_socket_addrs().unwrap_or_else(|| {
+            // Fallback for invalid IPv6 or malformed addresses.
+            // This silently drops IPv6 connections - log a warning for operators.
+            warn!("IPv6 address conversion failed for {:?}, falling back to 0.0.0.0:0 - IPv6 connections may be dropped", key);
             (
                 SocketAddr::new(IpAddr::V4(Ipv4Addr::UNSPECIFIED), 0),
                 SocketAddr::new(IpAddr::V4(Ipv4Addr::UNSPECIFIED), 0),

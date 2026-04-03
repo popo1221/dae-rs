@@ -1341,12 +1341,11 @@ mod tests {
         assert!(tun_packet.is_udp());
         assert!(!tun_packet.is_tcp());
 
-        if let Some(ref dns) = tun_packet.dns_query {
-            assert_eq!(dns.domain, "foo.bar");
-            assert_eq!(dns.qtype, 1);
-        } else {
-            panic!("DNS query should be parsed");
-        }
+        // Verify DNS query was parsed successfully
+        let dns = tun_packet.dns_query
+            .expect("DNS query should be parsed - check DNS packet format in test");
+        assert_eq!(dns.domain, "foo.bar");
+        assert_eq!(dns.qtype, 1);
     }
 
     #[test]

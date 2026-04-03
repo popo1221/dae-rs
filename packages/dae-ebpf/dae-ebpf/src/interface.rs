@@ -56,11 +56,19 @@ pub fn get_interface(name: &str) -> Result<InterfaceInfo> {
 }
 
 /// Get the IPv4 address of an interface
+///
+/// # Not Implemented
+///
+/// This function is a stub. IPv4 address parsing requires reading from
+/// `/sys/class/net/<name>/address` or using the `netlink` crate for proper
+/// address resolution.
+///
+/// See GitHub Issue #76 for tracking.
 #[allow(dead_code)]
 fn get_interface_ipv4(name: &str) -> Result<Ipv4Addr> {
     let _ = name;
-    // For now, return an error as getting IPv4 requires more complex parsing
-    anyhow::bail!("IPv4 address parsing not implemented")
+    // TODO(#76): Implement IPv4 address parsing via netlink or /sys/class/net
+    anyhow::bail!("IPv4 address parsing not implemented (see issue #76)")
 }
 
 /// List all network interfaces

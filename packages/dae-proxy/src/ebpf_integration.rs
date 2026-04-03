@@ -2,6 +2,13 @@
 //!
 //! Provides wrappers around eBPF maps for session, routing, and stats management.
 //!
+//! # ⚠️ Implementation Status
+//!
+//! **This is an in-memory stub for development/testing.**
+//! Real eBPF map operations require the `aya` crate and kernel BPF support.
+//!
+//! See GitHub Issue #73 for tracking the real eBPF implementation.
+//!
 //! # Implementation
 //!
 //! This module provides **in-memory HashMap implementations** as a working
