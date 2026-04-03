@@ -55,10 +55,22 @@ impl Fnv1aHasher {
 impl Hasher for Fnv1aHasher {
     fn write(&mut self, bytes: &[u8]) {
         // FNV-1a: hash = (hash XOR byte) * FNV_prime
+        // Process each byte in the order given (native endianness from Hash impl)
         for &b in bytes {
             self.hash ^= b as u64;
             self.hash = self.hash.wrapping_mul(FNV_PRIME_64);
         }
+    }
+
+    fn write_u64(&mut self, i: u64) {
+        // FNV-1a processes bytes, split u64 into bytes
+        // Use little-endian to match Hash impl for u64 on most platforms
+        self.write(&i.to_le_bytes());
+    }
+
+    fn write_usize(&mut self, i: usize) {
+        // FNV-1a processes bytes, split usize into bytes
+        self.write(&i.to_le_bytes());
     }
 
     fn finish(&self) -> u64 {
