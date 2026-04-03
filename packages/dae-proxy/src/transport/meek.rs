@@ -404,11 +404,12 @@ impl Transport for MeekTransport {
         "meek"
     }
 
-    async fn dial(&self, _addr: &str) -> IoResult<TcpStream> {
+    async fn dial(&self, addr: &str) -> IoResult<TcpStream> {
         let mut stream = self.dial_fronted().await?;
 
         // Build and send tunnel request
-        let request = self.build_tunnel_request(&self.config.server_host, &self.config.path_prefix);
+        // addr specifies the target to relay through the fronted connection
+        let request = self.build_tunnel_request(addr, &self.config.path_prefix);
         stream.write_all(&request).await?;
         stream.flush().await?;
 
