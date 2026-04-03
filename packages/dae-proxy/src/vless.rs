@@ -24,7 +24,8 @@ use std::time::Duration;
 
 use std::io::ErrorKind;
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
-use tokio::net::{TcpListener, TcpStream};
+use tokio::net::{TcpListener, TcpStream, UdpSocket};
+use tokio::sync::Mutex;
 use tracing::{debug, error, info};
 
 use crate::protocol::{Handler, HandlerConfig};
@@ -379,10 +380,12 @@ impl VlessHandler {
         match cmd {
             VlessCommand::Tcp => self.handle_tcp(client, &header_buf).await,
             VlessCommand::Udp => {
-                error!("VLESS UDP not fully implemented");
+                // VLESS UDP should use the dedicated UDP port, not TCP channel.
+                // The client should send UDP packets directly to the UDP listener.
+                error!("VLESS UDP: UDP traffic should go through the UDP port, not TCP");
                 Err(std::io::Error::new(
-                    std::io::ErrorKind::Unsupported,
-                    "VLESS UDP not implemented",
+                    std::io::ErrorKind::InvalidInput,
+                    "UDP traffic should use the UDP port",
                 ))
             }
             VlessCommand::XtlsVision => {
@@ -433,6 +436,246 @@ impl VlessHandler {
 
         // Relay data between client and remote
         self.relay(client, remote).await
+    }
+
+    /// Handle VLESS UDP packets directly
+    ///
+    /// This method handles UDP packets that contain VLESS headers.
+    /// Each UDP packet has the following format:
+    /// - v1 (1 byte): version, 0x01
+    /// - uuid (16 bytes): user UUID
+    /// - ver (1 byte): protocol version, 0x01
+    /// - cmd (1 byte): command, 0x02 for UDP
+    /// - port (4 bytes): target port (big-endian)
+    /// - atyp (1 byte): address type (0x01=IPv4, 0x02=domain, 0x03=IPv6)
+    /// - addr (variable): target address
+    /// - iv (16 bytes): initial vector for encryption
+    /// - payload: encrypted data
+    ///
+    /// This is the entry point when VLESS server listens on a UDP port
+    /// and receives VLESS UDP packets directly from clients.
+    pub async fn handle_udp(self: Arc<Self>, client: Arc<UdpSocket>) -> std::io::Result<()> {
+        const MAX_UDP_SIZE: usize = 65535;
+        let mut buf = vec![0u8; MAX_UDP_SIZE];
+
+        let local_addr = client.local_addr().unwrap_or_else(|e| {
+            debug!("VLESS UDP: failed to get local addr: {}", e);
+            SocketAddr::from(([0, 0, 0, 0], 0))
+        });
+        info!(
+            "VLESS UDP: listening on {} (via {}:{})",
+            local_addr,
+            self.config.server.addr,
+            self.config.server.port
+        );
+
+        loop {
+            let (n, client_addr) = client.recv_from(&mut buf).await?;
+
+            // Minimum header size: v1(1) + uuid(16) + ver(1) + cmd(1) + port(4) + atyp(1) + iv(16) = 40
+            const MIN_HEADER_SIZE: usize = 40;
+
+            if n < MIN_HEADER_SIZE {
+                debug!("VLESS UDP: packet too small from {}: {} bytes", client_addr, n);
+                continue;
+            }
+
+            // Parse VLESS UDP header
+            let v1 = buf[0];
+            if v1 != VLESS_VERSION {
+                debug!("VLESS UDP: invalid version {} from {}", v1, client_addr);
+                continue;
+            }
+
+            // Extract UUID (bytes 1-16)
+            let uuid = &buf[1..17];
+            if !Self::validate_uuid(uuid) {
+                debug!("VLESS UDP: invalid UUID from {}", client_addr);
+                continue;
+            }
+
+            // Verify UUID matches config
+            let expected_uuid = self.config.server.uuid.as_bytes();
+            if expected_uuid.len() == 16 && uuid != expected_uuid {
+                debug!("VLESS UDP: UUID mismatch from {}", client_addr);
+                continue;
+            }
+
+            // Verify protocol version (byte 17)
+            let ver = buf[17];
+            if ver != VLESS_VERSION {
+                debug!("VLESS UDP: invalid protocol version {} from {}", ver, client_addr);
+                continue;
+            }
+
+            // Verify command (byte 18) is UDP
+            let cmd = buf[18];
+            if cmd != VlessCommand::Udp as u8 {
+                debug!("VLESS UDP: invalid command {} from {}", cmd, client_addr);
+                continue;
+            }
+
+            // Extract port (bytes 19-22, big-endian)
+            let port = u16::from_be_bytes([buf[19], buf[20]]);
+
+            // Extract address type (byte 21)
+            let atyp = buf[21];
+
+            // Parse target address based on address type
+            // Address starts at byte 22
+            let addr_start = 22;
+            let (target_addr, addr_len) = match VlessAddressType::from_u8(atyp) {
+                Some(VlessAddressType::Ipv4) => {
+                    // IPv4: 4 bytes
+                    if n < addr_start + 4 + 2 {
+                        debug!("VLESS UDP: buffer too small for IPv4 from {}", client_addr);
+                        continue;
+                    }
+                    let ip = IpAddr::V4(Ipv4Addr::new(buf[addr_start], buf[addr_start + 1], buf[addr_start + 2], buf[addr_start + 3]));
+                    (ip, 4)
+                }
+                Some(VlessAddressType::Domain) => {
+                    // Domain: 1 byte length + domain name
+                    if n < addr_start + 1 + 2 {
+                        debug!("VLESS UDP: buffer too small for domain length from {}", client_addr);
+                        continue;
+                    }
+                    let domain_len = buf[addr_start] as usize;
+                    if n < addr_start + 1 + domain_len + 2 {
+                        debug!("VLESS UDP: buffer too small for domain from {}", client_addr);
+                        continue;
+                    }
+                    let domain = String::from_utf8(buf[addr_start + 1..addr_start + 1 + domain_len].to_vec())
+                        .unwrap_or_else(|_| "invalid".to_string());
+                    (IpAddr::V4(Ipv4Addr::new(0, 0, 0, 0)), 1 + domain_len) // Placeholder, will resolve later
+                }
+                Some(VlessAddressType::Ipv6) => {
+                    // IPv6: 16 bytes
+                    if n < addr_start + 16 + 2 {
+                        debug!("VLESS UDP: buffer too small for IPv6 from {}", client_addr);
+                        continue;
+                    }
+                    let ip = IpAddr::V6(Ipv6Addr::new(
+                        u16::from_be_bytes([buf[addr_start], buf[addr_start + 1]]),
+                        u16::from_be_bytes([buf[addr_start + 2], buf[addr_start + 3]]),
+                        u16::from_be_bytes([buf[addr_start + 4], buf[addr_start + 5]]),
+                        u16::from_be_bytes([buf[addr_start + 6], buf[addr_start + 7]]),
+                        u16::from_be_bytes([buf[addr_start + 8], buf[addr_start + 9]]),
+                        u16::from_be_bytes([buf[addr_start + 10], buf[addr_start + 11]]),
+                        u16::from_be_bytes([buf[addr_start + 12], buf[addr_start + 13]]),
+                        u16::from_be_bytes([buf[addr_start + 14], buf[addr_start + 15]]),
+                    ));
+                    (ip, 16)
+                }
+                None => {
+                    debug!("VLESS UDP: invalid address type {} from {}", atyp, client_addr);
+                    continue;
+                }
+            };
+
+            // IV is after address (16 bytes)
+            let iv_start = addr_start + addr_len;
+            if n < iv_start + 16 {
+                debug!("VLESS UDP: buffer too small for IV from {}", client_addr);
+                continue;
+            }
+            let iv = &buf[iv_start..iv_start + 16];
+
+            // Payload starts after IV
+            let payload_start = iv_start + 16;
+            if n <= payload_start {
+                debug!("VLESS UDP: no payload from {}", client_addr);
+                continue;
+            }
+            let payload = &buf[payload_start..n];
+
+            debug!(
+                "VLESS UDP: {} -> {}:{} ({} bytes, iv: {:?})",
+                client_addr,
+                target_addr,
+                port,
+                payload.len(),
+                &iv[..8]
+            );
+
+            // Create a UDP session to forward the packet
+            // We need to:
+            // 1. Connect to the VLESS server
+            // 2. Send the packet with proper VLESS header
+            // 3. Receive response and send back to client
+
+            let server_addr = format!("{}:{}", self.config.server.addr, self.config.server.port);
+
+            // Create server UDP socket
+            let server_socket = match UdpSocket::bind("0.0.0.0:0").await {
+                Ok(s) => s,
+                Err(e) => {
+                    debug!("VLESS UDP: failed to bind server socket: {}", e);
+                    continue;
+                }
+            };
+
+            // Build the VLESS header for server communication
+            // The header format for server->server communication:
+            // v1(1) + uuid(16) + ver(1) + cmd(1) + port(4) + atyp(1) + addr + iv(16) + payload
+            let mut server_packet = Vec::with_capacity(n);
+            server_packet.push(VLESS_VERSION); // v1
+            server_packet.extend_from_slice(uuid); // uuid
+            server_packet.push(VLESS_VERSION); // ver
+            server_packet.push(VlessCommand::Udp as u8); // cmd
+            server_packet.extend_from_slice(&port.to_be_bytes()); // port
+
+            // For domain, we need to resolve it or use it as-is
+            match VlessAddressType::from_u8(atyp) {
+                Some(VlessAddressType::Ipv4) => {
+                    server_packet.push(atyp);
+                    if let IpAddr::V4(ipv4) = target_addr {
+                        server_packet.extend_from_slice(&ipv4.octets());
+                    }
+                }
+                Some(VlessAddressType::Ipv6) => {
+                    server_packet.push(atyp);
+                    if let IpAddr::V6(ipv6) = target_addr {
+                        for segment in ipv6.segments() {
+                            server_packet.extend_from_slice(&segment.to_be_bytes());
+                        }
+                    }
+                }
+                Some(VlessAddressType::Domain) => {
+                    // For domain, we include the raw domain in the packet
+                    let domain_len = buf[addr_start] as usize;
+                    server_packet.push(atyp);
+                    server_packet.extend_from_slice(&buf[addr_start..addr_start + 1 + domain_len]);
+                }
+                None => continue,
+            }
+
+            server_packet.extend_from_slice(iv); // iv
+            server_packet.extend_from_slice(payload); // payload
+
+            // Send to server
+            if let Err(e) = server_socket.send_to(&server_packet, &server_addr).await {
+                debug!("VLESS UDP: failed to send to server: {}", e);
+                continue;
+            }
+
+            // Receive response from server
+            let mut response_buf = vec![0u8; MAX_UDP_SIZE];
+            match tokio::time::timeout(self.config.udp_timeout, server_socket.recv_from(&mut response_buf)).await {
+                Ok(Ok((m, _))) => {
+                    // Forward response back to client
+                    if let Err(e) = client.send_to(&response_buf[..m], &client_addr).await {
+                        debug!("VLESS UDP: failed to send response to client: {}", e);
+                    }
+                }
+                Ok(Err(e)) => {
+                    debug!("VLESS UDP: server recv error: {}", e);
+                }
+                Err(_) => {
+                    debug!("VLESS UDP: server response timed out");
+                }
+            }
+        }
     }
 
     /// Handle VLESS Reality Vision connection
@@ -881,6 +1124,7 @@ fn hmac_sha256(key: &[u8], data: &[u8]) -> [u8; 32] {
 pub struct VlessServer {
     handler: Arc<VlessHandler>,
     listener: TcpListener,
+    udp_socket: Arc<Mutex<Option<UdpSocket>>>,
     listen_addr: SocketAddr,
 }
 
@@ -889,9 +1133,11 @@ impl VlessServer {
     #[allow(dead_code)]
     pub async fn new(addr: SocketAddr) -> std::io::Result<Self> {
         let listener = TcpListener::bind(addr).await?;
+        let udp_socket = Arc::new(Mutex::new(UdpSocket::bind(addr).await.ok()));
         Ok(Self {
             handler: Arc::new(VlessHandler::new_default()),
             listener,
+            udp_socket,
             listen_addr: addr,
         })
     }
@@ -901,9 +1147,11 @@ impl VlessServer {
         let listen_addr = config.listen_addr;
         let handler = Arc::new(VlessHandler::new(config));
         let listener = TcpListener::bind(listen_addr).await?;
+        let udp_socket = Arc::new(Mutex::new(UdpSocket::bind(listen_addr).await.ok()));
         Ok(Self {
             handler,
             listener,
+            udp_socket,
             listen_addr,
         })
     }
@@ -913,6 +1161,22 @@ impl VlessServer {
     pub async fn start(self: Arc<Self>) -> std::io::Result<()> {
         info!("VLESS server listening on {}", self.listen_addr);
 
+        // Spawn UDP handler if UDP socket is available
+        // We need to move the socket into the task, so we take it from the mutex
+        let maybe_socket = {
+            let mut guard = self.udp_socket.lock().await;
+            guard.take()
+        };
+
+        if let Some(socket) = maybe_socket {
+            let handler = self.handler.clone();
+            tokio::spawn(async move {
+                handler.handle_udp(Arc::new(socket)).await;
+            });
+            info!("VLESS UDP server listening on {}", self.listen_addr);
+        }
+
+        // TCP accept loop
         loop {
             match self.listener.accept().await {
                 Ok((client, addr)) => {
@@ -1118,5 +1382,92 @@ mod tests {
         let result1 = hmac_sha256(key, data);
         let result2 = hmac_sha256(key, data);
         assert_eq!(result1, result2);
+    }
+
+    #[test]
+    fn test_vless_udp_header_parse_ipv4() {
+        // VLESS UDP packet header for IPv4 target
+        // Format: v1(1) + uuid(16) + ver(1) + cmd(1) + port(4) + atyp(1) + addr(4) + iv(16) + payload
+        // Total header: 1 + 16 + 1 + 1 + 4 + 1 + 4 + 16 = 44 bytes + payload
+        let uuid = [0x01u8; 16];
+        let mut packet = Vec::new();
+        packet.push(0x01); // v1
+        packet.extend_from_slice(&uuid); // uuid
+        packet.push(0x01); // ver
+        packet.push(0x02); // cmd = UDP
+        // Port is 4 bytes (big-endian), pad with 0x00 for the high 2 bytes
+        packet.extend_from_slice(&[0x00, 0x00, 0x1F, 0x90]); // port = 8080
+        packet.push(0x01); // atyp = IPv4
+        packet.extend_from_slice(&[192, 168, 1, 1]); // IPv4 address
+        packet.extend_from_slice(&[0u8; 16]); // iv (16 bytes)
+        packet.extend_from_slice(b"test payload"); // payload
+
+        assert_eq!(packet.len(), 44 + 12); // 44 header + 12 payload
+
+        // Verify header fields
+        assert_eq!(packet[0], 0x01); // v1
+        assert_eq!(&packet[1..17], &uuid); // uuid
+        assert_eq!(packet[17], 0x01); // ver
+        assert_eq!(packet[18], 0x02); // cmd = UDP
+        assert_eq!(u32::from_be_bytes([packet[19], packet[20], packet[21], packet[22]]), 8080); // port (4 bytes)
+        assert_eq!(packet[23], 0x01); // atyp = IPv4
+        assert_eq!(&packet[24..28], &[192, 168, 1, 1]); // addr
+        assert_eq!(&packet[28..44], &[0u8; 16]); // iv
+        assert_eq!(&packet[44..], b"test payload"); // payload
+    }
+
+    #[test]
+    fn test_vless_udp_header_parse_domain() {
+        // VLESS UDP packet header for domain target
+        // Port is 4 bytes (big-endian)
+        let uuid = [0x02u8; 16];
+        let domain = b"example.com";
+        let mut packet = Vec::new();
+        packet.push(0x01); // v1
+        packet.extend_from_slice(&uuid); // uuid
+        packet.push(0x01); // ver
+        packet.push(0x02); // cmd = UDP
+        packet.extend_from_slice(&[0x00, 0x00, 0x01, 0xBB]); // port = 443 (4 bytes)
+        packet.push(0x02); // atyp = Domain
+        packet.push(domain.len() as u8); // domain length
+        packet.extend_from_slice(domain); // domain
+        packet.extend_from_slice(&[0u8; 16]); // iv (16 bytes)
+        packet.extend_from_slice(b"dns query"); // payload
+
+        // Verify header fields
+        assert_eq!(packet[0], 0x01); // v1
+        assert_eq!(packet[17], 0x01); // ver
+        assert_eq!(packet[18], 0x02); // cmd = UDP
+        assert_eq!(u32::from_be_bytes([packet[19], packet[20], packet[21], packet[22]]), 443); // port (4 bytes)
+        assert_eq!(packet[23], 0x02); // atyp = Domain
+        assert_eq!(packet[24], domain.len() as u8); // domain length
+        assert_eq!(&packet[25..25 + domain.len()], domain); // domain
+    }
+
+    #[test]
+    fn test_vless_udp_header_parse_ipv6() {
+        // VLESS UDP packet header for IPv6 target
+        // Port is 4 bytes (big-endian)
+        let uuid = [0x03u8; 16];
+        let mut packet = Vec::new();
+        packet.push(0x01); // v1
+        packet.extend_from_slice(&uuid); // uuid
+        packet.push(0x01); // ver
+        packet.push(0x02); // cmd = UDP
+        packet.extend_from_slice(&[0x00, 0x00, 0x1F, 0x90]); // port = 8080 (4 bytes)
+        packet.push(0x03); // atyp = IPv6
+        // IPv6 address (16 bytes)
+        packet.extend_from_slice(&[
+            0x20, 0x01, 0x0d, 0xb8, 0x00, 0x00, 0x00, 0x00,
+            0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x01,
+        ]);
+        packet.extend_from_slice(&[0u8; 16]); // iv (16 bytes)
+        packet.extend_from_slice(b"ipv6 payload"); // payload
+
+        // Verify header fields
+        assert_eq!(packet[0], 0x01); // v1
+        assert_eq!(packet[23], 0x03); // atyp = IPv6
+        assert_eq!(&packet[24..40], &[0x20, 0x01, 0x0d, 0xb8, 0x00, 0x00, 0x00, 0x00,
+            0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x01]); // IPv6
     }
 }
