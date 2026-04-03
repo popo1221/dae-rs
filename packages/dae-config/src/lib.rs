@@ -101,6 +101,9 @@ pub struct Config {
     /// Logging configuration
     #[serde(default)]
     pub logging: LoggingConfig,
+    /// Transparent proxy configuration (TUN device)
+    #[serde(default)]
+    pub transparent_proxy: TransparentProxyConfig,
 }
 
 /// Proxy configuration
@@ -143,6 +146,58 @@ impl Default for ProxyConfig {
             ebpf_enabled: true,
             control_socket: default_control_socket(),
             pid_file: None,
+        }
+    }
+}
+
+/// Transparent proxy configuration (TUN device)
+#[derive(Debug, Clone, Deserialize)]
+pub struct TransparentProxyConfig {
+    /// Enable transparent proxy via TUN device
+    #[serde(default)]
+    pub enabled: bool,
+    /// TUN interface name
+    #[serde(default = "default_tun_interface")]
+    pub tun_interface: String,
+    /// TUN device IP address
+    #[serde(default = "default_tun_ip")]
+    pub tun_ip: String,
+    /// TUN netmask
+    #[serde(default = "default_tun_netmask")]
+    pub tun_netmask: String,
+    /// MTU for TUN device
+    #[serde(default = "default_mtu")]
+    pub mtu: u32,
+    /// DNS hijack server addresses (IPs to intercept DNS queries to)
+    #[serde(default)]
+    pub dns_hijack: Vec<String>,
+    /// DNS upstream servers (for hijacked queries)
+    #[serde(default)]
+    pub dns_upstream: Vec<String>,
+    /// TCP connection timeout in seconds
+    #[serde(default = "default_tcp_timeout")]
+    pub tcp_timeout: u64,
+    /// UDP session timeout in seconds
+    #[serde(default = "default_udp_timeout")]
+    pub udp_timeout: u64,
+    /// Enable automatic routing (setup routing rules automatically)
+    #[serde(default = "default_true")]
+    pub auto_route: bool,
+}
+
+impl Default for TransparentProxyConfig {
+    fn default() -> Self {
+        Self {
+            enabled: false,
+            tun_interface: default_tun_interface(),
+            tun_ip: default_tun_ip(),
+            tun_netmask: default_tun_netmask(),
+            mtu: default_mtu(),
+            dns_hijack: default_dns_hijack(),
+            dns_upstream: default_dns_upstream(),
+            tcp_timeout: default_tcp_timeout(),
+            udp_timeout: default_udp_timeout(),
+            auto_route: default_auto_route(),
         }
     }
 }
@@ -582,6 +637,30 @@ fn default_control_socket() -> String {
     "/var/run/dae/control.sock".to_string()
 }
 
+fn default_tun_interface() -> String {
+    "dae0".to_string()
+}
+
+fn default_tun_ip() -> String {
+    "10.0.0.1".to_string()
+}
+
+fn default_tun_netmask() -> String {
+    "255.255.255.0".to_string()
+}
+
+fn default_mtu() -> u32 {
+    1500
+}
+
+fn default_dns_hijack() -> Vec<String> {
+    vec!["8.8.8.8".to_string(), "8.8.4.4".to_string()]
+}
+
+fn default_dns_upstream() -> Vec<String> {
+    vec!["8.8.8.8:53".to_string(), "8.8.4.4:53".to_string()]
+}
+
 fn default_port() -> u16 {
     8080
 }
@@ -591,6 +670,10 @@ fn default_log_level() -> String {
 }
 
 fn default_true() -> bool {
+    true
+}
+
+fn default_auto_route() -> bool {
     true
 }
 
@@ -733,6 +816,7 @@ impl Config {
                 file: None,
                 structured: true,
             },
+            transparent_proxy: TransparentProxyConfig::default(),
         })
     }
 
@@ -962,9 +1046,14 @@ mod tests {
             nodes: vec![],
             rules: RulesConfig::default(),
             logging: LoggingConfig::default(),
+            transparent_proxy: TransparentProxyConfig::default(),
         };
         assert_eq!(config.proxy.socks5_listen, "127.0.0.1:1080");
         assert_eq!(config.proxy.tcp_timeout, 60);
+        assert!(!config.transparent_proxy.enabled);
+        assert_eq!(config.transparent_proxy.tun_interface, "dae0");
+        assert_eq!(config.transparent_proxy.tun_ip, "10.0.0.1");
+        assert_eq!(config.transparent_proxy.mtu, 1500);
     }
 
     #[test]
@@ -1020,6 +1109,7 @@ mod tests {
             }],
             rules: RulesConfig::default(),
             logging: LoggingConfig::default(),
+            transparent_proxy: TransparentProxyConfig::default(),
         };
         assert!(config.validate().is_ok());
     }
@@ -1045,6 +1135,7 @@ mod tests {
             }],
             rules: RulesConfig::default(),
             logging: LoggingConfig::default(),
+            transparent_proxy: TransparentProxyConfig::default(),
         };
         assert!(config.validate().is_err());
     }
@@ -1120,6 +1211,7 @@ mod tests {
             ],
             rules: RulesConfig::default(),
             logging: LoggingConfig::default(),
+            transparent_proxy: TransparentProxyConfig::default(),
         };
 
         assert!(config.find_node("node1").is_some());

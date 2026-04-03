@@ -13,12 +13,14 @@
 
 pub mod config;
 pub mod direct;
+pub mod dns;
 pub mod routing;
 pub mod session;
 pub mod stats;
 
 // Re-export commonly used types
 pub use config::{ConfigEntry, GLOBAL_CONFIG_KEY};
+pub use dns::{DnsMapEntry, MAX_DOMAIN_LEN};
 pub use routing::{action, RoutingEntry};
 pub use session::{state, SessionEntry, SessionKey};
 pub use stats::{idx, StatsEntry};
