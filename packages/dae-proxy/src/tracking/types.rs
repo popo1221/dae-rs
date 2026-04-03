@@ -678,7 +678,11 @@ mod tests {
         assert_eq!(stats.successful_requests, 2);
         assert_eq!(stats.failed_requests, 1);
         let avg = stats.latency_avg();
-        assert!((avg - 83.33).abs() < 0.01, "latency_avg() = {} expected ~83.33", avg);
+        assert!(
+            (avg - 83.33).abs() < 0.01,
+            "latency_avg() = {} expected ~83.33",
+            avg
+        );
     }
 
     #[test]

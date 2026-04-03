@@ -31,7 +31,7 @@ pub mod simple;
 pub mod store;
 
 // Re-export hash algorithms
-pub use hash::{Fnv1aHasher, SipHasher, fnv1a_hash, sip_hash};
+pub use hash::{fnv1a_hash, sip_hash, Fnv1aHasher, SipHasher};
 
 // Re-export common types
 pub use capability::{

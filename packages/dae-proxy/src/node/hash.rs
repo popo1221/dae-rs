@@ -191,7 +191,10 @@ mod tests {
         h2.write_u8(b'b');
         let result2 = h2.finish();
 
-        assert_eq!(result1, result2, "Incremental write should equal bulk write");
+        assert_eq!(
+            result1, result2,
+            "Incremental write should equal bulk write"
+        );
     }
 
     #[test]
@@ -341,7 +344,10 @@ mod tests {
             h.write(data);
             h.finish()
         };
-        assert_ne!(fnv, sip, "FNV-1a and SipHash should produce different hashes");
+        assert_ne!(
+            fnv, sip,
+            "FNV-1a and SipHash should produce different hashes"
+        );
     }
 
     // ========================================================================

@@ -7,8 +7,8 @@ use async_trait::async_trait;
 use std::collections::HashMap;
 use std::sync::Arc;
 
+pub use super::hash::{fnv1a_hash, sip_hash, Fnv1aHasher, SipHasher};
 pub use super::node::{Node, NodeError, NodeId};
-pub use super::hash::{Fnv1aHasher, SipHasher, fnv1a_hash, sip_hash};
 
 /// Connection fingerprint for hash-based policies
 #[derive(Debug, Clone, Default)]
