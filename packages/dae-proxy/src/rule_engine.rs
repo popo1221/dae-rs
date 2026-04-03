@@ -91,7 +91,10 @@ impl PacketInfo {
     }
 
     /// Set destination domain
+    ///
+    /// Note: caller should normalize the domain before passing (lowercase once, not per-call).
     pub fn with_domain(mut self, domain: &str) -> Self {
+        // Normalize to lowercase once at entry point — avoid repeated conversion in hot paths
         self.destination_domain = Some(domain.to_lowercase());
         self
     }

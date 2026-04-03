@@ -8,7 +8,7 @@ use std::net::{IpAddr, Ipv4Addr, SocketAddr};
 use std::sync::Arc;
 use std::time::Duration;
 use tokio::sync::RwLock;
-use tracing::{debug, info};
+use tracing::{debug, info, warn};
 
 /// 4-tuple key for connection identification
 #[derive(Clone, Copy, Debug, Hash, PartialEq, Eq)]
@@ -22,10 +22,22 @@ pub struct ConnectionKey {
 
 impl ConnectionKey {
     /// Create a new connection key from addresses and protocol
+    ///
+    /// # IPv6 Limitation
+    /// IPv6 addresses are currently NOT fully supported. When an IPv6 address is
+    /// encountered, a warning is logged and the connection key is created with
+    /// null values (0.0.0.0:0). This means connection pooling will NOT work
+    /// correctly for IPv6 connections.
+    ///
+    /// See GitHub Issue #60 for tracking the IPv6 support implementation.
     pub fn new(src: SocketAddr, dst: SocketAddr, proto: Protocol) -> Self {
         let (src_ip, dst_ip) = match (src.ip(), dst.ip()) {
             (IpAddr::V4(src), IpAddr::V4(dst)) => (src.into(), dst.into()),
-            _ => (0, 0), // TODO: handle IPv6
+            (IpAddr::V6(_), _) => {
+                warn!("IPv6 address detected in connection pool — IPv6 is not yet supported. See issue #60.");
+                (0, 0)
+            }
+            _ => (0, 0),
         };
         let proto = match proto {
             Protocol::Tcp => 6,
@@ -52,6 +64,10 @@ impl ConnectionKey {
     }
 
     /// Convert to socket addresses
+    ///
+    /// # Limitation
+    /// Only supports IPv4. If the connection key was created from an IPv6
+    /// address (src_ip/dst_ip == 0), this returns 0.0.0.0 addresses.
     pub fn to_socket_addrs(&self) -> Option<(SocketAddr, SocketAddr)> {
         let src = SocketAddr::new(IpAddr::V4(Ipv4Addr::from(self.src_ip)), self.src_port);
         let dst = SocketAddr::new(IpAddr::V4(Ipv4Addr::from(self.dst_ip)), self.dst_port);
@@ -96,11 +112,28 @@ impl ConnectionPool {
     }
 
     /// Get a connection by key, or create a new one
+    ///
+    /// Uses double-checked locking: first acquires a read lock to check if the
+    /// connection exists (fast path for cache hits), then only acquires a write
+    /// lock when a new connection needs to be created (cache miss).
+    /// This reduces lock contention in high-concurrency scenarios.
     pub async fn get_or_create(&self, key: ConnectionKey) -> (SharedConnection, bool) {
+        // Fast path: try read lock first (cache hit)
+        {
+            let connections = self.connections.read().await;
+            if let Some(conn) = connections.get(&key) {
+                debug!("Reusing existing connection for {:?}", key);
+                // Need to update last_access, must upgrade to write on the connection itself
+                let mut conn_write = conn.write().await;
+                conn_write.touch();
+                return (conn.clone(), false);
+            }
+        }
+        // Slow path: cache miss — acquire write lock and create
         let mut connections = self.connections.write().await;
-
+        // Double-check after acquiring write lock (another task may have created it)
         if let Some(conn) = connections.get(&key) {
-            debug!("Reusing existing connection for {:?}", key);
+            debug!("Reusing existing connection for {:?} (after write lock)", key);
             let mut conn_write = conn.write().await;
             conn_write.touch();
             return (conn.clone(), false);

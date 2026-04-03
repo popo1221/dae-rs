@@ -1,6 +1,18 @@
 //! eBPF map integration for dae-proxy
 //!
 //! Provides wrappers around eBPF maps for session, routing, and stats management.
+//!
+//! # ⚠️ Implementation Status
+//!
+//! This module is a **STUB**. All operations are no-ops that log but do nothing:
+//! - `insert()` returns `Ok(())`
+//! - `lookup()` always returns `None`
+//! - `remove()` returns `Ok(())`
+//!
+//! To implement properly, this module needs the `aya` crate with actual BPF map
+//! operations (e.g., `aya::maps::HashMap`, `aya::maps::LpmTrie`).
+//!
+//! See issue #62 on GitHub for tracking the full implementation.
 
 use crate::connection_pool::ConnectionKey;
 use crate::rule_engine::{PacketInfo, RuleAction, SharedRuleEngine};
@@ -38,6 +50,9 @@ impl From<std::io::Error> for EbpfError {
 pub type Result<T> = std::result::Result<T, EbpfError>;
 
 /// eBPF map handles wrapper
+///
+/// ⚠️ STUB — all fields are None by default. See module-level documentation.
+#[allow(dead_code)]
 #[derive(Clone)]
 pub struct EbpfMaps {
     /// Session map handle
@@ -71,6 +86,9 @@ impl Default for EbpfMaps {
 }
 
 /// Session map handle wrapper
+///
+/// ⚠️ STUB — all operations are no-ops. See module-level documentation.
+#[allow(dead_code)]
 #[derive(Clone)]
 pub struct SessionMapHandle {
     _private: (),
@@ -111,6 +129,9 @@ impl Default for SessionMapHandle {
 }
 
 /// Routing map handle wrapper
+///
+/// ⚠️ STUB — all operations are no-ops. See module-level documentation.
+#[allow(dead_code)]
 #[derive(Clone)]
 pub struct RoutingMapHandle {
     _private: (),
@@ -137,6 +158,9 @@ impl Default for RoutingMapHandle {
 }
 
 /// Stats map handle wrapper
+///
+/// ⚠️ STUB — all operations are no-ops. See module-level documentation.
+#[allow(dead_code)]
 #[derive(Clone)]
 pub struct StatsMapHandle {
     _private: (),

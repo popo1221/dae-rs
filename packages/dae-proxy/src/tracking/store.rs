@@ -1,10 +1,15 @@
 //! Tracking store for user-space statistics aggregation
 //!
 //! Provides in-memory storage and aggregation for tracking data.
-//! This is a specification for the tracking storage system.
 //!
-//! Note: This implementation provides the type definitions and interfaces.
-//! Actual implementation would require adding dependencies like dashmap to Cargo.toml.
+//! # Implementation Status
+//!
+//! This module is **partially implemented**. It uses `RwLock<HashMap>` instead
+//! of the initially planned `dashmap` dependency. The current implementation
+//! works but may have performance limitations under high concurrency.
+//!
+//! See issue #66 on GitHub for tracking potential optimization (e.g., dashmap
+//! or concurrent hashmap replacement).
 
 use crate::tracking::types::*;
 use axum::{

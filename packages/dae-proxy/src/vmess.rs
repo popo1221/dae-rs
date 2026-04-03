@@ -8,6 +8,15 @@
 //!
 //! Protocol flow:
 //! Client -> dae-rs (VMess client) -> remote VMess server -> target
+//!
+//! # ⚠️ Implementation Status
+//!
+//! This module contains a STUB implementation for testing purposes.
+//! The actual VMess AEAD-2022 encryption/decryption is NOT implemented.
+//! See issue #61 on GitHub for tracking the full implementation.
+//!
+//! Current status: Header parsing only, no real cryptographic operations.
+//! DO NOT use in production environments.
 
 use std::net::{IpAddr, Ipv4Addr, Ipv6Addr, SocketAddr};
 use std::sync::Arc;
@@ -428,6 +437,11 @@ impl VmessHandler {
 }
 
 /// VMess server that listens for connections
+///
+/// ⚠️ **STUB IMPLEMENTATION** — This server does not perform real VMess AEAD
+/// encryption/decryption. It is for testing/development only.
+/// See module-level documentation for details.
+#[allow(dead_code)]
 pub struct VmessServer {
     handler: Arc<VmessHandler>,
     listener: TcpListener,

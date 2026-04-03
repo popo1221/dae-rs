@@ -34,6 +34,7 @@ hmac = "0.12"
 sha2 = "0.10"
 bitflags = "2"
 tokio-tun = "0.9"
+subtle = "2"
 
 # Metrics and observability
 prometheus = "0.13"

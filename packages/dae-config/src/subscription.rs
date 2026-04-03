@@ -159,6 +159,9 @@ pub struct SubscriptionConfig {
     /// User agent for HTTP requests
     pub user_agent: String,
     /// TLS certificate verification
+    ///
+    /// TODO (#63): This field is read by fetch logic but not yet applied to the
+    /// HTTP client. Set to `false` to disable TLS verification (not recommended).
     pub verify_tls: bool,
     /// Timeout for requests
     pub timeout: Duration,

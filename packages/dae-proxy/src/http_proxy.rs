@@ -5,6 +5,7 @@
 //! - Basic authentication
 //! - Host:port parsing
 
+use subtle::ConstantTimeEq;
 use std::net::SocketAddr;
 use std::str::FromStr;
 use std::sync::Arc;
@@ -59,9 +60,12 @@ impl BasicAuth {
         })
     }
 
-    /// Validate credentials
+    /// Validate credentials using constant-time comparison to prevent timing attacks
     pub fn matches(&self, username: &str, password: &str) -> bool {
-        self.username == username && self.password == password
+        // Use constant-time comparison to prevent timing attacks
+        let user_match = self.username.as_bytes().ct_eq(username.as_bytes()).unwrap_u8() == 1;
+        let pass_match = self.password.as_bytes().ct_eq(password.as_bytes()).unwrap_u8() == 1;
+        user_match && pass_match
     }
 }
 
