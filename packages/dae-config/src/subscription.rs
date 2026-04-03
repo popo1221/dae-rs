@@ -158,10 +158,10 @@ pub struct SubscriptionConfig {
     pub update_interval: Duration,
     /// User agent for HTTP requests
     pub user_agent: String,
-    /// TLS certificate verification
+    /// TLS certificate verification.
     ///
-    /// TODO (#63): This field is read by fetch logic but not yet applied to the
-    /// HTTP client. Set to `false` to disable TLS verification (not recommended).
+    /// When `false`, TLS certificates are not verified (dangerous, not recommended).
+    /// Applied automatically when using [`SubscriptionConfig::fetch_and_parse()`].
     pub verify_tls: bool,
     /// Timeout for requests
     pub timeout: Duration,
@@ -204,6 +204,109 @@ impl SubscriptionConfig {
     pub fn with_insecure_tls(mut self) -> Self {
         self.verify_tls = false;
         self
+    }
+}
+
+impl SubscriptionConfig {
+    /// Fetch and parse a subscription
+    ///
+    /// Makes an HTTP GET request to the subscription URL and parses
+    /// the response. Respects `verify_tls` and `user_agent` settings.
+    ///
+    /// # Example
+    /// ```ignore
+    /// let config = SubscriptionConfig::new("https://example.com/sub");
+    /// let update = config.fetch_and_parse().await?;
+    /// ```
+    pub async fn fetch_and_parse(&self) -> Result<SubscriptionUpdate, SubscriptionError> {
+        let client = if self.verify_tls {
+            reqwest::Client::builder()
+                .user_agent(&self.user_agent)
+                .timeout(self.timeout)
+                .build()
+                .map_err(|e| SubscriptionError::NetworkError(e.to_string()))?
+        } else {
+            reqwest::Client::builder()
+                .user_agent(&self.user_agent)
+                .timeout(self.timeout)
+                .danger_accept_invalid_certs(true)
+                .build()
+                .map_err(|e| SubscriptionError::NetworkError(e.to_string()))?
+        };
+
+        let response = client
+            .get(&self.url)
+            .send()
+            .await
+            .map_err(|e| SubscriptionError::NetworkError(e.to_string()))?;
+
+        if response.status() == 401 {
+            return Err(SubscriptionError::AuthenticationRequired);
+        }
+
+        if !response.status().is_success() {
+            return Err(SubscriptionError::NetworkError(format!(
+                "HTTP {}: {}",
+                response.status().as_u16(),
+                response.status().canonical_reason().unwrap_or("Unknown")
+            )));
+        }
+
+        let bytes = response
+            .bytes()
+            .await
+            .map_err(|e| SubscriptionError::NetworkError(e.to_string()))?;
+
+        let mut update = parse_subscription(&bytes)?;
+
+        // Override detected tag with URL-based detection if not present
+        if update.tag.is_none() {
+            update.tag = extract_tag(&self.url, &bytes);
+        }
+
+        Ok(update)
+    }
+
+    /// Fetch raw subscription content (without parsing)
+    pub async fn fetch_raw(&self) -> Result<Vec<u8>, SubscriptionError> {
+        let client = if self.verify_tls {
+            reqwest::Client::builder()
+                .user_agent(&self.user_agent)
+                .timeout(self.timeout)
+                .build()
+                .map_err(|e| SubscriptionError::NetworkError(e.to_string()))?
+        } else {
+            reqwest::Client::builder()
+                .user_agent(&self.user_agent)
+                .timeout(self.timeout)
+                .danger_accept_invalid_certs(true)
+                .build()
+                .map_err(|e| SubscriptionError::NetworkError(e.to_string()))?
+        };
+
+        let response = client
+            .get(&self.url)
+            .send()
+            .await
+            .map_err(|e| SubscriptionError::NetworkError(e.to_string()))?;
+
+        if response.status() == 401 {
+            return Err(SubscriptionError::AuthenticationRequired);
+        }
+
+        if !response.status().is_success() {
+            return Err(SubscriptionError::NetworkError(format!(
+                "HTTP {}: {}",
+                response.status().as_u16(),
+                response.status().canonical_reason().unwrap_or("Unknown")
+            )));
+        }
+
+        response
+            .bytes()
+            .await
+            .map(|b| b.to_vec())
+            .map_err(|e| SubscriptionError::NetworkError(e.to_string()))
     }
 }
 
