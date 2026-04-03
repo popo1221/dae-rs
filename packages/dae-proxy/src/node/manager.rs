@@ -8,6 +8,7 @@ use std::collections::HashMap;
 use std::sync::Arc;
 
 pub use super::node::{Node, NodeError, NodeId};
+pub use super::hash::{Fnv1aHasher, SipHasher, fnv1a_hash, sip_hash};
 
 /// Connection fingerprint for hash-based policies
 #[derive(Debug, Clone, Default)]
@@ -52,11 +53,18 @@ impl ConnectionFingerprint {
     }
 
     /// Calculate hash for consistent hashing
-    /// Uses FNV-1a hash algorithm
+    ///
+    /// Uses FNV-1a (Fowler–Noll–Vo) hash algorithm for non-cryptographic
+    /// hashing with good distribution properties. This is NOT SipHash
+    /// (which was incorrectly documented in the original implementation).
+    ///
+    /// FNV-1a is used here instead of SipHash because:
+    /// - Consistent hashing doesn't need anti-hash-flood protection
+    /// - FNV-1a is faster for non-keyed hashing
+    /// - Matches the documented behavior
     pub fn hash(&self) -> u64 {
-        use std::collections::hash_map::DefaultHasher;
         use std::hash::{Hash, Hasher};
-        let mut s = DefaultHasher::new();
+        let mut s = Fnv1aHasher::new();
         self.src_ip.hash(&mut s);
         self.dst_ip.hash(&mut s);
         self.src_port.hash(&mut s);

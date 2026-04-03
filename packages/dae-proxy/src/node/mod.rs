@@ -20,6 +20,7 @@
 //! - `*Handle`: Reference to a managed entity
 
 pub mod capability;
+pub mod hash;
 pub mod health;
 pub mod manager;
 pub mod node;
@@ -28,6 +29,9 @@ pub mod simple;
 
 // Node Store - Zed-inspired naming for node management
 pub mod store;
+
+// Re-export hash algorithms
+pub use hash::{Fnv1aHasher, SipHasher, fnv1a_hash, sip_hash};
 
 // Re-export common types
 pub use capability::{
