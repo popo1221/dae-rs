@@ -15,9 +15,10 @@ use clap::{Parser, Subcommand};
 use dae_config::{Config, NodeType};
 use dae_proxy::{
     control::{connect_and_send, ControlServer},
+    new_dns_hijacker,
     shadowsocks::{SsCipherType, SsServerConfig},
     trojan_protocol::{TrojanServerConfig, TrojanTlsConfig},
-    tun::TunConfig,
+    tun::{TunConfig, TunProxy},
     vless::{VlessServerConfig, VlessTlsConfig},
     vmess::{VmessSecurity, VmessServerConfig},
     Proxy, ProxyConfig,
@@ -192,6 +193,10 @@ async fn run_proxy(
     proxy_config.ebpf.enabled = loaded_config.proxy.ebpf_enabled;
     proxy_config.xdp_interface = loaded_config.proxy.ebpf_interface.clone();
 
+    // Save timeouts for TUN before proxy_config is moved
+    let tcp_timeout = Duration::from_secs(loaded_config.proxy.tcp_timeout);
+    let udp_timeout = Duration::from_secs(loaded_config.proxy.udp_timeout);
+
     // Transparent proxy (TUN) settings
     let tun_config = if loaded_config.transparent_proxy.enabled {
         Some(TunConfig {
@@ -298,21 +303,50 @@ async fn run_proxy(
     let proxy = Arc::new(Proxy::new(proxy_config).await?);
 
     // Create TUN proxy if enabled
-    // Note: TUN requires a separate initialization loop to read packets from TUN device
-    // This is prepared infrastructure for when TUN packet processing is fully implemented
-    #[allow(unused_variables)]
-    let tun_initialized: bool = if let Some(ref tun_cfg) = tun_config {
+    // TunProxy requires: config, rule_engine, connection_pool, dns_hijacker
+    let tun_proxy: Option<Arc<TunProxy>> = if let Some(ref tun_cfg) = tun_config {
         tracing::info!(
-            "TUN transparent proxy configured: {} ({}/{})",
+            "Initializing TUN transparent proxy: {} ({}/{})",
             tun_cfg.tun_ip, tun_cfg.tun_netmask, tun_cfg.interface
         );
-        tracing::info!(
-            "DNS hijack targets: {:?}",
-            tun_cfg.dns_hijack
+
+        // Create DNS hijacker with upstream servers
+        let dns_upstream: Vec<std::net::SocketAddr> = loaded_config
+            .transparent_proxy
+            .dns_upstream
+            .iter()
+            .filter_map(|s| {
+                // Parse "8.8.8.8:53" format
+                if let Ok(addr) = s.parse() {
+                    Some(addr)
+                } else if let Ok(ip) = s.parse::<std::net::IpAddr>() {
+                    Some(std::net::SocketAddr::new(ip, 53))
+                } else {
+                    None
+                }
+            })
+            .collect();
+
+        let dns_hijacker = new_dns_hijacker(dns_upstream);
+
+        // Create rule engine
+        let rule_engine = dae_proxy::new_rule_engine(Default::default());
+
+        // Create shared connection pool
+        let connection_pool = dae_proxy::connection_pool::new_connection_pool(
+            tcp_timeout,
+            udp_timeout,
+            Duration::from_secs(30), // tcp_keepalive
         );
-        true
+
+        Some(Arc::new(TunProxy::new(
+            tun_cfg.clone(),
+            rule_engine,
+            connection_pool,
+            dns_hijacker,
+        )))
     } else {
-        false
+        None
     };
 
     if daemon {
@@ -330,6 +364,21 @@ async fn run_proxy(
         }
     });
 
+    // Spawn TUN proxy task if enabled
+    let tun_proxy_clone = tun_proxy.clone();
+    let tun_handle = if tun_proxy.is_some() {
+        tracing::info!("Starting TUN proxy task...");
+        Some(tokio::spawn(async move {
+            if let Some(ref tun) = tun_proxy_clone {
+                if let Err(e) = tun.start().await {
+                    tracing::error!("TUN proxy error: {}", e);
+                }
+            }
+        }))
+    } else {
+        None
+    };
+
     // Wait for shutdown
     tokio::select! {
         result = proxy_handle => {
@@ -341,8 +390,12 @@ async fn run_proxy(
             tracing::info!("Shutting down...");
             control_state.set_running(false).await;
             proxy.stop().await;
-            // Note: TUN proxy will be stopped when the task handle is dropped
         }
+    }
+
+    // Wait for TUN handle to finish
+    if let Some(h) = tun_handle {
+        let _ = h.await;
     }
 
     tokio::time::sleep(Duration::from_secs(1)).await;

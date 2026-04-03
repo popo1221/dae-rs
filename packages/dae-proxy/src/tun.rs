@@ -34,10 +34,11 @@ use std::collections::HashMap;
 use std::net::{IpAddr, Ipv4Addr, SocketAddr};
 use std::sync::Arc;
 use std::time::Duration;
-use tokio::io::AsyncReadExt;
+use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use tokio::net::UdpSocket;
 use tokio::sync::RwLock;
 use tokio::time::timeout;
+use tokio_tun::TunBuilder;
 use tracing::{debug, error, info, warn};
 
 /// DNS hijack entry - maps queried IP to domain for rule matching
@@ -943,6 +944,70 @@ impl TunProxy {
         }
 
         false
+    }
+
+    /// Start the TUN proxy - opens TUN device and processes packets
+    pub async fn start(&self) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+        info!(
+            "Starting TUN proxy on interface {} with IP {}/{}",
+            self.config.interface,
+            self.config.tun_ip,
+            self.config.tun_netmask
+        );
+
+        // Build TUN device using tokio-tun
+        let tun = TunBuilder::new()
+            .name(&self.config.interface)
+            .tap(false) // Use TUN mode (layer 3)
+            .packet_info(true) // Include packet metadata
+            .mtu(self.config.mtu as i32)
+            .address(self.config.tun_ip.parse()?)
+            .netmask(self.config.tun_netmask.parse()?)
+            .up()
+            .try_build()?;
+
+        info!("TUN device {} created successfully", tun.name());
+
+        let mut buf = vec![0u8; self.config.max_packet_size];
+        let mut tun = tun;
+
+        loop {
+            // Read packet from TUN device
+            let n = tun.read(&mut buf).await?;
+            if n == 0 {
+                continue;
+            }
+
+            let packet_data = &buf[..n];
+
+            // Parse the packet
+            match TunPacket::parse(packet_data.to_vec(), PacketDirection::Outbound) {
+                Some(packet) => {
+                    if self.should_handle(&packet) {
+                        // Route the packet based on rules
+                        let result = self.route_packet(packet).await;
+
+                        match result {
+                            RouteResult::Forwarded => {
+                                debug!("Packet forwarded successfully");
+                            }
+                            RouteResult::Dropped => {
+                                debug!("Packet dropped by rules");
+                            }
+                            RouteResult::Response(dns_response) => {
+                                // Send response back (e.g., DNS hijack response)
+                                if let Err(e) = tun.write(&dns_response).await {
+                                    error!("Failed to write response: {}", e);
+                                }
+                            }
+                        }
+                    }
+                }
+                None => {
+                    debug!("Failed to parse packet, ignoring");
+                }
+            }
+        }
     }
 
     /// Route a packet based on rule engine decision
