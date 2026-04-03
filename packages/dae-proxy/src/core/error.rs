@@ -121,7 +121,7 @@ mod tests {
         let err: Error = "config error string".into();
         match err {
             Error::Config(s) => assert_eq!(s, "config error string"),
-            _ => panic!("Expected Config variant"),
+            _ => unreachable!("From<&str> should produce Error::Config"),
         }
     }
 
@@ -130,7 +130,7 @@ mod tests {
         let err: Error = String::from("string error").into();
         match err {
             Error::Config(s) => assert_eq!(s, "string error"),
-            _ => panic!("Expected Config variant"),
+            _ => unreachable!("From<String> should produce Error::Config"),
         }
     }
 
@@ -140,7 +140,7 @@ mod tests {
         let err: Error = io_err.into();
         match err {
             Error::Io(_) => {}
-            _ => panic!("Expected Io variant"),
+            _ => unreachable!("From<io::Error> should produce Error::Io"),
         }
     }
 }
