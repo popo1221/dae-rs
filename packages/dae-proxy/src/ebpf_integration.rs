@@ -231,7 +231,10 @@ impl StatsMapHandle {
         let entry = map.entry(idx).or_default();
         entry.bytes += bytes;
         entry.packets += 1;
-        debug!("Stats increment: idx={}, bytes={}, total_bytes={}", idx, bytes, entry.bytes);
+        debug!(
+            "Stats increment: idx={}, bytes={}, total_bytes={}",
+            idx, bytes, entry.bytes
+        );
         Ok(())
     }
 
@@ -251,6 +254,16 @@ impl StatsMapHandle {
     /// Get all stats as a HashMap snapshot
     pub fn get_all(&self) -> HashMap<u32, StatsEntry> {
         self.inner.read().unwrap().clone()
+    }
+
+    /// Get the number of stats entries
+    pub fn len(&self) -> usize {
+        self.inner.read().unwrap().len()
+    }
+
+    /// Check if the map is empty
+    pub fn is_empty(&self) -> bool {
+        self.inner.read().unwrap().is_empty()
     }
 }
 
@@ -584,17 +597,682 @@ pub fn new_packet_classifier(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use dae_ebpf_common::routing::action;
+    use dae_ebpf_common::session::state;
+
+    /// Helper to create a SessionEntry without touching private fields
+    fn make_session_entry(state: u8, packets: u64, bytes: u64, route_id: u32) -> SessionEntry {
+        let mut entry = SessionEntry::default();
+        entry.state = state;
+        entry.packets = packets;
+        entry.bytes = bytes;
+        entry.route_id = route_id;
+        entry
+    }
 
     #[test]
     fn test_ebpf_maps_default() {
         let maps = EbpfMaps::new();
         assert!(!maps.is_initialized());
+        assert!(maps.sessions.is_none());
+        assert!(maps.routing.is_none());
+        assert!(maps.stats.is_none());
     }
 
     #[test]
-    fn test_session_entry() {
-        let key = ConnectionKey::from_raw(0x0100007f, 0x08080808, 80, 443, 6);
+    fn test_ebpf_maps_new_in_memory() {
+        let maps = EbpfMaps::new_in_memory();
+        assert!(maps.is_initialized());
+        assert!(maps.sessions.is_some());
+        assert!(maps.routing.is_some());
+        assert!(maps.stats.is_some());
+    }
+
+    // ============================================================
+    // SessionMapHandle Tests
+    // ============================================================
+
+    #[test]
+    fn test_session_map_insert_lookup() {
+        let handle = SessionMapHandle::new();
+        let key = ConnectionKey::from_raw(0x7f000001, 0x7f000002, 80, 443, 6);
+        let entry = make_session_entry(1, 10, 1024, 42);
+
+        // Insert
+        let result = handle.insert(&key, &entry);
+        assert!(result.is_ok());
+
+        // Lookup
+        let found = handle.lookup(&key).unwrap();
+        assert!(found.is_some());
+        let retrieved = found.unwrap();
+        assert_eq!(retrieved.state, 1);
+        assert_eq!(retrieved.packets, 10);
+        assert_eq!(retrieved.bytes, 1024);
+        assert_eq!(retrieved.route_id, 42);
+    }
+
+    #[test]
+    fn test_session_map_lookup_nonexistent() {
+        let handle = SessionMapHandle::new();
+        let key = ConnectionKey::from_raw(0x7f000001, 0x7f000002, 80, 443, 6);
+
+        let found = handle.lookup(&key).unwrap();
+        assert!(found.is_none());
+    }
+
+    #[test]
+    fn test_session_map_remove() {
+        let handle = SessionMapHandle::new();
+        let key = ConnectionKey::from_raw(0x7f000001, 0x7f000002, 80, 443, 6);
+        let entry = SessionEntry::default();
+
+        handle.insert(&key, &entry).unwrap();
+        assert!(handle.lookup(&key).unwrap().is_some());
+
+        handle.remove(&key).unwrap();
+        assert!(handle.lookup(&key).unwrap().is_none());
+    }
+
+    #[test]
+    fn test_session_map_remove_nonexistent() {
+        let handle = SessionMapHandle::new();
+        let key = ConnectionKey::from_raw(0x7f000001, 0x7f000002, 80, 443, 6);
+
+        // Removing non-existent key should not error
+        let result = handle.remove(&key);
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_session_map_update_existing() {
+        let handle = SessionMapHandle::new();
+        let key = ConnectionKey::from_raw(0x7f000001, 0x7f000002, 80, 443, 6);
+
+        let entry1 = make_session_entry(1, 5, 100, 0);
+        handle.insert(&key, &entry1).unwrap();
+
+        let entry2 = make_session_entry(2, 10, 200, 0);
+        handle.insert(&key, &entry2).unwrap();
+
+        let found = handle.lookup(&key).unwrap().unwrap();
+        assert_eq!(found.state, 2);
+        assert_eq!(found.packets, 10);
+        assert_eq!(found.bytes, 200);
+    }
+
+    #[test]
+    fn test_session_map_len_and_empty() {
+        let handle = SessionMapHandle::new();
+
+        assert!(handle.is_empty());
+        assert_eq!(handle.len(), 0);
+
+        let key1 = ConnectionKey::from_raw(0x7f000001, 0x7f000002, 80, 443, 6);
+        let key2 = ConnectionKey::from_raw(0x7f000001, 0x7f000003, 80, 443, 6);
+        let entry = SessionEntry::default();
+
+        handle.insert(&key1, &entry).unwrap();
+        assert_eq!(handle.len(), 1);
+        assert!(!handle.is_empty());
+
+        handle.insert(&key2, &entry).unwrap();
+        assert_eq!(handle.len(), 2);
+
+        handle.remove(&key1).unwrap();
+        assert_eq!(handle.len(), 1);
+    }
+
+    #[test]
+    fn test_session_map_multiple_keys() {
+        let handle = SessionMapHandle::new();
+        let entry = make_session_entry(1, 1, 1, 0);
+
+        for i in 0u16..100 {
+            let key = ConnectionKey::from_raw(0x7f000001, 0x7f000001, i, 443, 6);
+            handle.insert(&key, &entry).unwrap();
+        }
+
+        assert_eq!(handle.len(), 100);
+    }
+
+    // ============================================================
+    // RoutingMapHandle Tests
+    // ============================================================
+
+    #[test]
+    fn test_routing_map_insert_lookup() {
+        let handle = RoutingMapHandle::new();
+        let ip = 0x7f000001_u32;
+        let entry = RoutingEntry::new(42, 0, 0); // route_id=42, action=PASS
+
+        let result = handle.insert(ip, entry);
+        assert!(result.is_ok());
+
+        let found = handle.lookup(ip).unwrap();
+        assert!(found.is_some());
+        let retrieved = found.unwrap();
+        assert_eq!(retrieved.route_id, 42);
+        assert_eq!(retrieved.action, 0);
+    }
+
+    #[test]
+    fn test_routing_map_lookup_nonexistent() {
+        let handle = RoutingMapHandle::new();
+        let found = handle.lookup(0xDEADBEEF).unwrap();
+        assert!(found.is_none());
+    }
+
+    #[test]
+    fn test_routing_map_remove() {
+        let handle = RoutingMapHandle::new();
+        let ip = 0x0A000001_u32;
+        let entry = RoutingEntry::new(1, 0, 0);
+
+        handle.insert(ip, entry).unwrap();
+        assert!(handle.lookup(ip).unwrap().is_some());
+
+        handle.remove(ip).unwrap();
+        assert!(handle.lookup(ip).unwrap().is_none());
+    }
+
+    #[test]
+    fn test_routing_map_update_existing() {
+        let handle = RoutingMapHandle::new();
+        let ip = 0x0A000001_u32;
+
+        let entry1 = RoutingEntry::new(1, 0, 0);
+        handle.insert(ip, entry1).unwrap();
+
+        let entry2 = RoutingEntry::new(2, 1, 0); // different route_id, action=REDIRECT
+        handle.insert(ip, entry2).unwrap();
+
+        let found = handle.lookup(ip).unwrap().unwrap();
+        assert_eq!(found.route_id, 2);
+        assert_eq!(found.action, 1);
+    }
+
+    #[test]
+    fn test_routing_map_len() {
+        let handle = RoutingMapHandle::new();
+        assert_eq!(handle.len(), 0);
+
+        for i in 0u32..10 {
+            handle.insert(i, RoutingEntry::new(i, 0, 0)).unwrap();
+        }
+
+        assert_eq!(handle.len(), 10);
+    }
+
+    // ============================================================
+    // StatsMapHandle Tests
+    // ============================================================
+
+    #[test]
+    fn test_stats_map_increment() {
+        let handle = StatsMapHandle::new();
+        let idx = stats_idx::TCP;
+
+        handle.increment(idx, 100).unwrap();
+        handle.increment(idx, 200).unwrap();
+
+        let found = handle.get(idx).unwrap();
+        assert!(found.is_some());
+        let stats = found.unwrap();
+        assert_eq!(stats.bytes, 300); // 100 + 200
+        assert_eq!(stats.packets, 2);
+    }
+
+    #[test]
+    fn test_stats_map_increment_creates_entry() {
+        let handle = StatsMapHandle::new();
+        let idx = stats_idx::UDP;
+
+        // Entry should not exist initially
+        assert!(handle.get(idx).unwrap().is_none());
+
+        // After increment, entry should exist
+        handle.increment(idx, 50).unwrap();
+        let stats = handle.get(idx).unwrap().unwrap();
+        assert_eq!(stats.bytes, 50);
+        assert_eq!(stats.packets, 1);
+    }
+
+    #[test]
+    fn test_stats_map_set_and_get() {
+        let handle = StatsMapHandle::new();
+        let idx = stats_idx::OVERALL;
+
+        let entry = StatsEntry {
+            packets: 999,
+            bytes: 1_000_000,
+            redirected: 100,
+            passed: 800,
+            dropped: 99,
+            routed: 500,
+            unmatched: 400,
+            ..Default::default()
+        };
+
+        handle.set(idx, entry).unwrap();
+
+        let found = handle.get(idx).unwrap();
+        assert!(found.is_some());
+        let retrieved = found.unwrap();
+        assert_eq!(retrieved.packets, 999);
+        assert_eq!(retrieved.bytes, 1_000_000);
+        assert_eq!(retrieved.redirected, 100);
+        assert_eq!(retrieved.passed, 800);
+    }
+
+    #[test]
+    fn test_stats_map_get_all() {
+        let handle = StatsMapHandle::new();
+
+        handle
+            .set(
+                stats_idx::TCP,
+                StatsEntry {
+                    packets: 1,
+                    bytes: 100,
+                    ..Default::default()
+                },
+            )
+            .unwrap();
+        handle
+            .set(
+                stats_idx::UDP,
+                StatsEntry {
+                    packets: 2,
+                    bytes: 200,
+                    ..Default::default()
+                },
+            )
+            .unwrap();
+        handle
+            .set(
+                stats_idx::OVERALL,
+                StatsEntry {
+                    packets: 3,
+                    bytes: 300,
+                    ..Default::default()
+                },
+            )
+            .unwrap();
+
+        let all = handle.get_all();
+        assert_eq!(all.len(), 3);
+        assert_eq!(all[&stats_idx::TCP].packets, 1);
+        assert_eq!(all[&stats_idx::UDP].packets, 2);
+        assert_eq!(all[&stats_idx::OVERALL].packets, 3);
+    }
+
+    #[test]
+    fn test_stats_map_multiple_indices() {
+        let handle = StatsMapHandle::new();
+
+        handle.increment(stats_idx::TCP, 100).unwrap();
+        handle.increment(stats_idx::UDP, 200).unwrap();
+        handle.increment(stats_idx::ICMP, 50).unwrap();
+
+        let all = handle.get_all();
+        assert_eq!(all.len(), 3);
+        assert_eq!(all[&stats_idx::TCP].bytes, 100);
+        assert_eq!(all[&stats_idx::UDP].bytes, 200);
+        assert_eq!(all[&stats_idx::ICMP].bytes, 50);
+    }
+
+    #[test]
+    fn test_stats_entry_increment_methods() {
+        let mut entry = StatsEntry::default();
+
+        entry.inc_packets(500);
+        assert_eq!(entry.packets, 1);
+        assert_eq!(entry.bytes, 500);
+
+        entry.inc_packets(300);
+        assert_eq!(entry.packets, 2);
+        assert_eq!(entry.bytes, 800);
+
+        entry.inc_redirected();
+        assert_eq!(entry.redirected, 1);
+
+        entry.inc_passed();
+        assert_eq!(entry.passed, 1);
+
+        entry.inc_dropped();
+        assert_eq!(entry.dropped, 1);
+
+        entry.inc_routed();
+        assert_eq!(entry.routed, 1);
+
+        entry.inc_unmatched();
+        assert_eq!(entry.unmatched, 1);
+    }
+
+    // ============================================================
+    // EbpfMaps is_initialized Tests
+    // ============================================================
+
+    #[test]
+    fn test_ebpf_maps_partial_initialization() {
+        // Test that is_initialized requires ALL maps to be present
+        let mut maps = EbpfMaps::new_in_memory();
+        assert!(maps.is_initialized());
+
+        // Clone out the sessions handle
+        let sessions = maps.sessions.take();
+        assert!(!maps.is_initialized()); // Now only 2 of 3
+
+        // Put it back
+        maps.sessions = sessions;
+        assert!(maps.is_initialized());
+    }
+
+    #[test]
+    fn test_ebpf_maps_default_not_initialized() {
+        let maps = EbpfMaps::default();
+        assert!(!maps.is_initialized());
+    }
+
+    // ============================================================
+    // EbpfSessionHandle Tests
+    // ============================================================
+
+    #[test]
+    fn test_ebpf_session_handle_create_session() {
+        let maps = EbpfMaps::new_in_memory();
+        let handle = EbpfSessionHandle::new(maps.clone());
+
+        let key = ConnectionKey::from_raw(0x7f000001, 0x7f000002, 80, 443, 6);
+        let result = handle.create_session(&key, state::ESTABLISHED, 42);
+        assert!(result.is_ok());
+
+        let session = handle.lookup_session(&key).unwrap();
+        assert!(session.is_some());
+        let entry = session.unwrap();
+        assert_eq!(entry.state, state::ESTABLISHED);
+        assert_eq!(entry.route_id, 42);
+    }
+
+    #[test]
+    fn test_ebpf_session_handle_update_session() {
+        let maps = EbpfMaps::new_in_memory();
+        let handle = EbpfSessionHandle::new(maps.clone());
+
+        let key = ConnectionKey::from_raw(0x7f000001, 0x7f000002, 80, 443, 6);
+        handle.create_session(&key, state::NEW, 1).unwrap();
+
+        let result = handle.update_session(&key, state::ESTABLISHED, 5);
+        assert!(result.is_ok());
+
+        let session = handle.lookup_session(&key).unwrap().unwrap();
+        assert_eq!(session.state, state::ESTABLISHED);
+        assert_eq!(session.packets, 5);
+    }
+
+    #[test]
+    fn test_ebpf_session_handle_remove_session() {
+        let maps = EbpfMaps::new_in_memory();
+        let handle = EbpfSessionHandle::new(maps.clone());
+
+        let key = ConnectionKey::from_raw(0x7f000001, 0x7f000002, 80, 443, 6);
+        handle.create_session(&key, state::NEW, 1).unwrap();
+        assert!(handle.lookup_session(&key).unwrap().is_some());
+
+        handle.remove_session(&key).unwrap();
+        assert!(handle.lookup_session(&key).unwrap().is_none());
+    }
+
+    #[test]
+    fn test_ebpf_session_handle_maps_accessor() {
+        let maps = EbpfMaps::new_in_memory();
+        let handle = EbpfSessionHandle::new(maps.clone());
+        assert!(handle.maps().is_initialized());
+    }
+
+    // ============================================================
+    // EbpfRoutingHandle Tests
+    // ============================================================
+
+    #[test]
+    fn test_ebpf_routing_handle_lookup() {
+        let maps = EbpfMaps::new_in_memory();
+
+        // Insert a routing entry
+        if let Some(ref routing) = maps.routing {
+            routing
+                .insert(0x7f000001, RoutingEntry::new(99, action::PASS, 0))
+                .unwrap();
+        }
+
+        let handle = EbpfRoutingHandle::new(maps);
+        let result = handle.lookup_routing(0x7f000001).unwrap();
+        assert!(result.is_some());
+        assert_eq!(result.unwrap().route_id, 99);
+    }
+
+    #[test]
+    fn test_ebpf_routing_handle_lookup_nonexistent() {
+        let maps = EbpfMaps::new_in_memory();
+        let handle = EbpfRoutingHandle::new(maps);
+
+        let result = handle.lookup_routing(0xDEADBEEF).unwrap();
+        assert!(result.is_none());
+    }
+
+    // ============================================================
+    // EbpfStatsHandle Tests
+    // ============================================================
+
+    #[test]
+    fn test_ebpf_stats_handle_increment_stats() {
+        let maps = EbpfMaps::new_in_memory();
+        let handle = EbpfStatsHandle::new(maps);
+
+        handle.increment_stats(stats_idx::TCP, 500).unwrap();
+        handle.increment_stats(stats_idx::TCP, 300).unwrap();
+
+        let stats = handle.get_stats(stats_idx::TCP).unwrap().unwrap();
+        assert_eq!(stats.bytes, 800);
+        assert_eq!(stats.packets, 2);
+    }
+
+    #[test]
+    fn test_ebpf_stats_handle_increment_tcp() {
+        let maps = EbpfMaps::new_in_memory();
+        let handle = EbpfStatsHandle::new(maps);
+
+        handle.increment_tcp(1000).unwrap();
+        let stats = handle.get_stats(stats_idx::TCP).unwrap().unwrap();
+        assert_eq!(stats.bytes, 1000);
+    }
+
+    #[test]
+    fn test_ebpf_stats_handle_increment_udp() {
+        let maps = EbpfMaps::new_in_memory();
+        let handle = EbpfStatsHandle::new(maps);
+
+        handle.increment_udp(750).unwrap();
+        let stats = handle.get_stats(stats_idx::UDP).unwrap().unwrap();
+        assert_eq!(stats.bytes, 750);
+    }
+
+    #[test]
+    fn test_ebpf_stats_handle_increment_overall() {
+        let maps = EbpfMaps::new_in_memory();
+        let handle = EbpfStatsHandle::new(maps);
+
+        handle.increment_overall(2000).unwrap();
+        let stats = handle.get_stats(stats_idx::OVERALL).unwrap().unwrap();
+        assert_eq!(stats.bytes, 2000);
+    }
+
+    // ============================================================
+    // unix_time_secs Test
+    // ============================================================
+
+    #[test]
+    fn test_unix_time_secs_reasonable() {
+        let now = unix_time_secs();
+        // Should be well past 2020 (1577836800) but not in the distant future
+        assert!(now > 1577836800, "unix_time_secs should be after 2020");
+        assert!(now < 4102444800, "unix_time_secs should be before 2100");
+    }
+
+    // ============================================================
+    // ConnectionKey to SessionKey Conversion Test
+    // ============================================================
+
+    #[test]
+    fn test_connection_key_to_session_key() {
+        use dae_ebpf_common::session::SessionKey;
+
+        let conn_key = ConnectionKey::from_raw(0x7f000001, 0x7f000002, 80, 443, 6);
+        let session_key: SessionKey = (&conn_key).into();
+
+        assert_eq!(session_key.src_ip, 0x7f000001);
+        assert_eq!(session_key.dst_ip, 0x7f000002);
+        assert_eq!(session_key.src_port, 80);
+        assert_eq!(session_key.dst_port, 443);
+        assert_eq!(session_key.proto, 6);
+    }
+
+    // ============================================================
+    // SessionEntry Default Test
+    // ============================================================
+
+    #[test]
+    fn test_session_entry_default_values() {
         let entry = SessionEntry::default();
         assert_eq!(entry.state, 0);
+        assert_eq!(entry.packets, 0);
+        assert_eq!(entry.bytes, 0);
+        assert_eq!(entry.start_time, 0);
+        assert_eq!(entry.last_time, 0);
+        assert_eq!(entry.route_id, 0);
+        assert_eq!(entry.src_mac_len, 0);
+    }
+
+    // ============================================================
+    // RoutingEntry Tests
+    // ============================================================
+
+    #[test]
+    fn test_routing_entry_new() {
+        let entry = RoutingEntry::new(123, action::DROP, 5);
+        assert_eq!(entry.route_id, 123);
+        assert_eq!(entry.action, action::DROP);
+        assert_eq!(entry.ifindex, 5);
+    }
+
+    #[test]
+    fn test_routing_entry_action_constants() {
+        assert_eq!(action::PASS, 0);
+        assert_eq!(action::REDIRECT, 1);
+        assert_eq!(action::DROP, 2);
+    }
+
+    // ============================================================
+    // StatsEntry Default Test
+    // ============================================================
+
+    #[test]
+    fn test_stats_entry_default() {
+        let entry = StatsEntry::default();
+        assert_eq!(entry.packets, 0);
+        assert_eq!(entry.bytes, 0);
+        assert_eq!(entry.redirected, 0);
+        assert_eq!(entry.passed, 0);
+        assert_eq!(entry.dropped, 0);
+        assert_eq!(entry.routed, 0);
+        assert_eq!(entry.unmatched, 0);
+    }
+
+    // ============================================================
+    // EbpfError Display Test
+    // ============================================================
+
+    #[test]
+    fn test_ebpf_error_display() {
+        let err = EbpfError::MapNotFound("sessions".to_string());
+        assert!(format!("{}", err).contains("Map not found"));
+        assert!(format!("{}", err).contains("sessions"));
+
+        let err = EbpfError::KeyNotFound("0x1234".to_string());
+        assert!(format!("{}", err).contains("Key not found"));
+
+        let err = EbpfError::UpdateFailed("permission denied".to_string());
+        assert!(format!("{}", err).contains("Update failed"));
+
+        let err = EbpfError::LookupFailed("oops".to_string());
+        assert!(format!("{}", err).contains("Lookup failed"));
+
+        let err = EbpfError::PermissionDenied("no access".to_string());
+        assert!(format!("{}", err).contains("Permission denied"));
+
+        let err = EbpfError::Other("generic error".to_string());
+        assert!(format!("{}", err).contains("generic error"));
+    }
+
+    #[test]
+    fn test_ebpf_error_from_io_error() {
+        use std::io;
+        let io_err = io::Error::new(io::ErrorKind::NotFound, "file not found");
+        let ebpf_err: EbpfError = io_err.into();
+        assert!(format!("{}", ebpf_err).contains("file not found"));
+    }
+
+    // ============================================================
+    // SessionMapHandle Clone Test
+    // ============================================================
+
+    #[test]
+    fn test_session_map_handle_clone_independence() {
+        let handle1 = SessionMapHandle::new();
+        let key = ConnectionKey::from_raw(0x7f000001, 0x7f000002, 80, 443, 6);
+        let entry = make_session_entry(1, 5, 100, 0);
+        handle1.insert(&key, &entry).unwrap();
+
+        // Clone should share the same underlying map
+        let handle2 = handle1.clone();
+        assert_eq!(handle2.len(), 1);
+
+        // Insert via handle2
+        let key2 = ConnectionKey::from_raw(0x7f000001, 0x7f000003, 80, 443, 6);
+        handle2.insert(&key2, &entry).unwrap();
+
+        // Both handles should see both entries (shared state)
+        assert_eq!(handle1.len(), 2);
+        assert_eq!(handle2.len(), 2);
+    }
+
+    #[test]
+    fn test_routing_map_handle_clone_independence() {
+        let handle1 = RoutingMapHandle::new();
+        handle1
+            .insert(0x10000001, RoutingEntry::new(1, 0, 0))
+            .unwrap();
+
+        let handle2 = handle1.clone();
+        handle2
+            .insert(0x10000002, RoutingEntry::new(2, 0, 0))
+            .unwrap();
+
+        assert_eq!(handle1.len(), 2);
+        assert_eq!(handle2.len(), 2);
+    }
+
+    #[test]
+    fn test_stats_map_handle_clone_independence() {
+        let handle1 = StatsMapHandle::new();
+        handle1.increment(stats_idx::TCP, 100).unwrap();
+
+        let handle2 = handle1.clone();
+        handle2.increment(stats_idx::UDP, 200).unwrap();
+
+        // Stats indices are different so both should exist
+        assert_eq!(handle1.len(), 2);
+        assert_eq!(handle2.len(), 2);
     }
 }

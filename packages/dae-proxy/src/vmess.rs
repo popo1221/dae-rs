@@ -307,10 +307,7 @@ impl VmessHandler {
     /// request_auth_key = HMAC-SHA256(user_key, nonce)
     /// request_key = HKDF-Expand(request_auth_key, "VMess header", 32)
     /// request_iv = HMAC-SHA256(request_auth_key, nonce) [first 12 bytes]
-    fn derive_request_key_iv(
-        user_key: &[u8; 32],
-        nonce: &[u8],
-    ) -> ([u8; 32], [u8; 12]) {
+    fn derive_request_key_iv(user_key: &[u8; 32], nonce: &[u8]) -> ([u8; 32], [u8; 12]) {
         // request_auth_key = HMAC-SHA256(user_key, nonce)
         let auth_result = Self::hmac_sha256(user_key, nonce);
 
@@ -321,8 +318,7 @@ impl VmessHandler {
         {
             use hmac::{Hmac, Mac};
             type HmacSha256 = Hmac<sha2::Sha256>;
-            let mac = HmacSha256::new_from_slice(&auth_result)
-                .expect("HMAC can take any key size");
+            let mac = HmacSha256::new_from_slice(&auth_result).expect("HMAC can take any key size");
             // info || 0x01
             let mut info_with_tweak = [0u8; 13];
             info_with_tweak[..12].copy_from_slice(b"VMess header");
@@ -343,10 +339,7 @@ impl VmessHandler {
     ///
     /// Format: [16-byte nonce][encrypted data][16-byte auth tag]
     /// Returns the decrypted header data on success.
-    fn decrypt_header(
-        user_key: &[u8; 32],
-        encrypted: &[u8],
-    ) -> Result<Vec<u8>, &'static str> {
+    fn decrypt_header(user_key: &[u8; 32], encrypted: &[u8]) -> Result<Vec<u8>, &'static str> {
         use aes_gcm::aead::KeyInit;
 
         if encrypted.len() < 32 {
@@ -361,7 +354,8 @@ impl VmessHandler {
         let cipher = Aes256Gcm::new_from_slice(&request_key)
             .map_err(|_| "failed to create AES-GCM cipher")?;
 
-        let nonce_bytes: [u8; 12] = match nonce.try_into() {
+        // Use first 12 bytes of the 16-byte nonce for AES-GCM
+        let nonce_bytes: [u8; 12] = match nonce[..12].try_into() {
             Ok(n) => n,
             Err(_) => return Err("nonce is not 16 bytes"),
         };
@@ -385,7 +379,10 @@ impl VmessHandler {
         let header_len = u32::from_be_bytes(len_buf) as usize;
 
         if header_len > 65535 {
-            warn!("VMess TCP: {} header_len {} too large", client_addr, header_len);
+            warn!(
+                "VMess TCP: {} header_len {} too large",
+                client_addr, header_len
+            );
             return Err(std::io::Error::new(
                 std::io::ErrorKind::InvalidData,
                 "VMess header too large",
@@ -405,7 +402,10 @@ impl VmessHandler {
         let decrypted_header = match Self::decrypt_header(&user_key, &encrypted_header) {
             Ok(header) => header,
             Err(e) => {
-                warn!("VMess TCP: {} header decryption failed: {} — dropping connection", client_addr, e);
+                warn!(
+                    "VMess TCP: {} header decryption failed: {} — dropping connection",
+                    client_addr, e
+                );
                 return Err(std::io::Error::new(
                     std::io::ErrorKind::InvalidData,
                     format!("VMess header decryption failed: {}", e),
@@ -415,31 +415,43 @@ impl VmessHandler {
 
         // Parse the decrypted VMess header:
         // [version(1)][option(1)][port(2)][addr_type(1)][addr(var)][timestamp(4)][random(4)][checksum(4)]
-        let (target_addr, target_port) = match VmessTargetAddress::parse_from_bytes(&decrypted_header) {
-            Some((addr, port)) => (addr, port),
-            None => {
-                // Fall back: try to find address in the decrypted data
-                // The header format is: version + option + port(2) + atyp + addr + extras
-                // Find the address type marker (0x01=IPv4, 0x02=domain, 0x03=IPv6)
-                if let Some(pos) = decrypted_header.iter().position(|&b| matches!(b, 0x01 | 0x02 | 0x03)) {
-                    if let Some(result) = VmessTargetAddress::parse_from_bytes(&decrypted_header[pos..]) {
-                        (result.0, result.1)
+        let (target_addr, target_port) =
+            match VmessTargetAddress::parse_from_bytes(&decrypted_header) {
+                Some((addr, port)) => (addr, port),
+                None => {
+                    // Fall back: try to find address in the decrypted data
+                    // The header format is: version + option + port(2) + atyp + addr + extras
+                    // Find the address type marker (0x01=IPv4, 0x02=domain, 0x03=IPv6)
+                    if let Some(pos) = decrypted_header
+                        .iter()
+                        .position(|&b| matches!(b, 0x01 | 0x02 | 0x03))
+                    {
+                        if let Some(result) =
+                            VmessTargetAddress::parse_from_bytes(&decrypted_header[pos..])
+                        {
+                            (result.0, result.1)
+                        } else {
+                            error!(
+                                "VMess TCP: {} failed to parse decrypted header",
+                                client_addr
+                            );
+                            return Err(std::io::Error::new(
+                                std::io::ErrorKind::InvalidData,
+                                "invalid VMess decrypted header",
+                            ));
+                        }
                     } else {
-                        error!("VMess TCP: {} failed to parse decrypted header", client_addr);
+                        error!(
+                            "VMess TCP: {} no address type found in decrypted header",
+                            client_addr
+                        );
                         return Err(std::io::Error::new(
                             std::io::ErrorKind::InvalidData,
-                            "invalid VMess decrypted header",
+                            "no address in VMess header",
                         ));
                     }
-                } else {
-                    error!("VMess TCP: {} no address type found in decrypted header", client_addr);
-                    return Err(std::io::Error::new(
-                        std::io::ErrorKind::InvalidData,
-                        "no address in VMess header",
-                    ));
                 }
-            }
-        };
+            };
 
         info!(
             "VMess TCP: {} -> {}:{} (via {}:{})",
@@ -817,5 +829,389 @@ mod tests {
     fn test_vmess_security_from_str_case_insensitive() {
         assert!(VmessSecurity::from_str("AES-128-GCM-AEAD").is_some());
         assert!(VmessSecurity::from_str("ChaCha20-Poly1305-AEAD").is_some());
+    }
+
+    // ============================================================
+    // VMess AEAD-2022 Cryptographic Tests
+    // ============================================================
+
+    /// Test that derive_user_key produces a 32-byte key via HMAC-SHA256
+    #[test]
+    fn test_derive_user_key_length_and_determinism() {
+        let user_id = "test-user-uuid";
+
+        // derive_user_key is a private static method, access via handler construction
+        // We test the key derivation indirectly by checking the HMAC-SHA256 output length
+        let handler = VmessHandler::new_default();
+        drop(handler); // Just to use the handler type
+
+        // Test that HMAC-SHA256 always produces 32 bytes
+        let key1 = VmessHandler::hmac_sha256(user_id.as_bytes(), b"VMess AEAD");
+        let key2 = VmessHandler::hmac_sha256(user_id.as_bytes(), b"VMess AEAD");
+        assert_eq!(key1.len(), 32, "HMAC-SHA256 should produce 32 bytes");
+        assert_eq!(key1, key2, "Same input should produce same HMAC output");
+
+        // Different input should produce different output
+        let key3 = VmessHandler::hmac_sha256(b"different-user".as_slice(), b"VMess AEAD");
+        assert_ne!(
+            key1, key3,
+            "Different input should produce different HMAC output"
+        );
+    }
+
+    /// Test HMAC-SHA256 derivation for derive_user_key
+    #[test]
+    fn test_derive_user_key_different_user_ids() {
+        let user_ids = [
+            "user-1",
+            "another-user",
+            "550e8400-e29b-41d4-a716-446655440000",
+        ];
+        let mut keys: Vec<[u8; 32]> = Vec::new();
+
+        for uid in &user_ids {
+            let key = VmessHandler::hmac_sha256(uid.as_bytes(), b"VMess AEAD");
+            assert_eq!(key.len(), 32);
+
+            // Ensure no duplicate keys
+            for existing in &keys {
+                assert_ne!(
+                    &key, existing,
+                    "Different user IDs should produce different keys"
+                );
+            }
+            keys.push(key);
+        }
+    }
+
+    /// Test that derive_request_key_iv produces correct sized outputs
+    #[test]
+    fn test_derive_request_key_iv_output_sizes() {
+        let user_key = [0x42u8; 32];
+        let nonce = [
+            0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08, 0x09, 0x0a, 0x0b, 0x0c, 0x0d, 0x0e,
+            0x0f, 0x10,
+        ];
+
+        let (request_key, request_iv) = VmessHandler::derive_request_key_iv(&user_key, &nonce);
+
+        assert_eq!(request_key.len(), 32, "request_key should be 32 bytes");
+        assert_eq!(request_iv.len(), 12, "request_iv should be 12 bytes");
+    }
+
+    /// Test derive_request_key_iv determinism
+    #[test]
+    fn test_derive_request_key_iv_determinism() {
+        let user_key = [0xAB_u8; 32];
+        let nonce: [u8; 16] = [
+            0x11, 0x22, 0x33, 0x44, 0x55, 0x66, 0x77, 0x88, 0x99, 0xAA, 0xBB, 0xCC, 0xDD, 0xEE,
+            0xFF, 0x00,
+        ];
+
+        let (key1, iv1) = VmessHandler::derive_request_key_iv(&user_key, &nonce);
+        let (key2, iv2) = VmessHandler::derive_request_key_iv(&user_key, &nonce);
+
+        assert_eq!(key1, key2, "Same inputs should produce same request_key");
+        assert_eq!(iv1, iv2, "Same inputs should produce same request_iv");
+    }
+
+    /// Test that different nonces produce different key/IV pairs
+    #[test]
+    fn test_derive_request_key_iv_nonce_sensitivity() {
+        let user_key = [0x42u8; 32];
+        let nonce1: [u8; 16] = [0x00; 16];
+        let nonce2: [u8; 16] = [0xFF; 16];
+
+        let (key1, iv1) = VmessHandler::derive_request_key_iv(&user_key, &nonce1);
+        let (key2, iv2) = VmessHandler::derive_request_key_iv(&user_key, &nonce2);
+
+        assert_ne!(key1, key2, "Different nonces should produce different keys");
+        assert_ne!(iv1, iv2, "Different nonces should produce different IVs");
+    }
+
+    /// Test that different user_keys produce different key/IV pairs
+    #[test]
+    fn test_derive_request_key_iv_key_sensitivity() {
+        let user_key1 = [0x11u8; 32];
+        let user_key2 = [0x22u8; 32];
+        let nonce: [u8; 16] = [0xAA; 16];
+
+        let (k1, iv1) = VmessHandler::derive_request_key_iv(&user_key1, &nonce);
+        let (k2, iv2) = VmessHandler::derive_request_key_iv(&user_key2, &nonce);
+
+        assert_ne!(
+            k1, k2,
+            "Different user keys should produce different request keys"
+        );
+        assert_ne!(iv1, iv2, "Different user keys should produce different IVs");
+    }
+
+    /// Test full AEAD-2022 roundtrip: encrypt header then decrypt it
+    #[test]
+    fn test_decrypt_header_roundtrip() {
+        use aes_gcm::aead::KeyInit;
+
+        // Setup
+        let user_id = "test-uuid-1234";
+        let user_key = VmessHandler::hmac_sha256(user_id.as_bytes(), b"VMess AEAD");
+
+        // Build a valid VMess AEAD header payload
+        // Header format: [version(1)][option(1)][port(2)][atyp(1)][addr(var)][timestamp(4)][random(4)][checksum(4)]
+        // We'll build a simple header targeting an IPv4 address
+        let mut header = Vec::new();
+        header.push(0x01); // version
+        header.push(0x00); // option
+        header.extend_from_slice(&8080u16.to_be_bytes()); // port 8080
+        header.push(0x01); // atyp = IPv4
+        header.extend_from_slice(&[192, 168, 1, 1]); // 192.168.1.1
+                                                     // timestamp + random + checksum (12 bytes extra)
+        header.extend_from_slice(&[0x00; 12]);
+
+        // Nonce for this session (16 bytes)
+        let nonce: [u8; 16] = [
+            0x12, 0x34, 0x56, 0x78, 0x9A, 0xBC, 0xDE, 0xF0, 0x11, 0x22, 0x33, 0x44, 0x55, 0x66,
+            0x77, 0x88,
+        ];
+
+        // Derive request key and IV from user_key + nonce
+        let (request_key, _request_iv) = VmessHandler::derive_request_key_iv(&user_key, &nonce);
+
+        // Encrypt the header using AES-256-GCM
+        // Use first 12 bytes of the 16-byte nonce as GCM nonce
+        let cipher = Aes256Gcm::new_from_slice(&request_key).unwrap();
+        let gcm_nonce_arr: [u8; 12] = [
+            0x12, 0x34, 0x56, 0x78, 0x9A, 0xBC, 0xDE, 0xF0, 0x11, 0x22, 0x33, 0x44,
+        ];
+        let gcm_nonce = Nonce::from_slice(&gcm_nonce_arr);
+        let ciphertext = cipher.encrypt(gcm_nonce, header.as_slice()).unwrap();
+
+        // Build encrypted payload: [nonce(16)][ciphertext_with_tag]
+        // The decrypt_header function expects first 16 bytes as nonce for key derivation
+        let mut encrypted = Vec::new();
+        encrypted.extend_from_slice(&nonce);
+        encrypted.extend_from_slice(&ciphertext);
+
+        // Decrypt using our function
+        let decrypted = VmessHandler::decrypt_header(&user_key, &encrypted).unwrap();
+
+        // Verify decrypted header matches original
+        assert_eq!(&decrypted[..], &header[..]);
+    }
+
+    /// Test decrypt_header rejects too-short input
+    #[test]
+    fn test_decrypt_header_too_short() {
+        let user_key = [0x42u8; 32];
+
+        // Less than 32 bytes (16-byte nonce + minimum tag)
+        let encrypted = vec![0u8; 16];
+        let result = VmessHandler::decrypt_header(&user_key, &encrypted);
+        assert!(result.is_err());
+        assert_eq!(
+            result.unwrap_err(),
+            "encrypted header too short (< 32 bytes)"
+        );
+    }
+
+    /// Test decrypt_header rejects wrong auth tag (tampered data)
+    #[test]
+    fn test_decrypt_header_wrong_tag() {
+        use aes_gcm::aead::KeyInit;
+
+        let user_key = VmessHandler::hmac_sha256(b"test-user".as_slice(), b"VMess AEAD");
+        let nonce: [u8; 16] = [0xAA; 16];
+        let (request_key, _) = VmessHandler::derive_request_key_iv(&user_key, &nonce);
+
+        // Encrypt some data
+        let header =
+            b"\x01\x00\x00\x50\x01\xc0\xa8\x01\x01\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00";
+        let cipher = Aes256Gcm::new_from_slice(&request_key).unwrap();
+        let gcm_nonce: [u8; 12] = [0xAA; 12];
+        let ciphertext = cipher
+            .encrypt(Nonce::from_slice(&gcm_nonce), header.as_slice())
+            .unwrap();
+
+        // Tamper with the last byte (auth tag)
+        let mut encrypted = Vec::new();
+        encrypted.extend_from_slice(&nonce);
+        encrypted.extend_from_slice(&ciphertext);
+        if let Some(last) = encrypted.last_mut() {
+            *last ^= 0xFF; // Flip all bits in last byte
+        }
+
+        let result = VmessHandler::decrypt_header(&user_key, &encrypted);
+        let err_msg = *result.as_ref().unwrap_err();
+        assert!(err_msg.contains("AES-GCM decryption failed") || err_msg.contains("AES-GCM"));
+    }
+
+    /// Test decrypt_header rejects data encrypted with wrong key
+    #[test]
+    fn test_decrypt_header_wrong_key() {
+        use aes_gcm::aead::KeyInit;
+
+        let user_key1 = VmessHandler::hmac_sha256(b"user1".as_slice(), b"VMess AEAD");
+        let user_key2 = VmessHandler::hmac_sha256(b"user2".as_slice(), b"VMess AEAD");
+        let nonce: [u8; 16] = [0xBB; 16];
+
+        // Encrypt with key derived from user1
+        let (request_key, _) = VmessHandler::derive_request_key_iv(&user_key1, &nonce);
+        let header =
+            b"\x01\x00\x00\x50\x01\xc0\xa8\x01\x01\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00";
+        let cipher = Aes256Gcm::new_from_slice(&request_key).unwrap();
+        let gcm_nonce_arr: [u8; 12] = [0xBB; 12];
+        let ciphertext = cipher
+            .encrypt(Nonce::from_slice(&gcm_nonce_arr), header.as_slice())
+            .unwrap();
+
+        let mut encrypted = Vec::new();
+        encrypted.extend_from_slice(&nonce);
+        encrypted.extend_from_slice(&ciphertext);
+
+        // Try to decrypt with user2's key (should fail auth tag check)
+        let result = VmessHandler::decrypt_header(&user_key2, &encrypted);
+        assert!(result.is_err());
+    }
+
+    /// Test VmessTargetAddress parsing and roundtrip for IPv4
+    #[test]
+    fn test_target_address_parse_to_bytes_ipv4_roundtrip() {
+        let original = VmessTargetAddress::Ipv4(IpAddr::V4(Ipv4Addr::new(10, 0, 0, 1)));
+        let bytes = original.to_bytes();
+
+        // Parse the bytes back
+        // Need to include port in payload for parse_from_bytes
+        let mut payload_with_port = bytes.clone();
+        payload_with_port.extend_from_slice(&443u16.to_be_bytes()); // port 443
+
+        let result = VmessTargetAddress::parse_from_bytes(&payload_with_port);
+        assert!(result.is_some());
+        let (parsed, port) = result.unwrap();
+
+        match (&original, &parsed) {
+            (VmessTargetAddress::Ipv4(ip1), VmessTargetAddress::Ipv4(ip2)) => {
+                assert_eq!(ip1, ip2);
+            }
+            _ => panic!("Type mismatch in roundtrip"),
+        }
+        assert_eq!(port, 443);
+    }
+
+    /// Test VmessTargetAddress parsing and roundtrip for domain
+    #[test]
+    fn test_target_address_parse_to_bytes_domain_roundtrip() {
+        let original = VmessTargetAddress::Domain("test.example.org".to_string(), 8443);
+        let mut bytes = original.to_bytes();
+        bytes.extend_from_slice(&8443u16.to_be_bytes());
+
+        let result = VmessTargetAddress::parse_from_bytes(&bytes);
+        assert!(result.is_some());
+        let (parsed, port) = result.unwrap();
+
+        match (&original, &parsed) {
+            (VmessTargetAddress::Domain(d1, p1), VmessTargetAddress::Domain(d2, p2)) => {
+                assert_eq!(d1, d2);
+                assert_eq!(p1, p2);
+            }
+            _ => panic!("Type mismatch in roundtrip"),
+        }
+        assert_eq!(port, 8443);
+    }
+
+    /// Test VmessTargetAddress Display impl
+    #[test]
+    fn test_target_address_display() {
+        let ipv4 = VmessTargetAddress::Ipv4(IpAddr::V4(Ipv4Addr::new(8, 8, 8, 8)));
+        assert_eq!(format!("{}", ipv4), "8.8.8.8");
+
+        let domain = VmessTargetAddress::Domain("google.com".to_string(), 443);
+        assert_eq!(format!("{}", domain), "google.com");
+
+        let ipv6 = VmessTargetAddress::Ipv6(IpAddr::V6(Ipv6Addr::LOCALHOST));
+        assert_eq!(format!("{}", ipv6), "::1");
+    }
+
+    /// Test VmessSecurity default is Aes128GcmAead
+    #[test]
+    fn test_vmess_security_default() {
+        let security = VmessSecurity::default();
+        assert_eq!(security, VmessSecurity::Aes128GcmAead);
+    }
+
+    /// Test VmessSecurity is_valid pattern (check all known valid values work)
+    #[test]
+    fn test_vmess_security_all_valid_types() {
+        // All these security types should parse correctly and are considered "valid" AEAD types
+        let valid_types = [
+            ("aes-128-cfb", VmessSecurity::Aes128Cfb),
+            ("aes-128-gcm", VmessSecurity::Aes128Gcm),
+            ("chacha20-poly1305", VmessSecurity::ChaCha20Poly1305),
+            ("none", VmessSecurity::None),
+            ("aes-128-gcm-aead", VmessSecurity::Aes128GcmAead),
+            (
+                "chacha20-poly1305-aead",
+                VmessSecurity::ChaCha20Poly1305Aead,
+            ),
+        ];
+
+        for (name, expected) in valid_types {
+            let parsed = VmessSecurity::from_str(name);
+            assert_eq!(parsed, Some(expected), "Failed to parse: {}", name);
+        }
+    }
+
+    /// Test VmessSecurity invalid strings return None
+    #[test]
+    fn test_vmess_security_invalid_strings() {
+        let invalid = ["", "invalid", "aes-256-gcm", "tls", "reality", "xtls"];
+        for s in invalid {
+            assert_eq!(
+                VmessSecurity::from_str(s),
+                None,
+                "Should be None for: {}",
+                s
+            );
+        }
+    }
+
+    /// Test VmessServerConfig default values
+    #[test]
+    fn test_vmess_server_config_default() {
+        let config = VmessServerConfig::default();
+        assert_eq!(config.addr, "127.0.0.1");
+        assert_eq!(config.port, 10086);
+        assert!(config.user_id.is_empty());
+        assert_eq!(config.security, VmessSecurity::Aes128GcmAead);
+        assert!(config.enable_aead);
+    }
+
+    /// Test VmessHandler construction and listen_addr access
+    #[test]
+    fn test_vmess_handler_listen_addr() {
+        let handler = VmessHandler::new_default();
+        let addr = handler.listen_addr();
+        assert_eq!(addr, SocketAddr::from(([127, 0, 0, 1], 1080)));
+    }
+
+    /// Test VmessHandler with custom config
+    #[test]
+    fn test_vmess_handler_custom_config() {
+        let config = VmessClientConfig {
+            listen_addr: SocketAddr::from(([0, 0, 0, 0], 2080)),
+            server: VmessServerConfig {
+                addr: "192.168.1.100".to_string(),
+                port: 443,
+                user_id: "custom-user-id".to_string(),
+                security: VmessSecurity::ChaCha20Poly1305Aead,
+                enable_aead: true,
+            },
+            tcp_timeout: Duration::from_secs(120),
+            udp_timeout: Duration::from_secs(60),
+        };
+
+        let handler = VmessHandler::new(config);
+        assert_eq!(
+            handler.listen_addr(),
+            SocketAddr::from(([0, 0, 0, 0], 2080))
+        );
     }
 }

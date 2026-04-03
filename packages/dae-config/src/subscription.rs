@@ -1846,4 +1846,420 @@ proxies:
         assert_eq!(configs[0].node_type, NodeType::Shadowsocks);
         assert_eq!(configs[1].node_type, NodeType::Trojan);
     }
+
+    // ============================================================
+    // SubscriptionConfig Tests
+    // ============================================================
+
+    #[test]
+    fn test_subscription_config_new() {
+        let config = SubscriptionConfig::new("https://example.com/subscription");
+        assert_eq!(config.url, "https://example.com/subscription");
+        assert_eq!(config.update_interval, Duration::from_secs(3600));
+        assert!(config.verify_tls);
+        assert_eq!(config.user_agent, "dae-rs/0.1.0");
+        assert_eq!(config.timeout, Duration::from_secs(30));
+    }
+
+    #[test]
+    fn test_subscription_config_builder_pattern() {
+        let config = SubscriptionConfig::new("https://example.com/sub")
+            .with_update_interval(Duration::from_secs(7200))
+            .with_user_agent("CustomAgent/1.0")
+            .with_insecure_tls();
+
+        assert_eq!(config.url, "https://example.com/sub");
+        assert_eq!(config.update_interval, Duration::from_secs(7200));
+        assert_eq!(config.user_agent, "CustomAgent/1.0");
+        assert!(
+            !config.verify_tls,
+            "with_insecure_tls should set verify_tls to false"
+        );
+    }
+
+    #[test]
+    fn test_subscription_config_default() {
+        let config = SubscriptionConfig::default();
+        assert!(config.url.is_empty());
+        assert_eq!(config.update_interval, Duration::from_secs(3600));
+        assert!(config.verify_tls);
+        assert_eq!(config.user_agent, "dae-rs/0.1.0");
+        assert_eq!(config.timeout, Duration::from_secs(30));
+    }
+
+    #[test]
+    fn test_subscription_config_with_insecure_tls() {
+        let config = SubscriptionConfig::new("http://insecure.example.com/sub").with_insecure_tls();
+
+        assert!(!config.verify_tls);
+    }
+
+    #[test]
+    fn test_subscription_config_update_interval() {
+        let config = SubscriptionConfig::new("https://example.com/sub")
+            .with_update_interval(Duration::from_secs(86400));
+
+        assert_eq!(config.update_interval, Duration::from_secs(86400));
+    }
+
+    #[test]
+    fn test_subscription_config_user_agent() {
+        let config =
+            SubscriptionConfig::new("https://example.com/sub").with_user_agent("Mozilla/5.0");
+
+        assert_eq!(config.user_agent, "Mozilla/5.0");
+    }
+
+    // ============================================================
+    // Additional Parsing Tests
+    // ============================================================
+
+    #[test]
+    fn test_parse_clash_yaml_unsupported_type() {
+        let yaml = r#"
+proxies:
+  - name: "Unknown"
+    type: unknown-type
+    server: test.com
+    port: 443
+"#;
+        let result = parse_clash_yaml(yaml);
+        assert!(result.is_ok());
+        let links = result.unwrap();
+        assert!(links[0].starts_with("#Unsupported type:"));
+    }
+
+    #[test]
+    fn test_parse_singbox_json_unsupported_outbound() {
+        let json = r#"{
+  "outbounds": [
+    {"type": "wireguard", "tag": "Unsupported", "server": "test.com", "port": 443}
+  ]
+}"#;
+        let result = parse_singbox_json(json).unwrap();
+        assert!(result.is_empty());
+    }
+
+    #[test]
+    fn test_parse_uri_list_empty_content() {
+        let result = parse_uri_list("").unwrap();
+        assert!(result.is_empty());
+
+        let result = parse_uri_list("   \n\n   ").unwrap();
+        assert!(result.is_empty());
+    }
+
+    #[test]
+    fn test_parse_uri_list_filters_invalid() {
+        let content = "ss://valid\nhttp://invalid\nvmess://valid\nnot-a-proxy\nvless://valid";
+        let result = parse_uri_list(content).unwrap();
+        assert_eq!(result.len(), 3);
+        assert!(result.iter().all(|l| l.starts_with("ss://")
+            || l.starts_with("vmess://")
+            || l.starts_with("vless://")));
+    }
+
+    #[test]
+    fn test_uri_to_node_config_unsupported_scheme() {
+        let result = uri_to_node_config("https://example.com");
+        assert!(result.is_err());
+        assert!(matches!(
+            result.unwrap_err(),
+            SubscriptionError::UnsupportedUriScheme(_)
+        ));
+    }
+
+    #[test]
+    fn test_uri_to_node_config_ss_invalid_base64() {
+        let uri = "ss://!!!invalid-base64!!!@1.2.3.4:8388#Test";
+        let result = uri_to_node_config(uri);
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_uri_to_node_config_ss_plain_userinfo() {
+        let uri = "ss://plain:text@1.2.3.4:8388#Test";
+        let result = uri_to_node_config(uri);
+        assert!(result.is_ok());
+        let config = result.unwrap();
+        assert_eq!(config.node_type, NodeType::Shadowsocks);
+        assert_eq!(config.method.as_deref(), Some("plain"));
+        assert_eq!(config.password.as_deref(), Some("text"));
+    }
+
+    #[test]
+    fn test_uri_to_node_config_vmess_invalid_base64() {
+        let uri = "vmess://!!!invalid!!!";
+        let result = uri_to_node_config(uri);
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_uri_to_node_config_vmess_missing_server() {
+        use base64::Engine;
+        let json = serde_json::json!({
+            "v": "2",
+            "ps": "Test",
+            "port": 443,
+            "id": "12345678-1234-1234-1234-123456789012"
+        });
+        let encoded = base64::engine::general_purpose::STANDARD.encode(json.to_string().as_bytes());
+        let uri = format!("vmess://{}", encoded);
+        let result = uri_to_node_config(&uri);
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_uri_to_node_config_vless_invalid() {
+        let uri = "vless://no-at-sign";
+        let result = uri_to_node_config(uri);
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_uri_to_node_config_trojan_no_at() {
+        let uri = "trojan://no-at-sign";
+        let result = uri_to_node_config(uri);
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_parse_subscription_auto_base64_uri_list() {
+        use base64::Engine;
+        let raw = "ss://link1\nvmess://link2";
+        let encoded = base64::engine::general_purpose::STANDARD.encode(raw.as_bytes());
+
+        let result = parse_subscription(encoded.as_bytes());
+        assert!(result.is_ok());
+        let update = result.unwrap();
+        assert_eq!(update.links.len(), 2);
+        assert_eq!(update.format_detected, SubscriptionType::Base64);
+    }
+
+    #[test]
+    fn test_parse_subscription_auto_empty() {
+        let content = b"   \n\n   ";
+        let result = parse_subscription(content);
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_parse_subscription_auto_truly_empty_sip008() {
+        let json = br#"{"version": 1, "servers": []}"#;
+        let result = parse_subscription(json);
+        assert!(result.is_ok());
+        let update = result.unwrap();
+        assert!(update.links.is_empty());
+        assert_eq!(update.format_detected, SubscriptionType::Sip008);
+    }
+
+    #[test]
+    fn test_extract_tag_from_sip008_content() {
+        let json = br#"{
+            "version": 1,
+            "servers": [
+                {"remarks": "First Server", "server": "1.1.1.1", "server_port": 443, "password": "x", "method": "aes-256-gcm"}
+            ]
+        }"#;
+        let tag = extract_tag("", json);
+        assert_eq!(tag, Some("First Server".to_string()));
+    }
+
+    #[test]
+    fn test_extract_tag_priority_url_over_content() {
+        let url = "https://example.com/sub#URLTag";
+        let tag = extract_tag(url, b"something else");
+        assert_eq!(tag, Some("URLTag".to_string()));
+    }
+
+    #[test]
+    fn test_extract_tag_empty_url_fragment() {
+        let url = "https://example.com/sub#";
+        let tag = extract_tag(url, b"");
+        assert!(tag.is_none());
+    }
+
+    #[test]
+    fn test_node_config_debug() {
+        let config = NodeConfig {
+            name: "Test Node".to_string(),
+            node_type: NodeType::Shadowsocks,
+            server: "1.2.3.4".to_string(),
+            port: 443,
+            method: Some("aes-256-gcm".to_string()),
+            password: Some("secret".to_string()),
+            uuid: None,
+            trojan_password: None,
+            security: None,
+            tls: Some(true),
+            tls_server_name: Some("example.com".to_string()),
+            aead: Some(true),
+            capabilities: None,
+        };
+        let debug = format!("{:?}", config);
+        assert!(debug.contains("Test Node"));
+        assert!(debug.contains("Shadowsocks"));
+    }
+
+    #[test]
+    fn test_node_capabilities() {
+        let caps = NodeCapabilities {
+            fullcone: Some(true),
+            udp: Some(true),
+            v2ray: Some(false),
+        };
+        let debug = format!("{:?}", caps);
+        assert!(debug.contains("fullcone"));
+    }
+
+    #[test]
+    fn test_proxy_protocol_to_node_type() {
+        assert_eq!(
+            ProxyProtocol::Shadowsocks.to_node_type(),
+            NodeType::Shadowsocks
+        );
+        assert_eq!(ProxyProtocol::VMess.to_node_type(), NodeType::Vmess);
+        assert_eq!(ProxyProtocol::VLESS.to_node_type(), NodeType::Vless);
+        assert_eq!(ProxyProtocol::Trojan.to_node_type(), NodeType::Trojan);
+    }
+
+    #[test]
+    fn test_sip008_server_deserialization() {
+        let json = r#"{
+            "id": "srv-001",
+            "remarks": "Test Server",
+            "server": "test.example.com",
+            "server_port": 8443,
+            "password": "supersecret",
+            "method": "chacha20-ietf-poly1305",
+            "plugin": "v2ray-plugin",
+            "plugin_opts": "tls;host=example.com"
+        }"#;
+
+        let server: Sip008Server = serde_json::from_str(json).unwrap();
+        assert_eq!(server.id.as_deref(), Some("srv-001"));
+        assert_eq!(server.remarks.as_deref(), Some("Test Server"));
+        assert_eq!(server.server, "test.example.com");
+        assert_eq!(server.server_port, 8443);
+        assert_eq!(server.method, "chacha20-ietf-poly1305");
+        assert_eq!(server.plugin.as_deref(), Some("v2ray-plugin"));
+        assert_eq!(server.plugin_opts.as_deref(), Some("tls;host=example.com"));
+    }
+
+    #[test]
+    fn test_sip008_server_minimal() {
+        let json = r#"{
+            "server": "1.2.3.4",
+            "server_port": 443,
+            "password": "pwd",
+            "method": "aes-256-gcm"
+        }"#;
+
+        let server: Sip008Server = serde_json::from_str(json).unwrap();
+        assert!(server.id.is_none());
+        assert!(server.remarks.is_none());
+        assert!(server.plugin.is_none());
+        assert!(server.plugin_opts.is_none());
+    }
+
+    #[test]
+    fn test_subscription_update_debug() {
+        let update = SubscriptionUpdate {
+            tag: Some("MyTag".to_string()),
+            links: vec!["ss://link1".to_string()],
+            bytes_used: Some(1024),
+            bytes_remaining: Some(2048),
+            format_detected: SubscriptionType::ClashYaml,
+        };
+        let debug = format!("{:?}", update);
+        assert!(debug.contains("MyTag"));
+        assert!(debug.contains("1024"));
+    }
+
+    #[test]
+    fn test_subscription_config_clone() {
+        let config = SubscriptionConfig::new("https://example.com/sub")
+            .with_update_interval(Duration::from_secs(7200))
+            .with_insecure_tls();
+
+        let cloned = config.clone();
+        assert_eq!(cloned.url, config.url);
+        assert_eq!(cloned.update_interval, config.update_interval);
+        assert_eq!(cloned.verify_tls, config.verify_tls);
+    }
+
+    #[test]
+    fn test_clash_proxy_vmess_with_ws() {
+        let yaml = r#"
+proxies:
+  - name: "WS VMess"
+    type: vmess
+    server: example.com
+    port: 443
+    uuid: 12345678-1234-1234-1234-123456789012
+    alterId: 0
+    cipher: auto
+    network: ws
+    ws-path: /v2
+    ws-headers:
+      Host: example.com
+    tls: true
+"#;
+        let result = parse_clash_yaml(yaml).unwrap();
+        assert_eq!(result.len(), 1);
+        let uri = &result[0];
+        assert!(uri.starts_with("vmess://"));
+        use base64::Engine;
+        let encoded = uri.strip_prefix("vmess://").unwrap();
+        let decoded_bytes = base64::engine::general_purpose::STANDARD
+            .decode(encoded.as_bytes())
+            .unwrap();
+        let decoded = String::from_utf8(decoded_bytes).unwrap();
+        // The ws-path becomes "path" in the VMess JSON blob
+        assert!(decoded.contains(r#""path":"/v2"#) || decoded.contains("/v2"));
+    }
+
+    #[test]
+    fn test_clash_proxy_vless_with_flow() {
+        // VLESS serialization DOES include flow parameter
+        let yaml = r#"
+proxies:
+  - name: "XTLS VLESS"
+    type: vless
+    server: example.com
+    port: 443
+    uuid: 12345678-1234-1234-1234-123456789012
+    flow: xtls-rprx-vision
+"#;
+        let result = parse_clash_yaml(yaml).unwrap();
+        assert_eq!(result.len(), 1);
+        let uri = &result[0];
+        assert!(uri.starts_with("vless://"));
+        assert!(uri.contains("flow="));
+    }
+
+    #[test]
+    fn test_parse_subscription_url_safe_base64() {
+        use base64::Engine;
+        let raw = "ss://link1\nvmess://link2";
+        let encoded = base64::engine::general_purpose::URL_SAFE.encode(raw.as_bytes());
+
+        let result = parse_subscription(encoded.as_bytes());
+        assert!(result.is_ok());
+        assert_eq!(result.unwrap().links.len(), 2);
+    }
+
+    #[test]
+    fn test_subscription_update_clone() {
+        let update = SubscriptionUpdate {
+            tag: None,
+            links: vec!["ss://test".to_string()],
+            bytes_used: None,
+            bytes_remaining: None,
+            format_detected: SubscriptionType::Base64,
+        };
+        let cloned = update.clone();
+        assert_eq!(cloned.links.len(), 1);
+        assert_eq!(cloned.format_detected, SubscriptionType::Base64);
+    }
 }
