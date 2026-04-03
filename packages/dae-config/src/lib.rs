@@ -1069,6 +1069,7 @@ mod tests {
             rules: RulesConfig::default(),
             logging: LoggingConfig::default(),
             transparent_proxy: TransparentProxyConfig::default(),
+            tracking: TrackingConfig::default(),
         };
         assert_eq!(config.proxy.socks5_listen, "127.0.0.1:1080");
         assert_eq!(config.proxy.tcp_timeout, 60);
@@ -1132,6 +1133,7 @@ mod tests {
             rules: RulesConfig::default(),
             logging: LoggingConfig::default(),
             transparent_proxy: TransparentProxyConfig::default(),
+            tracking: TrackingConfig::default(),
         };
         assert!(config.validate().is_ok());
     }
@@ -1158,6 +1160,7 @@ mod tests {
             rules: RulesConfig::default(),
             logging: LoggingConfig::default(),
             transparent_proxy: TransparentProxyConfig::default(),
+            tracking: TrackingConfig::default(),
         };
         assert!(config.validate().is_err());
     }
@@ -1234,6 +1237,7 @@ mod tests {
             rules: RulesConfig::default(),
             logging: LoggingConfig::default(),
             transparent_proxy: TransparentProxyConfig::default(),
+            tracking: TrackingConfig::default(),
         };
 
         assert!(config.find_node("node1").is_some());

@@ -414,6 +414,7 @@ mod tests {
             rules: dae_config::RulesConfig::default(),
             logging: dae_config::LoggingConfig::default(),
             transparent_proxy: dae_config::TransparentProxyConfig::default(),
+            tracking: dae_config::TrackingConfig::default(),
         });
         assert!(format!("{event:?}").contains("Reloaded"));
 
