@@ -1,0 +1,19 @@
+[package]
+name = "dae-protocol-socks4"
+version = "0.1.0"
+edition = "2021"
+description = "SOCKS4 and SOCKS4a protocol implementation for dae-rs"
+
+[dependencies]
+tokio = { version = "1", features = ["full"] }
+async-trait = "0.1"
+bytes = "1"
+thiserror = "1"
+tracing = "0.1"
+
+# Internal dependencies
+dae-core = { path = "../dae-core" }
+dae-proxy-core = { path = "../dae-proxy-core" }
+
+[dev-dependencies]
+tokio-test = "0.4"
