@@ -60,6 +60,7 @@ port = 443
 uuid = "your-uuid-here"
 tls = true
 tls_server_name = "example.com"
+tags = ["hk", "proxy"]
 
 [[nodes]]
 name = "新加坡节点"
@@ -69,6 +70,8 @@ port = 10086
 uuid = "another-uuid"
 security = "auto"
 tls = true
+tags = ["sg", "proxy"]
+
 
 [[nodes]]
 name = "SS 节点"
@@ -77,6 +80,7 @@ server = "ss.example.com"
 port = 8388
 method = "chacha20-ietf-poly1305"
 password = "your-password"
+tags = ["ss"]
 
 # 订阅配置
 # 定时从订阅 URL 自动拉取并更新节点
@@ -85,6 +89,7 @@ url = "https://sub.example.com/clash"
 update_interval_secs = 3600
 verify_tls = true
 name = "主订阅"
+tags = ["sub"]  # 订阅节点自动继承此标签
 
 [[subscriptions]]
 url = "https://backup.example.com/sub"
@@ -309,6 +314,7 @@ ss://method:password@example.com:8388
 | `verify_tls` | bool | true | 是否验证TLS证书 |
 | `user_agent` | Option<String> | dae-rs默认 | 自定义 User-Agent |
 | `name` | Option<String> | None | 订阅别名，用于标识 |
+| `tags` | Vec<String> | [] | 节点标签，订阅节点自动继承 |
 
 ### 示例
 
@@ -319,6 +325,7 @@ url = "https://sub.example.com/clash"
 update_interval_secs = 3600
 verify_tls = true
 name = "主节点"
+tags = ["sub"]  # 从订阅获取的节点会自动带有此标签
 
 # 备用订阅 - 较长的更新间隔
 [[subscriptions]]
@@ -326,6 +333,7 @@ url = "https://backup.example.com/sub"
 update_interval_secs = 7200
 verify_tls = true
 name = "备用节点"
+tags = ["backup"]
 
 # 跳过 TLS 验证（不推荐，仅测试环境使用）
 [[subscriptions]]
@@ -372,6 +380,7 @@ verify_tls = false
 | `process` | `chrome` | 进程名匹配 |
 | `dnstype` | `AAAA` | DNS 查询类型 |
 | `capability` | `fullcone` | 节点能力匹配 |
+| `node-tag` | `hk` | 节点标签匹配（路由到带特定标签的节点）|
 
 ### 规则动作
 
@@ -402,6 +411,36 @@ type = "domain-suffix"
 value = "com"
 action = "proxy"
 priority = 20
+
+# 使用特定标签的节点
+[[rules.rule_groups.rules]]
+type = "node-tag"
+value = "hk"
+action = "proxy"
+priority = 15
+```
+
+### node-tag 规则说明
+
+`node-tag` 规则用于将流量路由到具有特定标签的节点。节点标签在 `[[nodes]].tags` 中定义，订阅节点的标签可在 `[[subscriptions]].tags` 中统一设置。
+
+```toml
+# 节点配置示例
+[[nodes]]
+name = "香港节点"
+tags = ["hk", "proxy"]
+...
+
+[[nodes]]
+name = "美国节点"
+tags = ["us", "proxy"]
+...
+
+# 规则中使用标签
+[[rules.rule_groups.rules]]
+type = "node-tag"
+value = "hk"
+action = "proxy"
 ```
 
 ## 跟踪配置
