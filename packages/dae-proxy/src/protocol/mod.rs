@@ -49,6 +49,7 @@ pub enum ProtocolType {
     Hysteria2,
 }
 
+#[allow(clippy::should_implement_trait)]
 impl ProtocolType {
     /// Returns the protocol name as a string
     pub fn as_str(&self) -> &'static str {

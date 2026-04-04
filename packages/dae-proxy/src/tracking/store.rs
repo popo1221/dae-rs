@@ -181,6 +181,7 @@ impl Default for RuleTrackingStore {
 }
 
 /// Aggregated statistics store
+#[allow(dead_code)]
 pub struct TrackingStore {
     /// Connection-level tracking
     connections: ConnectionTrackingStore,
@@ -397,6 +398,7 @@ impl TrackingStore {
 
 /// HTTP state for tracking metrics server
 #[derive(Clone)]
+#[allow(dead_code)]
 struct MetricsHttpState {
     store: Arc<TrackingStore>,
     prometheus_mode: bool,

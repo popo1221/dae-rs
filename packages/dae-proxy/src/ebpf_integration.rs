@@ -205,6 +205,11 @@ impl RoutingMapHandle {
     pub fn len(&self) -> usize {
         self.inner.read().unwrap().len()
     }
+
+    /// Check if the routing map is empty
+    pub fn is_empty(&self) -> bool {
+        self.len() == 0
+    }
 }
 
 impl Default for RoutingMapHandle {

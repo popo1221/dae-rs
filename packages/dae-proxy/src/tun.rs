@@ -124,7 +124,7 @@ impl From<u8> for IpProtocol {
 #[derive(Debug, Clone)]
 pub struct IpHeader {
     /// Version (4 or 6)
-    pub version: u4,
+    pub version: U4,
     /// Header length in bytes
     pub header_length: u8,
     /// Total packet length
@@ -162,7 +162,7 @@ impl IpHeader {
         let dst_ip = IpAddr::V4(Ipv4Addr::new(bytes[16], bytes[17], bytes[18], bytes[19]));
 
         Some(IpHeader {
-            version: u4::new(version),
+            version: U4::new(version),
             header_length,
             total_length,
             protocol,
@@ -181,10 +181,10 @@ impl IpHeader {
 
 /// Version 4 marker type
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub struct u4;
+pub struct U4;
 
-impl u4 {
-    pub fn new(v: u8) -> Self {
+impl U4 {
+    pub fn new(_v: u8) -> Self {
         Self
     }
 }
@@ -507,7 +507,6 @@ impl TunPacket {
             IpProtocol::Udp => 17,
             IpProtocol::Icmp => 1,
             IpProtocol::IcmpV6 => 58,
-            _ => 0,
         };
 
         let mut info = PacketInfo::new(
@@ -593,7 +592,7 @@ impl DnsHijacker {
     pub async fn handle_query(
         &self,
         query: &DnsQuery,
-        src_ip: IpAddr,
+        _src_ip: IpAddr,
         _src_port: u16,
     ) -> Option<Vec<u8>> {
         // Check cache first
@@ -771,7 +770,7 @@ impl DnsHijacker {
 
         // Question (copy from request)
         let domain_parts: Vec<&str> = query.domain.split('.').collect();
-        let mut pos = 12;
+        let _pos = 12;
         for part in &domain_parts {
             response.push(part.len() as u8);
             response.extend_from_slice(part.as_bytes());
@@ -867,6 +866,7 @@ impl Default for TcpTunSession {
 }
 
 /// TUN proxy main handler
+#[allow(dead_code)]
 pub struct TunProxy {
     /// Configuration
     config: TunConfig,
@@ -1042,7 +1042,7 @@ impl TunProxy {
 
         if packet.is_tcp() {
             // TCP proxy via connection pool
-            if let Some(key) = &packet.connection_key {
+            if let Some(_key) = &packet.connection_key {
                 return RouteResult::Forwarded; // Would need actual proxy connection
             }
         }
@@ -1056,7 +1056,7 @@ impl TunProxy {
     }
 
     /// Directly forward a packet (no proxy)
-    async fn direct_packet(&self, packet: TunPacket) -> RouteResult {
+    async fn direct_packet(&self, _packet: TunPacket) -> RouteResult {
         // Direct forwarding would send packet back to TUN device
         // The actual network send would be handled by the TUN device write
         RouteResult::Forwarded
@@ -1167,7 +1167,7 @@ mod tests {
         assert!(header.is_some());
 
         let header = header.unwrap();
-        assert_eq!(header.version, u4::new(4));
+        assert_eq!(header.version, U4::new(4));
         assert_eq!(header.header_length, 20);
         assert_eq!(header.total_length, 40);
         assert_eq!(header.protocol, IpProtocol::Tcp);

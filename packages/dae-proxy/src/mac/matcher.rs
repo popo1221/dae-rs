@@ -12,7 +12,7 @@ use super::MacAddr;
 /// * `mac` - The MAC address to check
 /// * `pattern` - The MAC address pattern to match against
 /// * `mask` - Optional mask. When provided, only bytes where mask is non-zero are compared.
-///             For example, mask "FF:FF:FF:00:00:00" only compares the OUI (first 3 bytes).
+///   For example, mask "FF:FF:FF:00:00:00" only compares the OUI (first 3 bytes).
 ///
 /// # Returns
 /// `true` if the MAC address matches the pattern (applying mask if specified)

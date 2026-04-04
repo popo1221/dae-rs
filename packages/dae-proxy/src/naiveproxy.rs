@@ -23,7 +23,7 @@ use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use tokio::net::TcpStream;
 use tokio::process::{Child, Command};
 use tokio::sync::RwLock;
-use tracing::{debug, error, info, warn};
+use tracing::{debug, info, warn};
 
 /// NaiveProxy configuration
 #[derive(Debug, Clone)]
@@ -135,17 +135,15 @@ impl NaiveProxyManager {
         tokio::time::sleep(std::time::Duration::from_millis(500)).await;
 
         // Check if process is still running
-        if let Some(status) = child.try_wait().map_err(|e| {
-            std::io::Error::new(
-                std::io::ErrorKind::Other,
-                format!("Failed to check status: {}", e),
-            )
-        })? {
+        if let Some(status) = child
+            .try_wait()
+            .map_err(|e| std::io::Error::other(format!("Failed to check status: {}", e)))?
+        {
             if status.code().is_some() {
-                return Err(std::io::Error::new(
-                    std::io::ErrorKind::Other,
-                    format!("NaiveProxy exited early with status: {:?}", status.code()),
-                ));
+                return Err(std::io::Error::other(format!(
+                    "NaiveProxy exited early with status: {:?}",
+                    status.code()
+                )));
             }
         }
 

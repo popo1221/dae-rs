@@ -52,6 +52,7 @@ pub enum ProxyNodeType {
     Vless,
 }
 
+#[allow(clippy::should_implement_trait)]
 impl ProxyNodeType {
     pub fn from_str(s: &str) -> Option<Self> {
         match s.to_lowercase().as_str() {

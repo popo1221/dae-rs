@@ -12,9 +12,8 @@
 //! - No authentication support in SOCKS4 (SOCKS4a uses userid for identification)
 
 use std::net::{Ipv4Addr, SocketAddr, SocketAddrV4};
-use std::sync::Arc;
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
-use tokio::net::{TcpListener, TcpStream};
+use tokio::net::TcpStream;
 use tracing::{debug, error, info};
 
 /// SOCKS4 protocol constants
@@ -23,6 +22,7 @@ mod consts {
     pub const VER: u8 = 0x04;
 
     /// SOCKS4a magic address when domain is used
+    #[allow(dead_code)]
     pub const SOCKS4A_MAGIC_IP: [u8; 3] = [0x00, 0x00, 0x00];
 
     /// Commands
@@ -420,14 +420,14 @@ impl Socks4Server {
         stream.write_all(&response).await?;
 
         // Bridge connections
-        self.bridgeConnections(stream, target_stream).await
+        self.bridge_connections(stream, target_stream).await
     }
 
     /// Handle BIND command
     async fn handle_bind(
         &self,
         mut stream: TcpStream,
-        request: Socks4Request,
+        _request: Socks4Request,
     ) -> std::io::Result<()> {
         // For BIND, we need to:
         // 1. Create a listening socket
@@ -491,7 +491,7 @@ impl Socks4Server {
                 stream.write_all(&response2).await?;
 
                 // Bridge connections
-                self.bridgeConnections(stream, incoming).await
+                self.bridge_connections(stream, incoming).await
             }
             Err(e) => {
                 error!("SOCKS4 BIND accept failed: {}", e);
@@ -502,7 +502,7 @@ impl Socks4Server {
     }
 
     /// Bridge two connections bidirectionally
-    async fn bridgeConnections(
+    async fn bridge_connections(
         &self,
         mut client: TcpStream,
         mut target: TcpStream,
@@ -511,8 +511,8 @@ impl Socks4Server {
 
         // Simple half-duplex bridging
         // In production, use proper bidirectional copying
-        let (mut client_reader, mut client_writer) = client.split();
-        let (mut target_reader, mut target_writer) = target.split();
+        let (_client_reader, mut client_writer) = client.split();
+        let (mut target_reader, _target_writer) = target.split();
 
         // Copy target -> client
         let mut buf = vec![0u8; 8192];

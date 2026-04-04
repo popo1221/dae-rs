@@ -31,22 +31,23 @@
 
 use super::Transport;
 use async_trait::async_trait;
-use bytes::{Buf, BufMut, Bytes, BytesMut};
+use bytes::{BufMut, Bytes, BytesMut};
 use std::fmt::Debug;
 use std::io::{Error as IoError, ErrorKind, Result as IoResult};
 use std::time::Duration;
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use tokio::net::TcpStream;
-use tracing::{debug, error, info, warn};
+use tracing::{debug, info, warn};
 
 /// Meek obfuscation tactic
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub enum MeekTactic {
     /// HTTP proxy through front domain
     Http,
     /// HTTPS proxy through front domain
     Https,
     /// Length-encoded requests with padding (default)
+    #[default]
     Bytepolding,
     /// Session ticket ID obfuscation (Azure)
     Snia,
@@ -56,12 +57,6 @@ pub enum MeekTactic {
     Gimmie,
     /// Server-side redirect following
     Redirect,
-}
-
-impl Default for MeekTactic {
-    fn default() -> Self {
-        MeekTactic::Bytepolding
-    }
 }
 
 impl std::fmt::Display for MeekTactic {

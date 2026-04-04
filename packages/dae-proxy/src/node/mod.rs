@@ -23,6 +23,7 @@ pub mod capability;
 pub mod hash;
 pub mod health;
 pub mod manager;
+#[allow(clippy::module_inception)]
 pub mod node;
 pub mod selector;
 pub mod simple;

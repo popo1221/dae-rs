@@ -17,7 +17,7 @@ use aes_gcm::aead::Aead;
 use aes_gcm::Aes256Gcm;
 use aes_gcm::Nonce;
 
-use tokio::io::{AsyncReadExt, AsyncWriteExt};
+use tokio::io::AsyncReadExt;
 use tokio::net::{TcpListener, TcpStream, UdpSocket};
 use tracing::{debug, error, info, warn};
 
@@ -71,6 +71,7 @@ impl std::fmt::Display for VmessSecurity {
     }
 }
 
+#[allow(clippy::should_implement_trait)]
 impl VmessSecurity {
     /// Parse security type from string
     pub fn from_str(s: &str) -> Option<Self> {
@@ -278,6 +279,7 @@ impl VmessHandler {
     }
 
     /// Get current timestamp (seconds since epoch)
+    #[allow(dead_code)]
     fn timestamp() -> u64 {
         SystemTime::now()
             .duration_since(UNIX_EPOCH)
@@ -323,7 +325,7 @@ impl VmessHandler {
             let mut info_with_tweak = [0u8; 13];
             info_with_tweak[..12].copy_from_slice(b"VMess header");
             info_with_tweak[12] = 0x01;
-            let result = mac.chain_update(&info_with_tweak).finalize();
+            let result = mac.chain_update(info_with_tweak).finalize();
             request_key.copy_from_slice(&result.into_bytes()[..32]);
         }
 
@@ -433,7 +435,7 @@ impl VmessHandler {
                     );
                 if let Some(pos) = decrypted_header
                     .iter()
-                    .position(|&b| matches!(b, 0x01 | 0x02 | 0x03))
+                    .position(|&b| matches!(b, 0x01..=0x03))
                 {
                     if let Some(result) =
                         VmessTargetAddress::parse_from_bytes(&decrypted_header[pos..])

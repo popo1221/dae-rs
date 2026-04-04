@@ -47,17 +47,15 @@ impl ProcessResolver {
         let reader = BufReader::new(file);
         let mut args = Vec::new();
 
-        for line in reader.split(0u8) {
-            if let Ok(bytes) = line {
-                if bytes.is_empty() {
-                    break;
-                }
-                // cmdline uses null bytes as separators
-                let arg = String::from_utf8_lossy(&bytes)
-                    .trim_end_matches('\0')
-                    .to_string();
-                args.push(arg);
+        for bytes in reader.split(0u8).flatten() {
+            if bytes.is_empty() {
+                break;
             }
+            // cmdline uses null bytes as separators
+            let arg = String::from_utf8_lossy(&bytes)
+                .trim_end_matches('\0')
+                .to_string();
+            args.push(arg);
         }
 
         if args.is_empty() {

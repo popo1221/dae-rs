@@ -8,6 +8,7 @@
 //! - Bandwidth congestion control
 //! - Simple authentication via password
 
+#[allow(clippy::module_inception)]
 pub mod hysteria2;
 pub mod quic;
 

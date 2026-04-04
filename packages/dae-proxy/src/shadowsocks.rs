@@ -49,6 +49,7 @@ impl std::fmt::Display for SsCipherType {
     }
 }
 
+#[allow(clippy::should_implement_trait)]
 impl SsCipherType {
     /// Parse cipher type from string
     pub fn from_str(s: &str) -> Option<Self> {

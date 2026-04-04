@@ -5,9 +5,8 @@
 #[cfg(test)]
 mod e2e_tests {
     use dae_config::{
-        subscription::SubscriptionConfig, Config, ConfigError, GlobalConfig, LegacyConfig,
-        LogLevel, NodeConfig, NodeType, ProxyConfig, RuleGroupConfig, RulesConfig,
-        ShadowsocksServerConfig, TrojanServerConfig, TrojanTlsConfig, VlessServerConfig,
+        subscription::SubscriptionConfig, Config, ConfigError, LegacyConfig, LogLevel, NodeConfig,
+        NodeType, ProxyConfig, RulesConfig, TrojanServerConfig, TrojanTlsConfig, VlessServerConfig,
         VlessTlsConfig, VmessServerConfig,
     };
     use std::time::Duration;
@@ -507,7 +506,7 @@ type = "ipcidr"
         let tracking = dae_config::TrackingConfig::default();
         // Verify default construction doesn't panic
         // Specific defaults depend on implementation
-        assert!(tracking.enabled || !tracking.enabled); // Just check it's bool
+        let _ = tracking.enabled; // Just check it's a bool that doesn't panic
     }
 
     // ============================================================

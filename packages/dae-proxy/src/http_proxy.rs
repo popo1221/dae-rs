@@ -215,6 +215,7 @@ impl HttpProxyHandler {
     }
 
     /// Handle an HTTP proxy connection
+    #[allow(clippy::incompatible_msrv)]
     pub async fn handle(self: Arc<Self>, mut client: TcpStream) -> std::io::Result<()> {
         // Read the request line
         let mut line = String::new();

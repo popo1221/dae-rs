@@ -14,7 +14,7 @@ use std::time::Duration;
 
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use tokio::net::{TcpStream, UdpSocket};
-use tracing::{debug, error, info, warn};
+use tracing::{debug, info, warn};
 
 use crate::core::{Context, Result as ProxyResult};
 use crate::protocol::ProtocolHandler;
@@ -96,6 +96,7 @@ pub enum CongestionControl {
 
 impl CongestionControl {
     /// Parse from string
+    #[allow(clippy::should_implement_trait)]
     pub fn from_str(s: &str) -> Option<Self> {
         match s.to_lowercase().as_str() {
             "bbr" => Some(CongestionControl::Bbr),

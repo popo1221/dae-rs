@@ -71,7 +71,7 @@ impl AnyTlsHandler {
     }
 
     /// Perform AnyTLS handshake
-    pub async fn handshake(&self, stream: &mut TcpStream) -> std::io::Result<()> {
+    pub async fn handshake(&self, _stream: &mut TcpStream) -> std::io::Result<()> {
         // AnyTLS handshake:
         // 1. Client sends client_hello with AnyTLS extension
         // 2. Server responds with server_hello

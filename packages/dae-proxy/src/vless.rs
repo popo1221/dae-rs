@@ -28,13 +28,14 @@ use tokio::net::{TcpListener, TcpStream, UdpSocket};
 use tokio::sync::Mutex;
 use tracing::{debug, error, info};
 
-use crate::protocol::{Handler, HandlerConfig};
+use crate::protocol::HandlerConfig;
 
 /// VLESS protocol version
 const VLESS_VERSION: u8 = 0x01;
 
 /// VLESS header size constants
 const VLESS_HEADER_MIN_SIZE: usize = 38; // v1 + uuid(16) + ver(1) + cmd(1) + port(4) + atyp(1) + iv(16)
+#[allow(dead_code)]
 const VLESS_REQUEST_HEADER_SIZE: usize = 22; // port(4) + atyp(1) + addr + iv(16)
 
 /// VLESS command types
@@ -399,7 +400,7 @@ impl VlessHandler {
     async fn handle_tcp(
         self: &Arc<Self>,
         mut client: TcpStream,
-        header_buf: &[u8],
+        _header_buf: &[u8],
     ) -> std::io::Result<()> {
         // Read additional header: port(4) + atyp(1) + addr + iv(16)
         let mut addl_buf = vec![0u8; 64];
@@ -407,7 +408,7 @@ impl VlessHandler {
 
         // Parse address
         let address = self.parse_target_address(&addl_buf)?;
-        let port = match &address {
+        let _port = match &address {
             VlessTargetAddress::Domain(_, p) => *p,
             _ => u16::from_be_bytes([addl_buf[5], addl_buf[6]]),
         };
@@ -560,7 +561,7 @@ impl VlessHandler {
                         );
                         continue;
                     }
-                    let domain = String::from_utf8(
+                    let _domain = String::from_utf8(
                         buf[addr_start + 1..addr_start + 1 + domain_len].to_vec(),
                     )
                     .unwrap_or_else(|_| "invalid".to_string());
@@ -1002,7 +1003,7 @@ impl VlessHandler {
         &self,
         buffer: &mut Vec<u8>,
         client_public: &[u8; 32],
-        request: &[u8; 48],
+        _request: &[u8; 48],
     ) -> std::io::Result<()> {
         // Extension type: key_share (0x0033)
         buffer.push(0x00);
@@ -1075,7 +1076,7 @@ impl VlessHandler {
                     ));
                 }
                 let ip = IpAddr::V4(Ipv4Addr::new(buf[5], buf[6], buf[7], buf[8]));
-                let port = u16::from_be_bytes([buf[9], buf[10]]);
+                let _port = u16::from_be_bytes([buf[9], buf[10]]);
                 Ok(VlessTargetAddress::Ipv4(ip))
             }
             Some(VlessAddressType::Domain) => {
@@ -1115,7 +1116,7 @@ impl VlessHandler {
                     u16::from_be_bytes([buf[17], buf[18]]),
                     u16::from_be_bytes([buf[19], buf[20]]),
                 ));
-                let port = u16::from_be_bytes([buf[21], buf[22]]);
+                let _port = u16::from_be_bytes([buf[21], buf[22]]);
                 Ok(VlessTargetAddress::Ipv6(ip))
             }
             None => Err(std::io::Error::new(

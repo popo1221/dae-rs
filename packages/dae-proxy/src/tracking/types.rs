@@ -2,7 +2,7 @@
 //!
 //! Core data structures for connection, node, rule, and protocol tracking.
 
-use std::time::{Duration, SystemTime};
+use std::time::SystemTime;
 
 /// Connection tracking key (5-tuple)
 #[derive(Clone, Copy, Debug, Default, Hash, PartialEq, Eq)]
@@ -635,6 +635,12 @@ impl TrackingMetrics {
             self.protocols.udp.packets,
             self.protocols.udp.bytes,
         )
+    }
+}
+
+impl Default for TrackingMetrics {
+    fn default() -> Self {
+        Self::new()
     }
 }
 

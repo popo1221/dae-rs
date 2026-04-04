@@ -5,7 +5,6 @@
 //!
 //! Protocol spec: https://github.com/p4gefau1t/trojan-go
 
-use std::io::ErrorKind;
 use std::time::Duration;
 
 use tokio_tungstenite::{connect_async, tungstenite::protocol::Message};
@@ -22,6 +21,7 @@ pub enum TrojanGoMode {
     WebSocketTLS,
 }
 
+#[allow(clippy::should_implement_trait)]
 impl TrojanGoMode {
     pub fn from_str(s: &str) -> Option<Self> {
         match s.to_lowercase().as_str() {

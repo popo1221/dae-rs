@@ -14,7 +14,7 @@ use std::net::SocketAddr;
 use std::time::Duration;
 
 use tokio::net::UdpSocket;
-use tracing::{error, warn};
+use tracing::warn;
 
 /// QUIC endpoint configuration
 #[derive(Debug, Clone)]

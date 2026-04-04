@@ -14,7 +14,6 @@ use crate::transport::Transport;
 use async_trait::async_trait;
 use std::fmt::Debug;
 use std::io::{Error as IoError, ErrorKind};
-use std::time::Duration;
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use tokio::net::TcpStream;
 
@@ -186,6 +185,7 @@ impl Transport for HttpUpgradeTransport {
 
 /// Simple HTTPUpgrade connection handler for server-side
 #[derive(Debug)]
+#[allow(dead_code)]
 pub struct HttpUpgradeHandler {
     config: HttpUpgradeConfig,
 }

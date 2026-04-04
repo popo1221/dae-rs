@@ -45,8 +45,8 @@ impl DomainRuleType {
     pub fn parse(s: &str) -> Self {
         if s.starts_with('.') {
             DomainRuleType::Suffix(s.to_lowercase())
-        } else if s.starts_with("keyword:") {
-            DomainRuleType::Keyword(s[8..].to_lowercase())
+        } else if let Some(stripped) = s.strip_prefix("keyword:") {
+            DomainRuleType::Keyword(stripped.to_lowercase())
         } else {
             DomainRuleType::Exact(s.to_lowercase())
         }
@@ -164,8 +164,8 @@ pub struct GeoIpRule {
 impl GeoIpRule {
     /// Create a new GeoIP rule
     pub fn new(country_code: &str) -> Self {
-        let (code, is_exclude) = if country_code.starts_with('!') {
-            (&country_code[1..], true)
+        let (code, is_exclude) = if let Some(stripped) = country_code.strip_prefix('!') {
+            (stripped, true)
         } else {
             (country_code, false)
         };
@@ -199,8 +199,8 @@ pub struct ProcessRule {
 impl ProcessRule {
     /// Create a new process rule
     pub fn new(process_name: &str) -> Self {
-        let (name, is_exclude) = if process_name.starts_with('!') {
-            (&process_name[1..], true)
+        let (name, is_exclude) = if let Some(stripped) = process_name.strip_prefix('!') {
+            (stripped, true)
         } else {
             (process_name, false)
         };
@@ -247,6 +247,7 @@ pub enum DnsQueryType {
     ANY = 255,
 }
 
+#[allow(clippy::should_implement_trait)]
 impl DnsQueryType {
     /// Parse DNS query type from string
     pub fn from_str(s: &str) -> Option<Self> {
@@ -397,6 +398,7 @@ pub enum Rule {
 
 impl Rule {
     /// Create a rule from type string and value
+    #[allow(clippy::new_ret_no_self)]
     pub fn new(
         rule_type_str: &str,
         value: &str,

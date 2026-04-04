@@ -9,6 +9,7 @@
 //! Client -> dae-rs (Juicity client) -> remote Juicity server -> target
 
 pub mod codec;
+#[allow(clippy::module_inception)]
 pub mod juicity;
 
 pub use codec::{JuicityAddress, JuicityCodec, JuicityCommand, JuicityFrame};

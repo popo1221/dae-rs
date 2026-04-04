@@ -16,13 +16,13 @@
 
 use super::Transport;
 use async_trait::async_trait;
-use bytes::{Buf, BufMut, Bytes, BytesMut};
+use bytes::{BufMut, Bytes, BytesMut};
 use std::fmt::Debug;
 use std::io::{Error as IoError, ErrorKind, Result as IoResult};
 use std::time::Duration;
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use tokio::net::TcpStream;
-use tracing::{debug, error, info};
+use tracing::{debug, info};
 
 /// gRPC transport configuration
 #[derive(Debug, Clone)]
@@ -120,6 +120,7 @@ impl GrpcTransport {
     }
 }
 
+#[allow(dead_code)]
 impl GrpcTransport {
     /// Build HTTP/2 SETTINGS frame
     fn build_settings_frame() -> Bytes {
@@ -139,12 +140,12 @@ impl GrpcTransport {
 
     /// Build HTTP/2 HEADERS frame for gRPC request
     fn build_request_headers(config: &GrpcConfig, stream_id: u32) -> Bytes {
-        let mut buf = BytesMut::new();
+        let _buf = BytesMut::new();
 
         // Build pseudo-headers (must come before regular headers)
         let host = &config.host;
         let path = config.path();
-        let scheme = if config.tls { "https" } else { "http" };
+        let _scheme = if config.tls { "https" } else { "http" };
 
         // Calculate the header block size
         // :method: POST
@@ -274,7 +275,7 @@ impl GrpcTransport {
         let frame_type = header[3];
         let _flags = header[4];
         let stream_id = (u32::from_be_bytes([0, header[5], header[6], header[7]]) & 0x7FFFFFFF)
-            | ((header[5] & 0x80) != 0) as u32 * 0x80000000;
+            | (((header[5] & 0x80) != 0) as u32 * 0x80000000);
 
         if length > 0 {
             let mut payload = vec![0u8; length as usize];
@@ -288,7 +289,7 @@ impl GrpcTransport {
     /// Read HTTP/2 SETTINGS frame and send ACK
     async fn handle_settings<R: AsyncReadExt + Unpin, W: AsyncWriteExt + Unpin>(
         &self,
-        reader: &mut R,
+        _reader: &mut R,
         writer: &mut W,
         _flags: u8,
     ) -> IoResult<()> {
@@ -361,6 +362,7 @@ impl Transport for GrpcTransport {
 
 /// gRPC client for making individual requests
 #[derive(Debug)]
+#[allow(dead_code)]
 pub struct GrpcClient {
     config: GrpcConfig,
 }

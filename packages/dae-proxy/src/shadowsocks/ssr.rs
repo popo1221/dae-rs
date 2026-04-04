@@ -37,6 +37,7 @@ pub enum SsrProtocol {
     AuthChain,
 }
 
+#[allow(clippy::should_implement_trait)]
 impl SsrProtocol {
     pub fn from_str(s: &str) -> Option<Self> {
         match s.to_lowercase().as_str() {
@@ -81,6 +82,7 @@ pub enum SsrObfs {
     Tls12TicketAuth,
 }
 
+#[allow(clippy::should_implement_trait)]
 impl SsrObfs {
     pub fn from_str(s: &str) -> Option<Self> {
         match s.to_lowercase().as_str() {
@@ -297,17 +299,12 @@ impl SsrHandler {
 
     /// Build protocol header based on protocol type
     fn build_protocol_header(&self, protocol_flag: u8) -> std::io::Result<Vec<u8>> {
-        let mut header = Vec::new();
-
-        // Protocol version (1 byte)
-        header.push(0x01);
-
-        // Protocol type (1 byte)
-        header.push(protocol_flag);
-
-        // Reserved bytes (2 bytes)
-        header.push(0x00);
-        header.push(0x00);
+        let header = vec![
+            0x01,          // Protocol version (1 byte)
+            protocol_flag, // Protocol type (1 byte)
+            0x00,
+            0x00, // Reserved bytes (2 bytes)
+        ];
 
         Ok(header)
     }

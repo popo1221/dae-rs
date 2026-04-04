@@ -108,7 +108,7 @@ pub enum DetectionMethod {
 }
 
 /// Capability filter for routing rules
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Default)]
 pub struct CapabilityFilter {
     /// Required full-cone support (None = don't care)
     pub fullcone: Option<bool>,
@@ -160,16 +160,6 @@ impl CapabilityFilter {
             }
         }
         true
-    }
-}
-
-impl Default for CapabilityFilter {
-    fn default() -> Self {
-        Self {
-            fullcone: None,
-            udp: None,
-            v2ray: None,
-        }
     }
 }
 

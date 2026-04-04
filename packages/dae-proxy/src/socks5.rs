@@ -572,6 +572,7 @@ impl Socks5Handler {
     }
 
     /// Handle CONNECT command
+    #[allow(clippy::incompatible_msrv)]
     async fn handle_connect(
         &self,
         mut client: TcpStream,

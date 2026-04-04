@@ -27,8 +27,8 @@ impl ProcessMatchRule {
     /// - "chrome" -> match chrome, action
     /// - "!chrome" -> match anything except chrome, action
     pub fn new(process_name: &str, action: RuleAction) -> Self {
-        let (name, is_exclude) = if process_name.starts_with('!') {
-            (&process_name[1..], true)
+        let (name, is_exclude) = if let Some(stripped) = process_name.strip_prefix('!') {
+            (stripped, true)
         } else {
             (process_name, false)
         };

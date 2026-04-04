@@ -31,9 +31,11 @@ use tracing::{error, info};
 /// Log level enum
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
 #[serde(rename_all = "lowercase")]
+#[derive(Default)]
 pub enum LogLevel {
     Trace,
     Debug,
+    #[default]
     Info,
     Warn,
     Error,
@@ -41,6 +43,7 @@ pub enum LogLevel {
 
 impl LogLevel {
     /// Convert from string
+    #[allow(clippy::should_implement_trait)]
     pub fn from_str(s: &str) -> Option<Self> {
         match s.to_lowercase().as_str() {
             "trace" => Some(LogLevel::Trace),
@@ -66,12 +69,6 @@ impl LogLevel {
     /// Check if this level should be logged given the current level
     pub fn should_log(&self, min_level: LogLevel) -> bool {
         *self >= min_level
-    }
-}
-
-impl Default for LogLevel {
-    fn default() -> Self {
-        LogLevel::Info
     }
 }
 
