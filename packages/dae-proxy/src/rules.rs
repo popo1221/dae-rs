@@ -24,6 +24,8 @@ pub enum RuleType {
     DnsType,
     /// Node capability match (fullcone, udp, v2ray)
     Capability,
+    /// Node tag match (matches nodes with specified tag)
+    NodeTag,
 }
 
 /// Domain rule types
@@ -362,6 +364,48 @@ impl CapabilityRule {
     }
 }
 
+/// Node tag rule - matches packets based on the selected node's tag
+///
+/// This rule type is used to route traffic to nodes with specific tags.
+/// For example, a rule with tag "hk" would match if the selected node
+/// has the "hk" tag.
+///
+/// Note: Node-tag rules require node tag support in the proxy chain.
+/// The `PacketInfo.node_tag` field must be set before rule matching for
+/// this rule type to work correctly.
+#[derive(Debug, Clone)]
+pub struct NodeTagRule {
+    /// Tag to match against
+    pub tag: String,
+}
+
+impl NodeTagRule {
+    /// Create a new node tag rule
+    pub fn new(tag: &str) -> Self {
+        Self {
+            tag: tag.to_lowercase(),
+        }
+    }
+
+    /// Check if this rule matches the given packet info
+    ///
+    /// Returns true if the packet info's `node_tag` matches this rule's tag.
+    /// If `node_tag` is not set (None), returns false.
+    pub fn matches_packet(&self, info: &PacketInfo) -> bool {
+        // node_tag must be set by the node selector before rule matching
+        // For now, we check if info.node_tag matches our tag
+        // This will be implemented fully when node group support is added
+        if let Some(ref node_tag) = info.node_tag {
+            node_tag.to_lowercase() == self.tag
+        } else {
+            // If no node tag is set, we can't match
+            // This is expected behavior when node-tag rules are used but
+            // node selection hasn't populated the tag yet
+            false
+        }
+    }
+}
+
 /// Rule action for configuration
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum RuleMatchAction {
@@ -399,6 +443,8 @@ pub enum Rule {
     DnsType(DnsTypeRule),
     /// Node capability rule
     Capability(CapabilityRule),
+    /// Node tag rule (matches against selected node's tag)
+    NodeTag(NodeTagRule),
 }
 
 impl Rule {
@@ -433,6 +479,8 @@ impl Rule {
             }
             "udp" | "udp(enabled)" => Rule::Capability(CapabilityRule::new("udp", value)?),
             "v2ray" | "v2ray(compatible)" => Rule::Capability(CapabilityRule::new("v2ray", value)?),
+            // Node tag rules
+            "node-tag" | "nodetag" | "tag" => Rule::NodeTag(NodeTagRule::new(value)),
             _ => return Err(format!("Unknown rule type: {rule_type_str}")),
         };
 
@@ -477,6 +525,7 @@ impl Rule {
                 }
             }
             Rule::Capability(r) => r.matches_packet(info),
+            Rule::NodeTag(r) => r.matches_packet(info),
         }
     }
 }

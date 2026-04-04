@@ -153,6 +153,16 @@ pub fn validate_rule(rule: &RuleConfigItem) -> Result<(), RuleValidationError> {
                 _ => Err(RuleValidationError::InvalidRuleValue(value)),
             }
         }
+        // Node tag rules - match packets by the node tags selected for routing
+        // Value is the tag to match (e.g., "hk", "proxy", "fullcone")
+        "node-tag" | "nodetag" | "tag" => {
+            // Tag should be non-empty
+            if rule.value.trim().is_empty() {
+                Err(RuleValidationError::InvalidRuleValue(rule.value.clone()))
+            } else {
+                Ok(())
+            }
+        }
         _ => Err(RuleValidationError::InvalidRuleType(rule.rule_type.clone())),
     }?;
 
@@ -362,6 +372,34 @@ rules = [
             rule_type: "domain".to_string(),
             value: "".to_string(),
             action: "pass".to_string(),
+            priority: None,
+        };
+        assert!(validate_rule(&rule).is_err());
+    }
+
+    #[test]
+    fn test_validate_node_tag_rule() {
+        let rule = RuleConfigItem {
+            rule_type: "node-tag".to_string(),
+            value: "hk".to_string(),
+            action: "proxy".to_string(),
+            priority: None,
+        };
+        assert!(validate_rule(&rule).is_ok());
+
+        let rule = RuleConfigItem {
+            rule_type: "nodetag".to_string(),
+            value: "proxy".to_string(),
+            action: "proxy".to_string(),
+            priority: None,
+        };
+        assert!(validate_rule(&rule).is_ok());
+
+        // Empty tag should fail
+        let rule = RuleConfigItem {
+            rule_type: "node-tag".to_string(),
+            value: "".to_string(),
+            action: "proxy".to_string(),
             priority: None,
         };
         assert!(validate_rule(&rule).is_err());

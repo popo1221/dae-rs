@@ -28,6 +28,10 @@ pub struct SubscriptionEntry {
     /// Optional name/alias for this subscription
     #[serde(default)]
     pub name: Option<String>,
+    /// Tags to apply to all nodes from this subscription
+    /// Nodes fetched from this subscription will inherit these tags
+    #[serde(default)]
+    pub tags: Vec<String>,
 }
 
 fn default_subscription_interval() -> u64 {
@@ -346,6 +350,10 @@ pub struct NodeConfig {
     /// Node capabilities (fullcone, udp, v2ray)
     #[serde(default)]
     pub capabilities: Option<NodeCapabilities>,
+    /// Node tags/labels for grouping and rule matching
+    /// Example: tags = ["hk", "proxy", "fullcone"]
+    #[serde(default)]
+    pub tags: Vec<String>,
 }
 
 impl NodeConfig {
@@ -788,6 +796,7 @@ impl Config {
                 tls_server_name: None,
                 aead: Some(ss.ota),
                 capabilities: None,
+                tags: vec![],
             });
         }
 
@@ -807,6 +816,7 @@ impl Config {
                 tls_server_name: vless.tls.and_then(|t| t.server_name),
                 aead: None,
                 capabilities: None,
+                tags: vec![],
             });
         }
 
@@ -826,6 +836,7 @@ impl Config {
                 tls_server_name: None,
                 aead: Some(vmess.enable_aead),
                 capabilities: None,
+                tags: vec![],
             });
         }
 
@@ -845,6 +856,7 @@ impl Config {
                 tls_server_name: trojan.tls.and_then(|t| t.server_name),
                 aead: None,
                 capabilities: None,
+                tags: vec![],
             });
         }
 
@@ -1171,6 +1183,7 @@ mod tests {
             tls_server_name: None,
             aead: None,
             capabilities: None,
+            tags: vec![],
         };
         assert_eq!(node.display_addr(), "1.2.3.4:8388");
     }
@@ -1193,6 +1206,7 @@ mod tests {
                 tls_server_name: None,
                 aead: None,
                 capabilities: None,
+            tags: vec![],
             }],
             subscriptions: vec![],
             rules: RulesConfig::default(),
@@ -1221,6 +1235,7 @@ mod tests {
                 tls_server_name: None,
                 aead: None,
                 capabilities: None,
+            tags: vec![],
             }],
             subscriptions: vec![],
             rules: RulesConfig::default(),
@@ -1283,6 +1298,7 @@ mod tests {
                     tls_server_name: None,
                     aead: None,
                     capabilities: None,
+                    tags: vec![],
                 },
                 NodeConfig {
                     name: "node2".to_string(),
@@ -1298,6 +1314,7 @@ mod tests {
                     tls_server_name: None,
                     aead: None,
                     capabilities: None,
+                    tags: vec![],
                 },
             ],
             subscriptions: vec![],
@@ -1328,6 +1345,7 @@ mod tests {
                 verify_tls: true,
                 user_agent: None,
                 name: Some("my-sub".to_string()),
+                tags: vec![],
             }],
             rules: RulesConfig::default(),
             logging: LoggingConfig::default(),
@@ -1348,6 +1366,7 @@ mod tests {
                 verify_tls: true,
                 user_agent: None,
                 name: None,
+                tags: vec![],
             }],
             rules: RulesConfig::default(),
             logging: LoggingConfig::default(),
@@ -1368,6 +1387,7 @@ mod tests {
                 verify_tls: true,
                 user_agent: None,
                 name: None,
+                tags: vec![],
             }],
             rules: RulesConfig::default(),
             logging: LoggingConfig::default(),

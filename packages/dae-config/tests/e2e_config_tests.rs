@@ -105,6 +105,7 @@ uuid = "12345678-1234-1234-1234-123456789012"
                 tls_server_name: None,
                 aead: None,
                 capabilities: None,
+                tags: vec![],
             }],
             subscriptions: vec![],
             rules: RulesConfig::default(),
@@ -137,6 +138,7 @@ uuid = "12345678-1234-1234-1234-123456789012"
                 tls_server_name: None,
                 aead: None,
                 capabilities: None,
+                tags: vec![],
             }],
             subscriptions: vec![],
             rules: RulesConfig::default(),
@@ -170,6 +172,7 @@ uuid = "12345678-1234-1234-1234-123456789012"
                 tls_server_name: None,
                 aead: None,
                 capabilities: None,
+                tags: vec![],
             }],
             subscriptions: vec![],
             rules: RulesConfig::default(),
@@ -233,6 +236,7 @@ uuid = "12345678-1234-1234-1234-123456789012"
                     tls_server_name: None,
                     aead: None,
                     capabilities: None,
+                    tags: vec![],
                 },
                 NodeConfig {
                     name: "node-b".to_string(),
@@ -248,6 +252,7 @@ uuid = "12345678-1234-1234-1234-123456789012"
                     tls_server_name: None,
                     aead: None,
                     capabilities: None,
+                    tags: vec![],
                 },
             ],
             subscriptions: vec![],
@@ -281,6 +286,7 @@ uuid = "12345678-1234-1234-1234-123456789012"
                     tls_server_name: None,
                     aead: None,
                     capabilities: None,
+                    tags: vec![],
                 },
                 NodeConfig {
                     name: "vless-1".to_string(),
@@ -296,6 +302,7 @@ uuid = "12345678-1234-1234-1234-123456789012"
                     tls_server_name: None,
                     aead: None,
                     capabilities: None,
+                    tags: vec![],
                 },
                 NodeConfig {
                     name: "trojan-1".to_string(),
@@ -311,6 +318,7 @@ uuid = "12345678-1234-1234-1234-123456789012"
                     tls_server_name: None,
                     aead: None,
                     capabilities: None,
+                    tags: vec![],
                 },
                 NodeConfig {
                     name: "ss-2".to_string(),
@@ -326,6 +334,7 @@ uuid = "12345678-1234-1234-1234-123456789012"
                     tls_server_name: None,
                     aead: None,
                     capabilities: None,
+                    tags: vec![],
                 },
             ],
             subscriptions: vec![],
@@ -478,6 +487,7 @@ type = "ipcidr"
             tls_server_name: None,
             aead: None,
             capabilities: None,
+            tags: vec![],
         };
 
         assert_eq!(node.display_addr(), "example.com:443");

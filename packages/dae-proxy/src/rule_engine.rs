@@ -43,6 +43,9 @@ pub struct PacketInfo {
     pub node_udp: Option<bool>,
     /// Node capability: V2Ray compatibility
     pub node_v2ray: Option<bool>,
+    /// Selected node's tag (for node-tag rule matching)
+    /// This is set by the node selector when a node is chosen for routing
+    pub node_tag: Option<String>,
 }
 
 impl Default for PacketInfo {
@@ -63,6 +66,7 @@ impl Default for PacketInfo {
             node_fullcone: None,
             node_udp: None,
             node_v2ray: None,
+            node_tag: None,
         }
     }
 }
