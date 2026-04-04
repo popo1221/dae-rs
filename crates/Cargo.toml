@@ -3,7 +3,9 @@ resolver = "2"
 members = [
     "dae-core",
     "dae-proxy-core",
+    "dae-protocol-shadowsocks",
     "dae-protocol-socks5",
+    "dae-transport",
 ]
 
 [workspace.dependencies]
