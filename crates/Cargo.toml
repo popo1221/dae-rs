@@ -5,6 +5,9 @@ members = [
     "dae-proxy-core",
     "dae-protocol-shadowsocks",
     "dae-protocol-socks5",
+    "dae-protocol-trojan",
+    "dae-protocol-vless",
+    "dae-protocol-vmess",
     "dae-transport",
 ]
 
