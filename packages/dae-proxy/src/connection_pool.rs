@@ -1,6 +1,16 @@
 //! Connection pool for managing TCP/UDP connections
 //!
 //! Provides connection reuse by 4-tuple and expiration management.
+//!
+//! # Lock Contention Design (Issue #65)
+//!
+//! Uses double-checked locking pattern to minimize write lock contention:
+//! - Fast path (cache hit): read lock only — multiple readers can proceed in parallel
+//! - Slow path (cache miss): write lock only when creating new connection
+//!
+//! This is the optimal single-HashMap design. See issue #65 for context.
+//! A sharded (N×HashMap) design could reduce contention further but adds
+//! complexity and is not justified without benchmarking evidence.
 
 use crate::connection::{new_connection, ConnectionState, Protocol, SharedConnection};
 use std::collections::HashMap;

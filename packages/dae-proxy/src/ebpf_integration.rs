@@ -2,12 +2,15 @@
 //!
 //! Provides wrappers around eBPF maps for session, routing, and stats management.
 //!
-//! # ⚠️ Implementation Status
+//! # ⚠️ Implementation Status (Issue #62, #73)
 //!
-//! **This is an in-memory stub for development/testing.**
-//! Real eBPF map operations require the `aya` crate and kernel BPF support.
+//! **This is an in-memory stub by design.** Real eBPF integration requires:
+//! 1. `aya` crate for kernel BPF program management
+//! 2. Compiled BPF object files (`.o`) with actual map definitions
+//! 3. Privileged access to load BPF programs into the kernel
 //!
-//! See GitHub Issue #73 for tracking the real eBPF implementation.
+//! This stub provides HashMap-backed fallbacks so dae-rs works without kernel BPF.
+//! See GitHub Issue #62 for context and #73 for eBPF map progress.
 //!
 //! # Implementation
 //!

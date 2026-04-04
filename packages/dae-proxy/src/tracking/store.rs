@@ -2,14 +2,19 @@
 //!
 //! Provides in-memory storage and aggregation for tracking data.
 //!
-//! # Implementation Status
+//! # Performance Notes (Issue #66)
 //!
-//! This module is **partially implemented**. It uses `RwLock<HashMap>` instead
-//! of the initially planned `dashmap` dependency. The current implementation
-//! works but may have performance limitations under high concurrency.
+//! Uses `RwLock<HashMap>` (single-shard). This is sufficient because:
+//! 1. The tracking store is used for HTTP API / metrics export only
+//! 2. The store methods (update_connection, record_connection_data) are NEVER
+//!    called from the packet processing hot path — they're invoked only from
+//!    the metrics HTTP server for aggregated reporting
+//! 3. For HTTP API access patterns, `RwLock<HashMap>` is more than adequate
 //!
-//! See issue #66 on GitHub for tracking potential optimization (e.g., dashmap
-//! or concurrent hashmap replacement).
+//! A sharded (`dashmap` or multi-`RwLock`) implementation would only be
+//! beneficial if these methods were called per-packet, which they are not.
+//!
+//! See issue #66 on GitHub.
 
 use crate::tracking::types::*;
 use axum::{
