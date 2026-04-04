@@ -302,7 +302,8 @@ impl TrojanHandler {
                 debug!("Connected UDP socket to backend {}", backend_addr);
 
                 // Relay UDP packets between client (TCP) and remote (UDP)
-                self.relay_udp_over_tcp(client, remote_udp, &address_str).await?;
+                self.relay_udp_over_tcp(client, remote_udp, &address_str)
+                    .await?;
 
                 Ok(())
             }
@@ -336,10 +337,7 @@ impl TrojanHandler {
         const MAX_UDP_FRAME_SIZE: usize = 65535;
         let remote_addr = target_info.to_string();
 
-        info!(
-            "Starting Trojan UDP relay: {} via UDP socket",
-            remote_addr
-        );
+        info!("Starting Trojan UDP relay: {} via UDP socket", remote_addr);
 
         // For Trojan UDP over TCP, we need to:
         // 1. Read UDP frames from client TCP stream
@@ -350,7 +348,8 @@ impl TrojanHandler {
             // Read UDP frame header from TCP
             // Minimum header: cmd(1) + uuid(16) + ver(1) + port(2) + atyp(1) = 21 bytes
             let mut header_buf = [0u8; 21];
-            match tokio::time::timeout(self.config.udp_timeout, client.read_exact(&mut header_buf)).await
+            match tokio::time::timeout(self.config.udp_timeout, client.read_exact(&mut header_buf))
+                .await
             {
                 Ok(Ok(_)) => {}
                 Ok(Err(e)) => {
@@ -383,7 +382,8 @@ impl TrojanHandler {
                             // IPv4 - 4 bytes
                             let mut ip_buf = [0u8; 4];
                             client.read_exact(&mut ip_buf).await?;
-                            IpAddr::V4(Ipv4Addr::new(ip_buf[0], ip_buf[1], ip_buf[2], ip_buf[3])).to_string()
+                            IpAddr::V4(Ipv4Addr::new(ip_buf[0], ip_buf[1], ip_buf[2], ip_buf[3]))
+                                .to_string()
                         }
                         0x02 => {
                             // Domain - 1 byte length + domain
@@ -392,11 +392,12 @@ impl TrojanHandler {
                             let domain_len = len_buf[0] as usize;
                             let mut domain_buf = vec![0u8; domain_len];
                             client.read_exact(&mut domain_buf).await?;
-                            String::from_utf8(domain_buf)
-                                .map_err(|_| std::io::Error::new(
+                            String::from_utf8(domain_buf).map_err(|_| {
+                                std::io::Error::new(
                                     std::io::ErrorKind::InvalidData,
                                     "invalid domain in Trojan UDP header",
-                                ))?
+                                )
+                            })?
                         }
                         0x03 => {
                             // IPv6 - 16 bytes
@@ -411,7 +412,8 @@ impl TrojanHandler {
                                 u16::from_be_bytes([ip_buf[10], ip_buf[11]]),
                                 u16::from_be_bytes([ip_buf[12], ip_buf[13]]),
                                 u16::from_be_bytes([ip_buf[14], ip_buf[15]]),
-                            )).to_string()
+                            ))
+                            .to_string()
                         }
                         _ => {
                             debug!("Unknown address type in Trojan UDP: {}", atyp);

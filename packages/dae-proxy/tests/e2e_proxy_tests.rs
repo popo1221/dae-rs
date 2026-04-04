@@ -6,8 +6,8 @@
 #[cfg(test)]
 mod e2e_tests {
     use dae_proxy::{
-        ConnectionKey, ConnectionPool, Protocol, RuleEngine, RuleEngineConfig,
-        RuleMatchAction, SharedConnectionPool,
+        ConnectionKey, ConnectionPool, Protocol, RuleEngine, RuleEngineConfig, RuleMatchAction,
+        SharedConnectionPool,
     };
     use std::net::{IpAddr, Ipv4Addr, Ipv6Addr, SocketAddr};
     use std::sync::Arc;
@@ -37,7 +37,10 @@ mod e2e_tests {
 
         // Second connection with same 4-tuple - should reuse
         let (conn2, created2) = pool.get_or_create(key).await;
-        assert!(!created2, "Second connection should be reused (not created)");
+        assert!(
+            !created2,
+            "Second connection should be reused (not created)"
+        );
 
         // Both connections should have same source and destination addresses
         let conn1_read = conn1.read().await;
@@ -414,10 +417,7 @@ mod e2e_tests {
 
         // IPv6 source and destination
         let key = ConnectionKey::new(
-            SocketAddr::new(
-                IpAddr::V6(Ipv6Addr::new(0, 0, 0, 0, 0, 0, 0, 1)),
-                54321,
-            ),
+            SocketAddr::new(IpAddr::V6(Ipv6Addr::new(0, 0, 0, 0, 0, 0, 0, 1)), 54321),
             SocketAddr::new(
                 IpAddr::V6(Ipv6Addr::new(0x2001, 0x4860, 0x4860, 0, 0, 0, 0, 0x8888)),
                 443,
@@ -448,10 +448,7 @@ mod e2e_tests {
         ));
 
         let key = ConnectionKey::new(
-            SocketAddr::new(
-                IpAddr::V6(Ipv6Addr::new(0, 0, 0, 0, 0, 0, 0, 1)),
-                60000,
-            ),
+            SocketAddr::new(IpAddr::V6(Ipv6Addr::new(0, 0, 0, 0, 0, 0, 0, 1)), 60000),
             SocketAddr::new(
                 IpAddr::V6(Ipv6Addr::new(0x2001, 0x4860, 0x4860, 0, 0, 0, 0, 0x8888)),
                 53,
@@ -638,10 +635,7 @@ mod e2e_tests {
 
         let key = ConnectionKey::new(
             SocketAddr::new(IpAddr::V4(Ipv4Addr::new(192, 168, 1, 1)), 50000),
-            SocketAddr::new(
-                IpAddr::V6(Ipv6Addr::new(0, 0, 0, 0, 0, 0, 0, 1)),
-                443,
-            ),
+            SocketAddr::new(IpAddr::V6(Ipv6Addr::new(0, 0, 0, 0, 0, 0, 0, 1)), 443),
             Protocol::Tcp,
         );
 

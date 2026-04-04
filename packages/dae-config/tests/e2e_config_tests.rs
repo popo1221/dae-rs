@@ -113,7 +113,10 @@ uuid = "12345678-1234-1234-1234-123456789012"
             tracking: dae_config::TrackingConfig::default(),
         };
 
-        assert!(config.validate().is_ok(), "Valid config should pass validation");
+        assert!(
+            config.validate().is_ok(),
+            "Valid config should pass validation"
+        );
     }
 
     #[test]
@@ -142,7 +145,10 @@ uuid = "12345678-1234-1234-1234-123456789012"
         };
 
         let result = config.validate();
-        assert!(result.is_err(), "Config with empty server should fail validation");
+        assert!(
+            result.is_err(),
+            "Config with empty server should fail validation"
+        );
     }
 
     #[test]
@@ -171,7 +177,10 @@ uuid = "12345678-1234-1234-1234-123456789012"
         };
 
         let result = config.validate();
-        assert!(result.is_err(), "Config with zero port should fail validation");
+        assert!(
+            result.is_err(),
+            "Config with zero port should fail validation"
+        );
     }
 
     // ============================================================
@@ -414,7 +423,10 @@ type = "ipcidr"
 
         // Modifying clone shouldn't affect original
         let _ = config2.with_insecure_tls();
-        assert!(config1.verify_tls, "Original should still have TLS verification");
+        assert!(
+            config1.verify_tls,
+            "Original should still have TLS verification"
+        );
     }
 
     // ============================================================
@@ -548,7 +560,8 @@ type = "ipcidr"
 
     #[test]
     fn test_trojan_server_config_new() {
-        let trojan = TrojanServerConfig::new("test-trojan", "trojan.example.com", 443, "trojan-pwd");
+        let trojan =
+            TrojanServerConfig::new("test-trojan", "trojan.example.com", 443, "trojan-pwd");
 
         assert_eq!(trojan.name, "test-trojan");
         assert_eq!(trojan.addr, "trojan.example.com");
@@ -660,7 +673,10 @@ trojan_password = "jp-trojan-password"
         assert_eq!(config.nodes[1].name, "US-VLESS");
         assert_eq!(config.nodes[1].node_type, NodeType::Vless);
         assert!(config.nodes[1].tls.is_some());
-        assert_eq!(config.nodes[1].tls_server_name.as_deref(), Some("us-vless.example.com"));
+        assert_eq!(
+            config.nodes[1].tls_server_name.as_deref(),
+            Some("us-vless.example.com")
+        );
 
         // Trojan node
         assert_eq!(config.nodes[2].name, "JP-Trojan");
@@ -741,11 +757,14 @@ ota = false
 
     #[test]
     fn test_logging_config_with_file() {
-        let logging: dae_config::LoggingConfig = toml::from_str(r#"
+        let logging: dae_config::LoggingConfig = toml::from_str(
+            r#"
 level = "debug"
 file = "/var/log/dae.log"
 structured = true
-"#).unwrap();
+"#,
+        )
+        .unwrap();
 
         assert_eq!(logging.level, "debug");
         assert_eq!(logging.file.as_deref(), Some("/var/log/dae.log"));

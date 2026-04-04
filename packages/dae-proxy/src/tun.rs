@@ -1342,7 +1342,8 @@ mod tests {
         assert!(!tun_packet.is_tcp());
 
         // Verify DNS query was parsed successfully
-        let dns = tun_packet.dns_query
+        let dns = tun_packet
+            .dns_query
             .expect("DNS query should be parsed - check DNS packet format in test");
         assert_eq!(dns.domain, "foo.bar");
         assert_eq!(dns.qtype, 1);

@@ -415,52 +415,53 @@ impl VmessHandler {
 
         // Parse the decrypted VMess header:
         // [version(1)][option(1)][port(2)][addr_type(1)][addr(var)][timestamp(4)][random(4)][checksum(4)]
-        let (target_addr, target_port) =
-            match VmessTargetAddress::parse_from_bytes(&decrypted_header) {
-                Some((addr, port)) => (addr, port),
-                None => {
-                    // Fallback: some VMess implementations may have non-standard header formatting.
-                    // We try to find an address type marker (0x01=IPv4, 0x02=domain, 0x03=IPv6)
-                    // in the decrypted data. This is a best-effort approach for compatibility.
-                    //
-                    // Note: This fallback is fragile because random bytes in the header
-                    // could accidentally match address type markers. We log a warning
-                    // when this fallback is used so operators can investigate.
-                    warn!(
+        let (target_addr, target_port) = match VmessTargetAddress::parse_from_bytes(
+            &decrypted_header,
+        ) {
+            Some((addr, port)) => (addr, port),
+            None => {
+                // Fallback: some VMess implementations may have non-standard header formatting.
+                // We try to find an address type marker (0x01=IPv4, 0x02=domain, 0x03=IPv6)
+                // in the decrypted data. This is a best-effort approach for compatibility.
+                //
+                // Note: This fallback is fragile because random bytes in the header
+                // could accidentally match address type markers. We log a warning
+                // when this fallback is used so operators can investigate.
+                warn!(
                         "VMess TCP: {} standard header parsing failed, trying fallback heuristic (may indicate non-standard implementation)",
                         client_addr
                     );
-                    if let Some(pos) = decrypted_header
-                        .iter()
-                        .position(|&b| matches!(b, 0x01 | 0x02 | 0x03))
+                if let Some(pos) = decrypted_header
+                    .iter()
+                    .position(|&b| matches!(b, 0x01 | 0x02 | 0x03))
+                {
+                    if let Some(result) =
+                        VmessTargetAddress::parse_from_bytes(&decrypted_header[pos..])
                     {
-                        if let Some(result) =
-                            VmessTargetAddress::parse_from_bytes(&decrypted_header[pos..])
-                        {
-                            debug!("VMess TCP: {} fallback parsing succeeded at pos {}", client_addr, pos);
-                            (result.0, result.1)
-                        } else {
-                            error!(
-                                "VMess TCP: {} fallback parsing also failed",
-                                client_addr
-                            );
-                            return Err(std::io::Error::new(
-                                std::io::ErrorKind::InvalidData,
-                                "invalid VMess decrypted header",
-                            ));
-                        }
-                    } else {
-                        error!(
-                            "VMess TCP: {} no address type found in decrypted header",
-                            client_addr
+                        debug!(
+                            "VMess TCP: {} fallback parsing succeeded at pos {}",
+                            client_addr, pos
                         );
+                        (result.0, result.1)
+                    } else {
+                        error!("VMess TCP: {} fallback parsing also failed", client_addr);
                         return Err(std::io::Error::new(
                             std::io::ErrorKind::InvalidData,
-                            "no address in VMess header",
+                            "invalid VMess decrypted header",
                         ));
                     }
+                } else {
+                    error!(
+                        "VMess TCP: {} no address type found in decrypted header",
+                        client_addr
+                    );
+                    return Err(std::io::Error::new(
+                        std::io::ErrorKind::InvalidData,
+                        "no address in VMess header",
+                    ));
                 }
-            };
+            }
+        };
 
         info!(
             "VMess TCP: {} -> {}:{} (via {}:{})",
