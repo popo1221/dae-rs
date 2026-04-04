@@ -1196,7 +1196,7 @@ impl VlessServer {
         if let Some(socket) = maybe_socket {
             let handler = self.handler.clone();
             tokio::spawn(async move {
-                handler.handle_udp(Arc::new(socket)).await;
+                let _ = handler.handle_udp(Arc::new(socket)).await;
             });
             info!("VLESS UDP server listening on {}", self.listen_addr);
         }
