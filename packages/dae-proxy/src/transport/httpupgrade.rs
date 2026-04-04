@@ -331,8 +331,8 @@ mod tests {
 
     #[test]
     fn test_http_upgrade_config_builder_full() {
-        let config = HttpUpgradeConfig::new("host.com", 8443, "/tunnel")
-            .with_tls(Some("tls.host.com"));
+        let config =
+            HttpUpgradeConfig::new("host.com", 8443, "/tunnel").with_tls(Some("tls.host.com"));
 
         assert_eq!(config.host, "host.com");
         assert_eq!(config.port, 8443);
@@ -349,8 +349,14 @@ mod tests {
         config = config.with_header("Authorization", "Bearer token");
 
         assert_eq!(config.headers.len(), 3);
-        assert!(config.headers.iter().any(|(k, v)| k == "Accept" && v == "*/*"));
-        assert!(config.headers.iter().any(|(k, v)| k == "User-Agent" && v == "test-agent"));
+        assert!(config
+            .headers
+            .iter()
+            .any(|(k, v)| k == "Accept" && v == "*/*"));
+        assert!(config
+            .headers
+            .iter()
+            .any(|(k, v)| k == "User-Agent" && v == "test-agent"));
     }
 
     #[test]
@@ -360,9 +366,7 @@ mod tests {
         config = config.with_header("Host", "new-override.com");
 
         // Only the last value should be kept for each key
-        let host_values: Vec<_> = config.headers.iter()
-            .filter(|(k, _)| k == "Host")
-            .collect();
+        let host_values: Vec<_> = config.headers.iter().filter(|(k, _)| k == "Host").collect();
         assert!(host_values.iter().any(|(_, v)| v == "new-override.com"));
     }
 
@@ -381,7 +385,10 @@ mod tests {
 
         assert_eq!(cloned.host, config.host);
         assert_eq!(cloned.tls_domain, config.tls_domain);
-        assert!(cloned.headers.iter().any(|(k, v)| k == "X-Test" && v == "value"));
+        assert!(cloned
+            .headers
+            .iter()
+            .any(|(k, v)| k == "X-Test" && v == "value"));
     }
 
     #[test]

@@ -495,9 +495,8 @@ pub fn parse_sip008_subscription(content: &[u8]) -> Result<SubscriptionUpdate, S
 
 /// Parse Clash YAML subscription content
 pub fn parse_clash_yaml(content: &str) -> Result<Vec<String>, SubscriptionError> {
-    let sub: ClashSubscription = serde_yaml::from_str(content).map_err(|e| {
-        SubscriptionError::ParseError(format!("Failed to parse Clash YAML: {}", e))
-    })?;
+    let sub: ClashSubscription = serde_yaml::from_str(content)
+        .map_err(|e| SubscriptionError::ParseError(format!("Failed to parse Clash YAML: {}", e)))?;
 
     let proxies = sub.proxies.ok_or_else(|| {
         SubscriptionError::ParseError("No proxies found in Clash subscription".to_string())
@@ -528,7 +527,10 @@ fn clash_proxy_to_uri(proxy: &ClashProxy) -> String {
             if let Some(ref plugin) = proxy.plugin {
                 if !plugin.is_empty() {
                     let opts = proxy.plugin_opts.as_deref().unwrap_or("");
-                    uri.push_str(&format!("?plugin={}", urlencoding::encode(&format!("{};{}", plugin, opts))));
+                    uri.push_str(&format!(
+                        "?plugin={}",
+                        urlencoding::encode(&format!("{};{}", plugin, opts))
+                    ));
                 }
             }
 
@@ -538,9 +540,18 @@ fn clash_proxy_to_uri(proxy: &ClashProxy) -> String {
         "trojan" => {
             // Trojan: trojan://password@server:port
             let password = proxy.password.as_deref().unwrap_or("");
-            let sni = proxy.sni.as_deref().or(proxy.tls_server_name.as_deref()).unwrap_or("");
+            let sni = proxy
+                .sni
+                .as_deref()
+                .or(proxy.tls_server_name.as_deref())
+                .unwrap_or("");
             let skip_verify = proxy.skip_cert_verify.unwrap_or(false);
-            let mut uri = format!("trojan://{}@{}:{}", urlencoding::encode(password), proxy.server, proxy.port);
+            let mut uri = format!(
+                "trojan://{}@{}:{}",
+                urlencoding::encode(password),
+                proxy.server,
+                proxy.port
+            );
 
             if !sni.is_empty() {
                 uri.push_str(&format!("?sni={}", urlencoding::encode(sni)));
@@ -557,7 +568,11 @@ fn clash_proxy_to_uri(proxy: &ClashProxy) -> String {
             let uuid = proxy.uuid.as_deref().unwrap_or("");
             let security = proxy.security.as_deref().unwrap_or("auto");
             let alter_id = proxy.alter_id.unwrap_or(0);
-            let sni = proxy.sni.as_deref().or(proxy.tls_server_name.as_deref()).unwrap_or("");
+            let sni = proxy
+                .sni
+                .as_deref()
+                .or(proxy.tls_server_name.as_deref())
+                .unwrap_or("");
             let network = proxy.network.as_deref().unwrap_or("tcp");
             let ws_path = proxy.ws_path.as_deref().unwrap_or("");
             let tls = proxy.tls.unwrap_or(false);
@@ -597,7 +612,11 @@ fn clash_proxy_to_uri(proxy: &ClashProxy) -> String {
         "vless" => {
             // VLESS: vless://uuid@server:port?params#name
             let uuid = proxy.uuid.as_deref().unwrap_or("");
-            let sni = proxy.sni.as_deref().or(proxy.tls_server_name.as_deref()).unwrap_or("");
+            let sni = proxy
+                .sni
+                .as_deref()
+                .or(proxy.tls_server_name.as_deref())
+                .unwrap_or("");
             let flow = proxy.flow.as_deref().unwrap_or("");
             let skip_verify = proxy.skip_cert_verify.unwrap_or(false);
             let mut uri = format!("vless://{}@{}:{}", uuid, proxy.server, proxy.port);
@@ -655,10 +674,7 @@ fn singbox_outbound_to_uri(outbound: &SingBoxOutbound) -> Option<String> {
     match outbound.type_.to_lowercase().as_str() {
         "trojan" => {
             let password = outbound.password.as_deref().unwrap_or("");
-            let sni = outbound
-                .tls_server_name
-                .as_deref()
-                .unwrap_or("");
+            let sni = outbound.tls_server_name.as_deref().unwrap_or("");
             let skip_verify = outbound.skip_cert_verify.unwrap_or(false);
             let mut uri = format!(
                 "trojan://{}@{}:{}",
@@ -678,7 +694,10 @@ fn singbox_outbound_to_uri(outbound: &SingBoxOutbound) -> Option<String> {
             Some(uri)
         }
         "shadowsocks" => {
-            let method = outbound.method.as_deref().unwrap_or("chacha20-ietf-poly1305");
+            let method = outbound
+                .method
+                .as_deref()
+                .unwrap_or("chacha20-ietf-poly1305");
             let password = outbound.password.as_deref().unwrap_or("");
             let user_info = format!("{}:{}", method, password);
             let encoded = base64::engine::general_purpose::STANDARD.encode(user_info.as_bytes());
@@ -778,7 +797,9 @@ pub fn uri_to_node_config(uri: &str) -> Result<NodeConfig, SubscriptionError> {
     // Remove fragment (name) if present
     let (uri_without_fragment, name) = if let Some(pos) = uri.find('#') {
         let fragment = &uri[pos + 1..];
-        let decoded_name = urlencoding::decode(fragment).unwrap_or_default().to_string();
+        let decoded_name = urlencoding::decode(fragment)
+            .unwrap_or_default()
+            .to_string();
         (&uri[..pos], Some(decoded_name))
     } else {
         (uri, None)
@@ -801,9 +822,9 @@ pub fn uri_to_node_config(uri: &str) -> Result<NodeConfig, SubscriptionError> {
 
 /// Parse Shadowsocks URI
 fn parse_ss_uri(uri: &str, name: Option<String>) -> Result<NodeConfig, SubscriptionError> {
-    let uri_str = uri.strip_prefix("ss://").ok_or_else(|| {
-        SubscriptionError::ParseError("Invalid ss:// URI".to_string())
-    })?;
+    let uri_str = uri
+        .strip_prefix("ss://")
+        .ok_or_else(|| SubscriptionError::ParseError("Invalid ss:// URI".to_string()))?;
 
     // Format: ss://BASE64(method:password)@server:port?plugin=...#name
     // Find the @ separator
@@ -821,8 +842,9 @@ fn parse_ss_uri(uri: &str, name: Option<String>) -> Result<NodeConfig, Subscript
         Err(_) => {
             // Try URL-safe base64
             match base64::engine::general_purpose::URL_SAFE.decode(user_info) {
-                Ok(decoded) => String::from_utf8(decoded)
-                    .map_err(|e| SubscriptionError::ParseError(format!("Invalid SS user info: {}", e)))?,
+                Ok(decoded) => String::from_utf8(decoded).map_err(|e| {
+                    SubscriptionError::ParseError(format!("Invalid SS user info: {}", e))
+                })?,
                 Err(_) => {
                     // Treat as plain user:password
                     user_info.to_string()
@@ -843,9 +865,9 @@ fn parse_ss_uri(uri: &str, name: Option<String>) -> Result<NodeConfig, Subscript
 
     // Parse server:port from server_part
     // server_part is like "1.2.3.4:8388" or "1.2.3.4:8388?plugin=..."
-    let (server, port_str) = server_part
-        .split_once(':')
-        .ok_or_else(|| SubscriptionError::ParseError("Invalid Shadowsocks URI: missing port".to_string()))?;
+    let (server, port_str) = server_part.split_once(':').ok_or_else(|| {
+        SubscriptionError::ParseError("Invalid Shadowsocks URI: missing port".to_string())
+    })?;
 
     // Handle query params if present (e.g., ?plugin=...)
     let _plugin = if let Some(query_pos) = server_part.find('?') {
@@ -886,9 +908,9 @@ fn parse_ss_uri(uri: &str, name: Option<String>) -> Result<NodeConfig, Subscript
 
 /// Parse VMess URI
 fn parse_vmess_uri(uri: &str, name: Option<String>) -> Result<NodeConfig, SubscriptionError> {
-    let uri_str = uri.strip_prefix("vmess://").ok_or_else(|| {
-        SubscriptionError::ParseError("Invalid vmess:// URI".to_string())
-    })?;
+    let uri_str = uri
+        .strip_prefix("vmess://")
+        .ok_or_else(|| SubscriptionError::ParseError("Invalid vmess:// URI".to_string()))?;
 
     let decoded = base64::engine::general_purpose::STANDARD
         .decode(uri_str.as_bytes())
@@ -913,19 +935,20 @@ fn parse_vmess_uri(uri: &str, name: Option<String>) -> Result<NodeConfig, Subscr
         tls: Option<String>,
     }
 
-    let vmess: VmessJson = serde_json::from_str(&json_str)
-        .map_err(|e| SubscriptionError::ParseError(format!("Invalid VMess JSON structure: {}", e)))?;
+    let vmess: VmessJson = serde_json::from_str(&json_str).map_err(|e| {
+        SubscriptionError::ParseError(format!("Invalid VMess JSON structure: {}", e))
+    })?;
 
     let node_name = name.or(vmess.ps).unwrap_or_else(|| "VMess".to_string());
     let server = vmess.add.ok_or_else(|| {
         SubscriptionError::ParseError("VMess URI missing server address".to_string())
     })?;
-    let port = vmess.port.ok_or_else(|| {
-        SubscriptionError::ParseError("VMess URI missing port".to_string())
-    })?;
-    let uuid = vmess.id.ok_or_else(|| {
-        SubscriptionError::ParseError("VMess URI missing id (UUID)".to_string())
-    })?;
+    let port = vmess
+        .port
+        .ok_or_else(|| SubscriptionError::ParseError("VMess URI missing port".to_string()))?;
+    let uuid = vmess
+        .id
+        .ok_or_else(|| SubscriptionError::ParseError("VMess URI missing id (UUID)".to_string()))?;
 
     let tls_enabled = vmess.tls.as_deref().map(|t| !t.is_empty()).unwrap_or(false);
     let tls_server_name = if tls_enabled {
@@ -953,9 +976,9 @@ fn parse_vmess_uri(uri: &str, name: Option<String>) -> Result<NodeConfig, Subscr
 
 /// Parse VLESS URI
 fn parse_vless_uri(uri: &str, name: Option<String>) -> Result<NodeConfig, SubscriptionError> {
-    let uri_str = uri.strip_prefix("vless://").ok_or_else(|| {
-        SubscriptionError::ParseError("Invalid vless:// URI".to_string())
-    })?;
+    let uri_str = uri
+        .strip_prefix("vless://")
+        .ok_or_else(|| SubscriptionError::ParseError("Invalid vless:// URI".to_string()))?;
 
     // Format: vless://uuid@server:port?params#name
     let (user_at_server, fragment) = if let Some(pos) = uri_str.find('#') {
@@ -970,16 +993,16 @@ fn parse_vless_uri(uri: &str, name: Option<String>) -> Result<NodeConfig, Subscr
         (user_at_server, None)
     };
 
-    let uuid_at = uuid_at_server.find('@').ok_or_else(|| {
-        SubscriptionError::ParseError("Invalid VLESS URI: missing @".to_string())
-    })?;
+    let uuid_at = uuid_at_server
+        .find('@')
+        .ok_or_else(|| SubscriptionError::ParseError("Invalid VLESS URI: missing @".to_string()))?;
 
     let uuid = &uuid_at_server[..uuid_at];
     let server_port = &uuid_at_server[uuid_at + 1..];
 
-    let (server, port_str) = server_port
-        .rsplit_once(':')
-        .ok_or_else(|| SubscriptionError::ParseError("Invalid VLESS URI: missing port".to_string()))?;
+    let (server, port_str) = server_port.rsplit_once(':').ok_or_else(|| {
+        SubscriptionError::ParseError("Invalid VLESS URI: missing port".to_string())
+    })?;
 
     let port: u16 = port_str
         .parse()
@@ -1003,7 +1026,8 @@ fn parse_vless_uri(uri: &str, name: Option<String>) -> Result<NodeConfig, Subscr
         }
     }
 
-    let node_name = name.or_else(|| fragment.and_then(|f| urlencoding::decode(f).ok().map(|s| s.to_string())))
+    let node_name = name
+        .or_else(|| fragment.and_then(|f| urlencoding::decode(f).ok().map(|s| s.to_string())))
         .unwrap_or_else(|| "VLESS".to_string());
 
     Ok(NodeConfig {
@@ -1025,9 +1049,9 @@ fn parse_vless_uri(uri: &str, name: Option<String>) -> Result<NodeConfig, Subscr
 
 /// Parse Trojan URI
 fn parse_trojan_uri(uri: &str, name: Option<String>) -> Result<NodeConfig, SubscriptionError> {
-    let uri_str = uri.strip_prefix("trojan://").ok_or_else(|| {
-        SubscriptionError::ParseError("Invalid trojan:// URI".to_string())
-    })?;
+    let uri_str = uri
+        .strip_prefix("trojan://")
+        .ok_or_else(|| SubscriptionError::ParseError("Invalid trojan:// URI".to_string()))?;
 
     // Format: trojan://password@server:port?params#name
     let (user_at_server, fragment) = if let Some(pos) = uri_str.find('#') {
@@ -1036,17 +1060,17 @@ fn parse_trojan_uri(uri: &str, name: Option<String>) -> Result<NodeConfig, Subsc
         (uri_str, None)
     };
 
-    let (password, server_port) = user_at_server
-        .split_once('@')
-        .ok_or_else(|| SubscriptionError::ParseError("Invalid Trojan URI: missing @".to_string()))?;
+    let (password, server_port) = user_at_server.split_once('@').ok_or_else(|| {
+        SubscriptionError::ParseError("Invalid Trojan URI: missing @".to_string())
+    })?;
 
     let decoded_password = urlencoding::decode(password)
         .unwrap_or_default()
         .to_string();
 
-    let (server, port_and_query) = server_port
-        .rsplit_once(':')
-        .ok_or_else(|| SubscriptionError::ParseError("Invalid Trojan URI: missing port".to_string()))?;
+    let (server, port_and_query) = server_port.rsplit_once(':').ok_or_else(|| {
+        SubscriptionError::ParseError("Invalid Trojan URI: missing port".to_string())
+    })?;
 
     // Handle query params if present
     let (port_str, _query) = port_and_query
@@ -1073,7 +1097,8 @@ fn parse_trojan_uri(uri: &str, name: Option<String>) -> Result<NodeConfig, Subsc
         }
     }
 
-    let node_name = name.or_else(|| fragment.and_then(|f| urlencoding::decode(f).ok().map(|s| s.to_string())))
+    let node_name = name
+        .or_else(|| fragment.and_then(|f| urlencoding::decode(f).ok().map(|s| s.to_string())))
         .unwrap_or_else(|| "Trojan".to_string());
 
     Ok(NodeConfig {
@@ -1514,7 +1539,8 @@ trojan://example4
             "path": "",
             "tls": "tls"
         });
-        let encoded = base64::engine::general_purpose::STANDARD.encode(vmess_json.to_string().as_bytes());
+        let encoded =
+            base64::engine::general_purpose::STANDARD.encode(vmess_json.to_string().as_bytes());
         let uri = format!("vmess://{}", encoded);
         let result = uri_to_node_config(&uri);
         assert!(result.is_ok());
@@ -1534,7 +1560,10 @@ trojan://example4
         assert_eq!(config.node_type, NodeType::Vless);
         assert_eq!(config.server, "1.2.3.4");
         assert_eq!(config.port, 443);
-        assert_eq!(config.uuid, Some("12345678-1234-1234-1234-123456789012".to_string()));
+        assert_eq!(
+            config.uuid,
+            Some("12345678-1234-1234-1234-123456789012".to_string())
+        );
     }
 
     #[test]
@@ -1625,7 +1654,10 @@ proxies:
         assert_eq!(format!("{:?}", SubscriptionType::Sip008), "Sip008");
         assert_eq!(format!("{:?}", SubscriptionType::Base64), "Base64");
         assert_eq!(format!("{:?}", SubscriptionType::ClashYaml), "ClashYaml");
-        assert_eq!(format!("{:?}", SubscriptionType::SingBoxJson), "SingBoxJson");
+        assert_eq!(
+            format!("{:?}", SubscriptionType::SingBoxJson),
+            "SingBoxJson"
+        );
         assert_eq!(format!("{:?}", SubscriptionType::Auto), "Auto");
     }
 
@@ -1700,10 +1732,7 @@ proxies:
         let user_info = "aes-256-gcm:password123";
         let encoded = base64::engine::general_purpose::STANDARD.encode(user_info.as_bytes());
         let ss_uri = format!("ss://{}@1.2.3.4:8388#Test1", encoded);
-        let uris = vec![
-            ss_uri,
-            "trojan://mypassword@5.6.7.8:443#Test2".to_string(),
-        ];
+        let uris = vec![ss_uri, "trojan://mypassword@5.6.7.8:443#Test2".to_string()];
         let result = uris_to_node_configs(&uris);
         assert!(result.is_ok());
         let configs = result.unwrap();

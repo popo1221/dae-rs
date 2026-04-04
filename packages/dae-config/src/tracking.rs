@@ -203,17 +203,39 @@ impl Default for TrackingNodesConfig {
 }
 
 // Tracking default helper functions
-fn default_tracking_export_interval() -> u64 { 10 }
-fn default_max_connections() -> usize { 65536 }
-fn default_max_rules() -> usize { 1024 }
-fn default_connection_ttl() -> u64 { 3600 }
-fn default_prometheus_port() -> u16 { 9090 }
-fn default_prometheus_path() -> String { "/metrics".to_string() }
-fn default_json_api_port() -> u16 { 8080 }
-fn default_json_api_path() -> String { "/api/stats".to_string() }
-fn default_packet_sample_rate() -> u32 { 100 }
-fn default_latency_sample_rate() -> u32 { 10 }
+fn default_tracking_export_interval() -> u64 {
+    10
+}
+fn default_max_connections() -> usize {
+    65536
+}
+fn default_max_rules() -> usize {
+    1024
+}
+fn default_connection_ttl() -> u64 {
+    3600
+}
+fn default_prometheus_port() -> u16 {
+    9090
+}
+fn default_prometheus_path() -> String {
+    "/metrics".to_string()
+}
+fn default_json_api_port() -> u16 {
+    8080
+}
+fn default_json_api_path() -> String {
+    "/api/stats".to_string()
+}
+fn default_packet_sample_rate() -> u32 {
+    100
+}
+fn default_latency_sample_rate() -> u32 {
+    10
+}
 fn default_latency_buckets() -> Vec<u32> {
     vec![10, 25, 50, 100, 200, 500, 1000]
 }
-fn default_true() -> bool { true }
+fn default_true() -> bool {
+    true
+}

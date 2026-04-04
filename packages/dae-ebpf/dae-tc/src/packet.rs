@@ -127,9 +127,7 @@ impl IpHdr {
         let data = ctx.data();
         let data_end = ctx.data_end();
 
-        let ptr = unsafe {
-            (data as *const u8).add(eth_offset) as *const IpHdr
-        };
+        let ptr = unsafe { (data as *const u8).add(eth_offset) as *const IpHdr };
         if ptr as usize + core::mem::size_of::<IpHdr>() > data_end {
             return None;
         }
@@ -194,9 +192,7 @@ impl TcpHdr {
         let data_end = ctx.data_end();
 
         let offset = ip_offset + ip_hdr_len as usize;
-        let ptr = unsafe {
-            (data as *const u8).add(offset) as *const TcpHdr
-        };
+        let ptr = unsafe { (data as *const u8).add(offset) as *const TcpHdr };
         if ptr as usize + core::mem::size_of::<TcpHdr>() > data_end {
             return None;
         }
@@ -266,9 +262,7 @@ impl UdpHdr {
         let data_end = ctx.data_end();
 
         let offset = ip_offset + ip_hdr_len as usize;
-        let ptr = unsafe {
-            (data as *const u8).add(offset) as *const UdpHdr
-        };
+        let ptr = unsafe { (data as *const u8).add(offset) as *const UdpHdr };
         if ptr as usize + core::mem::size_of::<UdpHdr>() > data_end {
             return None;
         }
@@ -314,9 +308,7 @@ impl IcmpHdr {
         let data_end = ctx.data_end();
 
         let offset = ip_offset + ip_hdr_len as usize;
-        let ptr = unsafe {
-            (data as *const u8).add(offset) as *const IcmpHdr
-        };
+        let ptr = unsafe { (data as *const u8).add(offset) as *const IcmpHdr };
         if ptr as usize + core::mem::size_of::<IcmpHdr>() > data_end {
             return None;
         }

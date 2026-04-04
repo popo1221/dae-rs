@@ -11,18 +11,13 @@ use tracing::{debug, info, warn};
 use crate::maps::MapManager;
 
 /// eBPF program type
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub enum EbpfProgramType {
     /// XDP (Express Data Path) program
+    #[default]
     Xdp,
     /// TC (Traffic Control) clsact program
     Tc,
-}
-
-impl Default for EbpfProgramType {
-    fn default() -> Self {
-        Self::Xdp
-    }
 }
 
 /// eBPF loader for dae-rs
@@ -166,7 +161,7 @@ impl EbpfLoader {
         if xdp_path.exists() {
             return self.load_xdp(interface, object).await;
         }
-        
+
         self.load_tc(interface, object).await
     }
 

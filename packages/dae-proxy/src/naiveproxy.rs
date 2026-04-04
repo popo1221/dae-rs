@@ -331,8 +331,8 @@ mod tests {
 
     #[test]
     fn test_naive_proxy_config_with_multiple_extra_args() {
-        let config = NaiveProxyConfig::new("127.0.0.1:1080", "https://proxy.com")
-            .with_extra_args(vec![
+        let config =
+            NaiveProxyConfig::new("127.0.0.1:1080", "https://proxy.com").with_extra_args(vec![
                 "--ipv6".to_string(),
                 "--verbose".to_string(),
                 "--conf=./config.json".to_string(),
@@ -399,14 +399,14 @@ mod tests {
 
     #[test]
     fn test_naive_proxy_manager_proxy_url() {
-        let manager = NaiveProxyManager::new(
-            NaiveProxyConfig::new("127.0.0.1:1080", "https://proxy1.com")
-        );
+        let manager = NaiveProxyManager::new(NaiveProxyConfig::new(
+            "127.0.0.1:1080",
+            "https://proxy1.com",
+        ));
         assert_eq!(manager.proxy_url(), "http://127.0.0.1:1080");
 
-        let manager = NaiveProxyManager::new(
-            NaiveProxyConfig::new("127.0.0.1:1081", "http://proxy2.com")
-        );
+        let manager =
+            NaiveProxyManager::new(NaiveProxyConfig::new("127.0.0.1:1081", "http://proxy2.com"));
         assert_eq!(manager.proxy_url(), "http://127.0.0.1:1081");
     }
 }

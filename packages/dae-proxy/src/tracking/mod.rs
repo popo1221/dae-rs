@@ -4,10 +4,10 @@
 //! connection-level, node-level, rule-level, and protocol-level statistics.
 
 // Re-export tracking types
-pub use crate::tracking::types::*;
 pub use crate::tracking::maps::*;
 pub use crate::tracking::store::*;
+pub use crate::tracking::types::*;
 
-pub mod types;
 pub mod maps;
 pub mod store;
+pub mod types;

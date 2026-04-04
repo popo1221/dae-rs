@@ -344,8 +344,14 @@ mod tests {
 
     #[test]
     fn test_detect_socks5_variants() {
-        assert_eq!(DetectedProtocol::detect(&[0x05, 0x00]), DetectedProtocol::Socks5);
-        assert_eq!(DetectedProtocol::detect(&[0x05, 0xFF, 0x00]), DetectedProtocol::Socks5);
+        assert_eq!(
+            DetectedProtocol::detect(&[0x05, 0x00]),
+            DetectedProtocol::Socks5
+        );
+        assert_eq!(
+            DetectedProtocol::detect(&[0x05, 0xFF, 0x00]),
+            DetectedProtocol::Socks5
+        );
     }
 
     #[test]

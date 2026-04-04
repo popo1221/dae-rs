@@ -507,15 +507,14 @@ impl Proxy {
                 let track_store = store_clone.clone();
 
                 if export_cfg.prometheus {
-                    info!("Starting tracking Prometheus metrics server on :{}/{}", prom_port, prom_path);
+                    info!(
+                        "Starting tracking Prometheus metrics server on :{}/{}",
+                        prom_port, prom_path
+                    );
                     let prom_store = store_clone.clone();
                     tokio::spawn(async move {
                         if let Err(e) = TrackingStore::start_http_server(
-                            prom_port,
-                            &prom_path,
-                            true,
-                            false,
-                            prom_store,
+                            prom_port, &prom_path, true, false, prom_store,
                         )
                         .await
                         {
@@ -525,15 +524,14 @@ impl Proxy {
                 }
 
                 if export_cfg.json_api {
-                    info!("Starting tracking JSON API server on :{}/{}", json_port, json_path);
+                    info!(
+                        "Starting tracking JSON API server on :{}/{}",
+                        json_port, json_path
+                    );
                     let json_store = store_clone.clone();
                     tokio::spawn(async move {
                         if let Err(e) = TrackingStore::start_http_server(
-                            json_port,
-                            &json_path,
-                            false,
-                            enable_ws,
-                            json_store,
+                            json_port, &json_path, false, enable_ws, json_store,
                         )
                         .await
                         {
@@ -546,9 +544,7 @@ impl Proxy {
                 track_store.record_routed(0);
             } else if self.config.tracking.enabled {
                 // Tracking is enabled but no export configured - just log it
-                info!(
-                    "Tracking enabled (no HTTP export configured), metrics available via store"
-                );
+                info!("Tracking enabled (no HTTP export configured), metrics available via store");
             }
         }
 

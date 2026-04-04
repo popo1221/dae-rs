@@ -638,7 +638,10 @@ mod tests {
     #[test]
     fn test_vmess_security_to_string() {
         assert_eq!(VmessSecurity::Aes128GcmAead.to_string(), "aes-128-gcm-aead");
-        assert_eq!(VmessSecurity::ChaCha20Poly1305Aead.to_string(), "chacha20-poly1305-aead");
+        assert_eq!(
+            VmessSecurity::ChaCha20Poly1305Aead.to_string(),
+            "chacha20-poly1305-aead"
+        );
         // None maps to "none" not "auto"
         assert_eq!(VmessSecurity::None.to_string(), "none");
     }

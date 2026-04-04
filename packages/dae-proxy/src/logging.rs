@@ -559,7 +559,11 @@ mod tests {
 
     #[test]
     fn test_log_message_format_with_target() {
-        let msg = LogMessage::with_target(LogLevel::Info, "proxy".to_string(), "test message".to_string());
+        let msg = LogMessage::with_target(
+            LogLevel::Info,
+            "proxy".to_string(),
+            "test message".to_string(),
+        );
         let display = msg.format_display();
         assert!(display.contains("proxy"));
         assert!(display.contains("info"));

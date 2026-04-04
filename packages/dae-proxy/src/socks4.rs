@@ -620,8 +620,7 @@ mod tests {
     #[tokio::test]
     async fn test_socks4_request_parse_bind() {
         let request = vec![
-            0x04,
-            0x02, // CMD BIND
+            0x04, 0x02, // CMD BIND
             0x00, 0x50, // DSTPORT: 80
             0x00, 0x00, 0x00, 0x00, // DSTIP: 0.0.0.0 (will be determined later)
             0x75, 0x73, 0x65, 0x72, 0x00, // USERID
@@ -635,10 +634,7 @@ mod tests {
     #[tokio::test]
     async fn test_socks4_request_parse_empty_user_id() {
         let request = vec![
-            0x04,
-            0x01,
-            0x00, 0x50,
-            0xC0, 0xA8, 0x01, 0x01,
+            0x04, 0x01, 0x00, 0x50, 0xC0, 0xA8, 0x01, 0x01,
             0x00, // Empty user ID (just null terminator)
         ];
 

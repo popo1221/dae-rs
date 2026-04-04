@@ -464,9 +464,7 @@ impl VlessHandler {
         });
         info!(
             "VLESS UDP: listening on {} (via {}:{})",
-            local_addr,
-            self.config.server.addr,
-            self.config.server.port
+            local_addr, self.config.server.addr, self.config.server.port
         );
 
         loop {
@@ -476,7 +474,10 @@ impl VlessHandler {
             const MIN_HEADER_SIZE: usize = 40;
 
             if n < MIN_HEADER_SIZE {
-                debug!("VLESS UDP: packet too small from {}: {} bytes", client_addr, n);
+                debug!(
+                    "VLESS UDP: packet too small from {}: {} bytes",
+                    client_addr, n
+                );
                 continue;
             }
 
@@ -504,7 +505,10 @@ impl VlessHandler {
             // Verify protocol version (byte 17)
             let ver = buf[17];
             if ver != VLESS_VERSION {
-                debug!("VLESS UDP: invalid protocol version {} from {}", ver, client_addr);
+                debug!(
+                    "VLESS UDP: invalid protocol version {} from {}",
+                    ver, client_addr
+                );
                 continue;
             }
 
@@ -531,22 +535,35 @@ impl VlessHandler {
                         debug!("VLESS UDP: buffer too small for IPv4 from {}", client_addr);
                         continue;
                     }
-                    let ip = IpAddr::V4(Ipv4Addr::new(buf[addr_start], buf[addr_start + 1], buf[addr_start + 2], buf[addr_start + 3]));
+                    let ip = IpAddr::V4(Ipv4Addr::new(
+                        buf[addr_start],
+                        buf[addr_start + 1],
+                        buf[addr_start + 2],
+                        buf[addr_start + 3],
+                    ));
                     (ip, 4)
                 }
                 Some(VlessAddressType::Domain) => {
                     // Domain: 1 byte length + domain name
                     if n < addr_start + 1 + 2 {
-                        debug!("VLESS UDP: buffer too small for domain length from {}", client_addr);
+                        debug!(
+                            "VLESS UDP: buffer too small for domain length from {}",
+                            client_addr
+                        );
                         continue;
                     }
                     let domain_len = buf[addr_start] as usize;
                     if n < addr_start + 1 + domain_len + 2 {
-                        debug!("VLESS UDP: buffer too small for domain from {}", client_addr);
+                        debug!(
+                            "VLESS UDP: buffer too small for domain from {}",
+                            client_addr
+                        );
                         continue;
                     }
-                    let domain = String::from_utf8(buf[addr_start + 1..addr_start + 1 + domain_len].to_vec())
-                        .unwrap_or_else(|_| "invalid".to_string());
+                    let domain = String::from_utf8(
+                        buf[addr_start + 1..addr_start + 1 + domain_len].to_vec(),
+                    )
+                    .unwrap_or_else(|_| "invalid".to_string());
                     (IpAddr::V4(Ipv4Addr::new(0, 0, 0, 0)), 1 + domain_len) // Placeholder, will resolve later
                 }
                 Some(VlessAddressType::Ipv6) => {
@@ -568,7 +585,10 @@ impl VlessHandler {
                     (ip, 16)
                 }
                 None => {
-                    debug!("VLESS UDP: invalid address type {} from {}", atyp, client_addr);
+                    debug!(
+                        "VLESS UDP: invalid address type {} from {}",
+                        atyp, client_addr
+                    );
                     continue;
                 }
             };
@@ -661,7 +681,12 @@ impl VlessHandler {
 
             // Receive response from server
             let mut response_buf = vec![0u8; MAX_UDP_SIZE];
-            match tokio::time::timeout(self.config.udp_timeout, server_socket.recv_from(&mut response_buf)).await {
+            match tokio::time::timeout(
+                self.config.udp_timeout,
+                server_socket.recv_from(&mut response_buf),
+            )
+            .await
+            {
                 Ok(Ok((m, _))) => {
                     // Forward response back to client
                     if let Err(e) = client.send_to(&response_buf[..m], &client_addr).await {
@@ -1304,9 +1329,18 @@ mod tests {
 
     #[test]
     fn test_vless_address_type_variants() {
-        assert_eq!(VlessAddressType::from_u8(0x01), Some(VlessAddressType::Ipv4));
-        assert_eq!(VlessAddressType::from_u8(0x02), Some(VlessAddressType::Domain));
-        assert_eq!(VlessAddressType::from_u8(0x03), Some(VlessAddressType::Ipv6));
+        assert_eq!(
+            VlessAddressType::from_u8(0x01),
+            Some(VlessAddressType::Ipv4)
+        );
+        assert_eq!(
+            VlessAddressType::from_u8(0x02),
+            Some(VlessAddressType::Domain)
+        );
+        assert_eq!(
+            VlessAddressType::from_u8(0x03),
+            Some(VlessAddressType::Ipv6)
+        );
         assert!(VlessAddressType::from_u8(0x00).is_none());
         assert!(VlessAddressType::from_u8(0x04).is_none());
     }
@@ -1395,7 +1429,7 @@ mod tests {
         packet.extend_from_slice(&uuid); // uuid
         packet.push(0x01); // ver
         packet.push(0x02); // cmd = UDP
-        // Port is 4 bytes (big-endian), pad with 0x00 for the high 2 bytes
+                           // Port is 4 bytes (big-endian), pad with 0x00 for the high 2 bytes
         packet.extend_from_slice(&[0x00, 0x00, 0x1F, 0x90]); // port = 8080
         packet.push(0x01); // atyp = IPv4
         packet.extend_from_slice(&[192, 168, 1, 1]); // IPv4 address
@@ -1409,7 +1443,10 @@ mod tests {
         assert_eq!(&packet[1..17], &uuid); // uuid
         assert_eq!(packet[17], 0x01); // ver
         assert_eq!(packet[18], 0x02); // cmd = UDP
-        assert_eq!(u32::from_be_bytes([packet[19], packet[20], packet[21], packet[22]]), 8080); // port (4 bytes)
+        assert_eq!(
+            u32::from_be_bytes([packet[19], packet[20], packet[21], packet[22]]),
+            8080
+        ); // port (4 bytes)
         assert_eq!(packet[23], 0x01); // atyp = IPv4
         assert_eq!(&packet[24..28], &[192, 168, 1, 1]); // addr
         assert_eq!(&packet[28..44], &[0u8; 16]); // iv
@@ -1438,7 +1475,10 @@ mod tests {
         assert_eq!(packet[0], 0x01); // v1
         assert_eq!(packet[17], 0x01); // ver
         assert_eq!(packet[18], 0x02); // cmd = UDP
-        assert_eq!(u32::from_be_bytes([packet[19], packet[20], packet[21], packet[22]]), 443); // port (4 bytes)
+        assert_eq!(
+            u32::from_be_bytes([packet[19], packet[20], packet[21], packet[22]]),
+            443
+        ); // port (4 bytes)
         assert_eq!(packet[23], 0x02); // atyp = Domain
         assert_eq!(packet[24], domain.len() as u8); // domain length
         assert_eq!(&packet[25..25 + domain.len()], domain); // domain
@@ -1456,10 +1496,10 @@ mod tests {
         packet.push(0x02); // cmd = UDP
         packet.extend_from_slice(&[0x00, 0x00, 0x1F, 0x90]); // port = 8080 (4 bytes)
         packet.push(0x03); // atyp = IPv6
-        // IPv6 address (16 bytes)
+                           // IPv6 address (16 bytes)
         packet.extend_from_slice(&[
-            0x20, 0x01, 0x0d, 0xb8, 0x00, 0x00, 0x00, 0x00,
-            0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x01,
+            0x20, 0x01, 0x0d, 0xb8, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+            0x00, 0x01,
         ]);
         packet.extend_from_slice(&[0u8; 16]); // iv (16 bytes)
         packet.extend_from_slice(b"ipv6 payload"); // payload
@@ -1467,7 +1507,12 @@ mod tests {
         // Verify header fields
         assert_eq!(packet[0], 0x01); // v1
         assert_eq!(packet[23], 0x03); // atyp = IPv6
-        assert_eq!(&packet[24..40], &[0x20, 0x01, 0x0d, 0xb8, 0x00, 0x00, 0x00, 0x00,
-            0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x01]); // IPv6
+        assert_eq!(
+            &packet[24..40],
+            &[
+                0x20, 0x01, 0x0d, 0xb8, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+                0x00, 0x01
+            ]
+        ); // IPv6
     }
 }

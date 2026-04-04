@@ -824,9 +824,18 @@ mod tests {
 
     #[test]
     fn test_socks5_command_all_variants() {
-        assert!(matches!(Socks5Command::from_u8(0x01), Some(Socks5Command::Connect)));
-        assert!(matches!(Socks5Command::from_u8(0x02), Some(Socks5Command::Bind)));
-        assert!(matches!(Socks5Command::from_u8(0x03), Some(Socks5Command::UdpAssociate)));
+        assert!(matches!(
+            Socks5Command::from_u8(0x01),
+            Some(Socks5Command::Connect)
+        ));
+        assert!(matches!(
+            Socks5Command::from_u8(0x02),
+            Some(Socks5Command::Bind)
+        ));
+        assert!(matches!(
+            Socks5Command::from_u8(0x03),
+            Some(Socks5Command::UdpAssociate)
+        ));
         assert!(Socks5Command::from_u8(0x00).is_none());
         assert!(Socks5Command::from_u8(0x04).is_none());
         assert!(Socks5Command::from_u8(0xFF).is_none());
@@ -834,10 +843,7 @@ mod tests {
 
     #[test]
     fn test_socks5_address_ipv6() {
-        let addr = Socks5Address::IPv6(
-            Ipv6Addr::new(0, 0, 0, 0, 0, 0, 0, 1),
-            8080,
-        );
+        let addr = Socks5Address::IPv6(Ipv6Addr::new(0, 0, 0, 0, 0, 0, 0, 1), 8080);
         let debug_str = format!("{:?}", addr);
         assert!(debug_str.contains("IPv6"));
     }
@@ -891,10 +897,7 @@ mod tests {
 
     #[test]
     fn test_socks5_address_ipv6_write_format() {
-        let addr = Socks5Address::IPv6(
-            Ipv6Addr::new(0x2001, 0xdb8, 0, 0, 0, 0, 0, 1),
-            443,
-        );
+        let addr = Socks5Address::IPv6(Ipv6Addr::new(0x2001, 0xdb8, 0, 0, 0, 0, 0, 1), 443);
         // Verify debug format works
         let debug_str = format!("{:?}", addr);
         assert!(debug_str.contains("IPv6"));

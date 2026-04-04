@@ -310,7 +310,9 @@ async fn run_proxy(
     let tun_proxy: Option<Arc<TunProxy>> = if let Some(ref tun_cfg) = tun_config {
         tracing::info!(
             "Initializing TUN transparent proxy: {} ({}/{})",
-            tun_cfg.tun_ip, tun_cfg.tun_netmask, tun_cfg.interface
+            tun_cfg.tun_ip,
+            tun_cfg.tun_netmask,
+            tun_cfg.interface
         );
 
         // Create DNS hijacker with upstream servers

@@ -1,0 +1,31 @@
+#!/bin/bash
+# pre-commit hook for dae-rs
+# Runs format check and clippy before every commit
+
+set -e
+
+echo "🔍 Checking formatting..."
+cargo fmt --all -- --check
+if [ $? -ne 0 ]; then
+    echo "❌ Formatting check failed. Run 'cargo fmt --all' to fix."
+    exit 1
+fi
+echo "✅ Formatting OK"
+
+echo "🔍 Running clippy..."
+cargo clippy --all \
+    -- -A clippy::should_implement_trait \
+    -A clippy::module_inception \
+    -A clippy::manual_strip \
+    -A clippy::manual_flatten \
+    -A clippy::doc_overindented_list_items \
+    -A clippy::new_ret_no_self \
+    -A clippy::unnecessary_box_returns
+if [ $? -ne 0 ]; then
+    echo "❌ Clippy found issues. Fix them before committing."
+    exit 1
+fi
+echo "✅ Clippy OK"
+
+echo ""
+echo "✅ All checks passed. Proceeding with commit."

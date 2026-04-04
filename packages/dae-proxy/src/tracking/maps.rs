@@ -220,13 +220,7 @@ mod tests {
 
     #[test]
     fn test_connection_key_hash() {
-        let key = EbpfConnectionKey::new(
-            0x7F000001,
-            0x08080808,
-            12345,
-            80,
-            6,
-        );
+        let key = EbpfConnectionKey::new(0x7F000001, 0x08080808, 12345, 80, 6);
         let hash = key.to_hash();
         assert_ne!(hash, 0);
     }

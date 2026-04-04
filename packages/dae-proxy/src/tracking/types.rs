@@ -96,7 +96,7 @@ impl ConnectionStatsEntry {
     pub fn update_packet(&mut self, bytes: u64, inbound: bool) {
         let now = current_epoch_ms();
         self.last_time = now;
-        
+
         if inbound {
             self.packets_in += 1;
             self.bytes_in += bytes;
@@ -179,16 +179,22 @@ impl NodeStatsEntry {
     }
 
     /// Record a request completion
-    pub fn record_request(&mut self, latency_ms: u32, success: bool, bytes_sent: u64, bytes_received: u64) {
+    pub fn record_request(
+        &mut self,
+        latency_ms: u32,
+        success: bool,
+        bytes_sent: u64,
+        bytes_received: u64,
+    ) {
         self.total_requests += 1;
         self.bytes_sent += bytes_sent;
         self.bytes_received += bytes_received;
-        
+
         // Update latency stats
         self.latency_sum += latency_ms as u64;
         self.latency_count += 1;
         self.latency_avg(); // Triggers recalculation
-        
+
         if success {
             self.successful_requests += 1;
         } else {
@@ -272,7 +278,7 @@ impl RuleStatsEntry {
     pub fn record_match(&mut self, action: RuleAction, bytes: u64) {
         self.match_count += 1;
         self.bytes_matched += bytes;
-        
+
         match action {
             RuleAction::Pass | RuleAction::Direct | RuleAction::MustDirect => {
                 self.pass_count += 1;
@@ -542,31 +548,59 @@ impl TrackingMetrics {
     /// Export as Prometheus format
     pub fn export_prometheus(&self) -> String {
         let mut output = String::new();
-        
+
         // Overall stats
         output.push_str("# dae-rs overall statistics\n");
-        output.push_str(&format!("dae_packets_total {}\n", self.overall.packets_total));
+        output.push_str(&format!(
+            "dae_packets_total {}\n",
+            self.overall.packets_total
+        ));
         output.push_str(&format!("dae_bytes_total {}\n", self.overall.bytes_total));
-        output.push_str(&format!("dae_connections_total {}\n", self.overall.connections_total));
-        output.push_str(&format!("dae_connections_active {}\n", self.overall.connections_active));
-        output.push_str(&format!("dae_dropped_total {}\n", self.overall.dropped_total));
+        output.push_str(&format!(
+            "dae_connections_total {}\n",
+            self.overall.connections_total
+        ));
+        output.push_str(&format!(
+            "dae_connections_active {}\n",
+            self.overall.connections_active
+        ));
+        output.push_str(&format!(
+            "dae_dropped_total {}\n",
+            self.overall.dropped_total
+        ));
         output.push_str(&format!("dae_routed_total {}\n", self.overall.routed_total));
-        output.push_str(&format!("dae_unmatched_total {}\n", self.overall.unmatched_total));
-        
+        output.push_str(&format!(
+            "dae_unmatched_total {}\n",
+            self.overall.unmatched_total
+        ));
+
         // Protocol stats
         output.push_str("\n# dae-rs protocol statistics\n");
-        output.push_str(&format!("dae_protocol_packets_total{{protocol=\"tcp\"}} {}\n", self.protocols.tcp.packets));
-        output.push_str(&format!("dae_protocol_bytes_total{{protocol=\"tcp\"}} {}\n", self.protocols.tcp.bytes));
-        output.push_str(&format!("dae_protocol_packets_total{{protocol=\"udp\"}} {}\n", self.protocols.udp.packets));
-        output.push_str(&format!("dae_protocol_bytes_total{{protocol=\"udp\"}} {}\n", self.protocols.udp.bytes));
-        
+        output.push_str(&format!(
+            "dae_protocol_packets_total{{protocol=\"tcp\"}} {}\n",
+            self.protocols.tcp.packets
+        ));
+        output.push_str(&format!(
+            "dae_protocol_bytes_total{{protocol=\"tcp\"}} {}\n",
+            self.protocols.tcp.bytes
+        ));
+        output.push_str(&format!(
+            "dae_protocol_packets_total{{protocol=\"udp\"}} {}\n",
+            self.protocols.udp.packets
+        ));
+        output.push_str(&format!(
+            "dae_protocol_bytes_total{{protocol=\"udp\"}} {}\n",
+            self.protocols.udp.bytes
+        ));
+
         output
     }
 
     /// Export as JSON (manual format, no serde required)
     #[allow(dead_code)]
     pub fn export_json(&self) -> String {
-        format!(r#"{{
+        format!(
+            r#"{{
   "timestamp": {},
   "overall": {{
     "packets_total": {},
@@ -613,9 +647,7 @@ mod tests {
         let key = ConnectionKey::new(
             0x7F000001, // 127.0.0.1
             0x08080808, // 8.8.8.8
-            12345,
-            80,
-            6,
+            12345, 80, 6,
         );
         assert_eq!(key.protocol_name(), "TCP");
     }
@@ -624,10 +656,10 @@ mod tests {
     fn test_connection_stats() {
         let start = current_epoch_ms();
         let mut stats = ConnectionStatsEntry::new(start);
-        
+
         stats.update_packet(100, true);
         stats.update_packet(200, false);
-        
+
         assert_eq!(stats.packets_in, 1);
         assert_eq!(stats.packets_out, 1);
         assert_eq!(stats.bytes_in, 100);
@@ -637,11 +669,11 @@ mod tests {
     #[test]
     fn test_node_stats() {
         let mut stats = NodeStatsEntry::new();
-        
+
         stats.record_request(50, true, 100, 200);
         stats.record_request(100, true, 100, 200);
         stats.record_request(100, false, 0, 0);
-        
+
         assert_eq!(stats.total_requests, 3);
         assert_eq!(stats.successful_requests, 2);
         assert_eq!(stats.failed_requests, 1);
@@ -651,11 +683,11 @@ mod tests {
     #[test]
     fn test_rule_stats() {
         let mut stats = RuleStatsEntry::new(1, RuleType::Domain as u8);
-        
+
         stats.record_match(RuleAction::Pass, 1000);
         stats.record_match(RuleAction::Proxy, 2000);
         stats.record_match(RuleAction::Drop, 500);
-        
+
         assert_eq!(stats.match_count, 3);
         assert_eq!(stats.pass_count, 1);
         assert_eq!(stats.proxy_count, 1);
@@ -667,7 +699,7 @@ mod tests {
     fn test_tracking_metrics_prometheus() {
         let metrics = TrackingMetrics::new();
         let output = metrics.export_prometheus();
-        
+
         assert!(output.contains("dae_packets_total"));
         assert!(output.contains("dae_connections_active"));
     }

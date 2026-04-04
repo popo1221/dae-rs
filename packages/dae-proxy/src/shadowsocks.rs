@@ -566,7 +566,10 @@ mod tests {
     fn test_cipher_type_to_string() {
         assert_eq!(SsCipherType::Aes128Gcm.to_string(), "aes-128-gcm");
         assert_eq!(SsCipherType::Aes256Gcm.to_string(), "aes-256-gcm");
-        assert_eq!(SsCipherType::Chacha20IetfPoly1305.to_string(), "chacha20-ietf-poly1305");
+        assert_eq!(
+            SsCipherType::Chacha20IetfPoly1305.to_string(),
+            "chacha20-ietf-poly1305"
+        );
     }
 
     #[test]

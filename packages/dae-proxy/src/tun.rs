@@ -89,10 +89,7 @@ impl Default for TunConfig {
             interface: "dae0".to_string(),
             tun_ip: "10.0.0.1".to_string(),
             tun_netmask: "255.255.255.0".to_string(),
-            dns_hijack: vec![
-                "8.8.8.8".parse().unwrap(),
-                "8.8.4.4".parse().unwrap(),
-            ],
+            dns_hijack: vec!["8.8.8.8".parse().unwrap(), "8.8.4.4".parse().unwrap()],
             mtu: 1500,
             tcp_timeout: Duration::from_secs(60),
             udp_timeout: Duration::from_secs(30),
@@ -371,11 +368,7 @@ impl DnsQuery {
         }
         let qtype = u16::from_be_bytes([bytes[pos], bytes[pos + 1]]);
 
-        Some(DnsQuery {
-            id,
-            qtype,
-            domain,
-        })
+        Some(DnsQuery { id, qtype, domain })
     }
 }
 
@@ -572,9 +565,7 @@ impl DnsHijacker {
 
     /// Check if an IP is in the hijack list
     pub fn is_hijacked_ip(&self, ip: IpAddr) -> bool {
-        self.upstream_servers
-            .iter()
-            .any(|server| server.ip() == ip)
+        self.upstream_servers.iter().any(|server| server.ip() == ip)
     }
 
     /// Cache a DNS hijack entry
@@ -612,10 +603,7 @@ impl DnsHijacker {
         }
 
         // Forward to upstream
-        debug!(
-            "DNS forwarding query for {} to upstream",
-            query.domain
-        );
+        debug!("DNS forwarding query for {} to upstream", query.domain);
         self.forward_query(query).await
     }
 
@@ -627,18 +615,14 @@ impl DnsHijacker {
         }
 
         let upstream = self.upstream_servers[0];
-        let socket = match UdpSocket::bind(SocketAddr::new(
-            IpAddr::V4(Ipv4Addr::UNSPECIFIED),
-            0,
-        ))
-        .await
-        {
-            Ok(s) => s,
-            Err(e) => {
-                error!("Failed to bind DNS socket: {}", e);
-                return None;
-            }
-        };
+        let socket =
+            match UdpSocket::bind(SocketAddr::new(IpAddr::V4(Ipv4Addr::UNSPECIFIED), 0)).await {
+                Ok(s) => s,
+                Err(e) => {
+                    error!("Failed to bind DNS socket: {}", e);
+                    return None;
+                }
+            };
 
         // Build DNS query packet
         let mut query_bytes = vec![0u8; 512];
@@ -646,7 +630,7 @@ impl DnsHijacker {
         query_bytes[0..2].copy_from_slice(&query.id.to_be_bytes()); // ID
         query_bytes[2..4].copy_from_slice(&[0x01, 0x00]); // Flags: recursion desired
         query_bytes[4..6].copy_from_slice(&1u16.to_be_bytes()); // 1 question
-        // Question
+                                                                // Question
         let domain_parts: Vec<&str> = query.domain.split('.').collect();
         let mut pos = 12;
         for part in &domain_parts {
@@ -950,9 +934,7 @@ impl TunProxy {
     pub async fn start(&self) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
         info!(
             "Starting TUN proxy on interface {} with IP {}/{}",
-            self.config.interface,
-            self.config.tun_ip,
-            self.config.tun_netmask
+            self.config.interface, self.config.tun_ip, self.config.tun_netmask
         );
 
         // Build TUN device using tokio-tun
@@ -1276,16 +1258,20 @@ mod tests {
 
     #[tokio::test]
     async fn test_dns_hijacker_cache() {
-        let hijacker = new_dns_hijacker(vec![
-            SocketAddr::new(IpAddr::V4(Ipv4Addr::new(8, 8, 8, 8)), 53)
-        ]);
+        let hijacker = new_dns_hijacker(vec![SocketAddr::new(
+            IpAddr::V4(Ipv4Addr::new(8, 8, 8, 8)),
+            53,
+        )]);
 
         // Check initial cache miss
         assert!(hijacker.lookup("example.com").await.is_none());
 
         // Cache an entry
         hijacker
-            .cache_entry("example.com".to_string(), IpAddr::V4(Ipv4Addr::new(93, 184, 216, 34)))
+            .cache_entry(
+                "example.com".to_string(),
+                IpAddr::V4(Ipv4Addr::new(93, 184, 216, 34)),
+            )
             .await;
 
         // Check cache hit
@@ -1405,17 +1391,17 @@ mod tests {
 
     #[tokio::test]
     async fn test_tun_proxy_stats() {
-        let rule_engine = crate::rule_engine::new_rule_engine(
-            crate::rule_engine::RuleEngineConfig::default(),
-        );
+        let rule_engine =
+            crate::rule_engine::new_rule_engine(crate::rule_engine::RuleEngineConfig::default());
         let connection_pool = crate::connection_pool::new_connection_pool(
             Duration::from_secs(60),
             Duration::from_secs(30),
             Duration::from_secs(10),
         );
-        let dns_hijacker = new_dns_hijacker(vec![
-            SocketAddr::new(IpAddr::V4(Ipv4Addr::new(8, 8, 8, 8)), 53)
-        ]);
+        let dns_hijacker = new_dns_hijacker(vec![SocketAddr::new(
+            IpAddr::V4(Ipv4Addr::new(8, 8, 8, 8)),
+            53,
+        )]);
 
         let config = TunConfig::default();
         let proxy = TunProxy::new(config, rule_engine, connection_pool, dns_hijacker);

@@ -202,17 +202,23 @@ impl EbpfNodeStatsEntry {
     }
 
     /// Record a request completion
-    pub fn record_request(&mut self, latency_ms: u32, success: bool, bytes_sent: u64, bytes_received: u64) {
+    pub fn record_request(
+        &mut self,
+        latency_ms: u32,
+        success: bool,
+        bytes_sent: u64,
+        bytes_received: u64,
+    ) {
         self.total_requests += 1;
         self.bytes_sent += bytes_sent;
         self.bytes_received += bytes_received;
-        
+
         if success {
             self.successful_requests += 1;
         } else {
             self.failed_requests += 1;
         }
-        
+
         if latency_ms > 0 {
             self.latency_sum += latency_ms as u64;
             self.latency_count += 1;
@@ -266,11 +272,11 @@ impl EbpfRuleStatsEntry {
     pub fn record_match(&mut self, action: u8, bytes: u64) {
         self.match_count += 1;
         self.bytes_matched += bytes;
-        
+
         match action {
             0 | 3 | 4 => self.pass_count += 1, // PASS, DEFAULT, DIRECT
-            1 => self.proxy_count += 1,         // PROXY
-            2 => self.drop_count += 1,          // DROP
+            1 => self.proxy_count += 1,        // PROXY
+            2 => self.drop_count += 1,         // DROP
             _ => {}
         }
     }
@@ -372,13 +378,7 @@ mod tests {
 
     #[test]
     fn test_connection_key_hash() {
-        let key = EbpfConnectionKey::new(
-            0x7F000001,
-            0x08080808,
-            12345,
-            80,
-            6,
-        );
+        let key = EbpfConnectionKey::new(0x7F000001, 0x08080808, 12345, 80, 6);
         let hash = key.to_hash();
         assert_ne!(hash, 0);
     }

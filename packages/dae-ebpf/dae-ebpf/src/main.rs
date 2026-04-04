@@ -98,7 +98,10 @@ async fn main() -> Result<()> {
     });
 
     info!("dae-ebpf loader starting");
-    info!("Loading {} program on interface: {}", args.program_type, args.interface);
+    info!(
+        "Loading {} program on interface: {}",
+        args.program_type, args.interface
+    );
 
     // Check if the object file exists
     let path = std::path::Path::new(&object);

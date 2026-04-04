@@ -34,9 +34,7 @@ use aya_ebpf::bindings::{TC_ACT_OK, TC_ACT_SHOT};
 use aya_ebpf::maps::lpm_trie::Key;
 use aya_ebpf::programs::TcContext;
 
-use dae_ebpf_common::{
-    action, state, RoutingEntry, SessionEntry, SessionKey,
-};
+use dae_ebpf_common::{action, state, RoutingEntry, SessionEntry, SessionKey};
 
 mod maps;
 mod packet;

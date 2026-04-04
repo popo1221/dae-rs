@@ -43,7 +43,7 @@ impl ConnectionTrackingStore {
     pub fn update(&self, key: ConnectionKey, stats: ConnectionStatsEntry) {
         let mut connections = self.connections.write().unwrap();
         connections.insert(key, stats);
-        
+
         // Cleanup if too many connections
         if connections.len() > MAX_CONNECTION_ENTRIES {
             Self::cleanup(&mut connections);
@@ -79,7 +79,7 @@ impl ConnectionTrackingStore {
     fn cleanup(connections: &mut HashMap<ConnectionKey, ConnectionStatsEntry>) {
         let now = current_epoch_ms();
         let max_age = Duration::from_secs(3600); // 1 hour max age
-        
+
         connections.retain(|_, stats| {
             let age = now.saturating_sub(stats.last_time);
             age < max_age.as_millis() as u64 && stats.state != ConnectionState::Closed as u8
@@ -216,7 +216,7 @@ impl TrackingStore {
     #[allow(dead_code)]
     pub fn update_connection(&self, key: ConnectionKey, stats: ConnectionStatsEntry) {
         self.connections.update(key, stats);
-        
+
         // Update overall stats
         let mut overall = self.overall.write().unwrap();
         overall.connections_total += 1;
@@ -227,11 +227,11 @@ impl TrackingStore {
     pub fn record_connection_data(&self, key: &ConnectionKey, bytes: u64, inbound: bool) {
         if let Some(mut stats) = self.connections.get(key) {
             stats.update_packet(bytes, inbound);
-            
+
             // Update protocol stats
             let mut protocols = self.protocols.write().unwrap();
             protocols.get_mut(key.proto).record_packet(bytes);
-            
+
             // Update overall
             let mut overall = self.overall.write().unwrap();
             overall.packets_total += 1;
@@ -284,17 +284,26 @@ impl TrackingStore {
         let mut output = String::new();
         let overall = self.overall.read().unwrap();
         let protocols = self.protocols.read().unwrap();
-        
+
         // Overall stats
         output.push_str("# dae-rs overall statistics\n");
         output.push_str(&format!("dae_packets_total {}\n", overall.packets_total));
         output.push_str(&format!("dae_bytes_total {}\n", overall.bytes_total));
-        output.push_str(&format!("dae_connections_total {}\n", overall.connections_total));
-        output.push_str(&format!("dae_connections_active {}\n", overall.connections_active));
+        output.push_str(&format!(
+            "dae_connections_total {}\n",
+            overall.connections_total
+        ));
+        output.push_str(&format!(
+            "dae_connections_active {}\n",
+            overall.connections_active
+        ));
         output.push_str(&format!("dae_dropped_total {}\n", overall.dropped_total));
         output.push_str(&format!("dae_routed_total {}\n", overall.routed_total));
-        output.push_str(&format!("dae_unmatched_total {}\n", overall.unmatched_total));
-        
+        output.push_str(&format!(
+            "dae_unmatched_total {}\n",
+            overall.unmatched_total
+        ));
+
         // Protocol stats
         output.push_str("\n# dae-rs protocol statistics\n");
         output.push_str(&format!(
@@ -313,7 +322,7 @@ impl TrackingStore {
             "dae_protocol_bytes_total{{protocol=\"udp\"}} {}\n",
             protocols.udp.bytes
         ));
-        
+
         output
     }
 
@@ -390,9 +399,7 @@ struct MetricsHttpState {
 }
 
 /// Prometheus-format metrics handler
-async fn tracking_metrics_handler(
-    State(state): State<MetricsHttpState>,
-) -> Response<Body> {
+async fn tracking_metrics_handler(State(state): State<MetricsHttpState>) -> Response<Body> {
     let metrics = state.store.export_prometheus();
     let mut response = Response::new(Body::from(metrics));
     response.headers_mut().insert(
@@ -403,9 +410,7 @@ async fn tracking_metrics_handler(
 }
 
 /// JSON API handler
-async fn tracking_json_handler(
-    State(state): State<MetricsHttpState>,
-) -> Response<Body> {
+async fn tracking_json_handler(State(state): State<MetricsHttpState>) -> Response<Body> {
     let store = &state.store;
     let overall = store.get_overall();
     let protocols = store.get_protocol_stats();
@@ -482,12 +487,12 @@ mod tests {
     #[test]
     fn test_tracking_store_connection() {
         let store = TrackingStore::new();
-        
+
         let key = ConnectionKey::new(0x7F000001, 0x08080808, 12345, 80, 6);
         let stats = ConnectionStatsEntry::new(current_epoch_ms());
-        
+
         store.update_connection(key, stats);
-        
+
         let retrieved = store.connections.get(&key);
         assert!(retrieved.is_some());
     }
@@ -496,7 +501,7 @@ mod tests {
     fn test_export_prometheus() {
         let store = TrackingStore::new();
         let output = store.export_prometheus();
-        
+
         assert!(output.contains("dae_packets_total"));
         assert!(output.contains("dae_connections_active"));
     }
