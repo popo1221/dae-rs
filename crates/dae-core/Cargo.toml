@@ -5,11 +5,12 @@ edition = "2021"
 description = "Shared core types for dae-rs"
 
 [dependencies]
-thiserror = "1"
-anyhow = "1"
-tokio = { version = "1", features = ["full"] }
-tracing = "0.1"
+thiserror = { workspace = true }
+anyhow = { workspace = true }
+tokio = { workspace = true }
+tracing = { workspace = true }
 serde = { version = "1", features = ["derive"] }
+bytes = { workspace = true }
 
 [dev-dependencies]
 tokio-test = "0.4"
