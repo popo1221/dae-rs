@@ -45,7 +45,7 @@ impl std::str::FromStr for ProgramType {
         match s.to_lowercase().as_str() {
             "xdp" => Ok(ProgramType::Xdp),
             "tc" => Ok(ProgramType::Tc),
-            _ => Err(format!("Unknown program type: {}. Use 'xdp' or 'tc'.", s)),
+            _ => Err(format!("Unknown program type: {s}. Use 'xdp' or 'tc'.")),
         }
     }
 }

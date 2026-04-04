@@ -92,8 +92,7 @@ impl EbpfLoader {
         let path = Path::new(tc_object);
         if !path.exists() {
             anyhow::bail!(
-                "TC object file not found: {}. Build the dae-tc crate first.",
-                tc_object
+                "TC object file not found: {tc_object}. Build the dae-tc crate first."
             );
         }
 
@@ -141,7 +140,7 @@ impl EbpfLoader {
             }
             Err(e) => {
                 // Check if it's already attached error - ignore it
-                let err_str = format!("{}", e);
+                let err_str = format!("{e}");
                 if err_str.contains("File exists") || err_str.contains("AlreadyExists") {
                     debug!("clsact qdisc already exists on {}", interface);
                 } else {
