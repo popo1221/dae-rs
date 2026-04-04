@@ -975,7 +975,7 @@ fn parse_ss_uri(uri: &str, name: Option<String>) -> Result<NodeConfig, Subscript
     // Plugin options are passed as base64-encoded query parameters:
     // - simple-obfs: plugin=simple-obfs;host=example.com;tls
     // - v2ray-plugin: plugin=v2ray-plugin;server;tls;host=example.com;path=/
-    let plugin_opts = if let Some(query_pos) = server_part.find('?') {
+    let _plugin_opts = if let Some(query_pos) = server_part.find('?') {
         let query = &server_part[query_pos + 1..];
         let mut plugin_type = None;
         let mut plugin_options = std::collections::HashMap::new();

@@ -64,7 +64,7 @@ mod integration_tests {
         let mut packet = dae_proxy::PacketInfo::default();
         packet.destination_domain = Some("example.com".to_string());
 
-        assert!(rule.matches_packet(&packet));
+        assert!(rule.matches_packet(&packet, None));
     }
 
     #[tokio::test]

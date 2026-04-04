@@ -53,14 +53,19 @@ impl DomainRuleType {
     }
 
     /// Check if this rule matches the given domain
-    pub fn matches(&self, domain: &str) -> bool {
-        let domain_lower = domain.to_lowercase();
+    pub fn matches(&self, domain: &str, domain_lower: Option<&str>) -> bool {
+        // Lowercase once: use pre-lowercased domain_lower if provided (hot path from RuleGroup::match_packet),
+        // otherwise lowercase domain ourselves. Avoids N×to_lowercase() in RuleGroup::match_packet loop.
+        let domain_lc = match domain_lower {
+            Some(dl) => dl.to_lowercase(),
+            None => domain.to_lowercase(),
+        };
         match self {
-            DomainRuleType::Exact(d) => domain_lower == *d,
+            DomainRuleType::Exact(d) => domain_lc == *d,
             DomainRuleType::Suffix(suffix) => {
-                domain_lower.ends_with(suffix) || domain_lower == suffix.trim_start_matches('.')
+                domain_lc.ends_with(suffix) || domain_lc == suffix.trim_start_matches('.')
             }
-            DomainRuleType::Keyword(keyword) => domain_lower.contains(keyword),
+            DomainRuleType::Keyword(keyword) => domain_lc.contains(keyword),
         }
     }
 }
@@ -80,9 +85,9 @@ impl DomainRule {
     }
 
     /// Check if this rule matches the given packet info
-    pub fn matches_packet(&self, info: &PacketInfo) -> bool {
+    pub fn matches_packet(&self, info: &PacketInfo, domain_lower: Option<&str>) -> bool {
         if let Some(ref domain) = info.destination_domain {
-            self.rule_type.matches(domain)
+            self.rule_type.matches(domain, domain_lower)
         } else {
             false
         }
@@ -439,9 +444,9 @@ impl Rule {
     }
 
     /// Check if this rule matches the given packet info
-    pub fn matches(&self, info: &PacketInfo) -> bool {
+    pub fn matches(&self, info: &PacketInfo, domain_lower: Option<&str>) -> bool {
         match self {
-            Rule::Domain(r) => r.matches_packet(info),
+            Rule::Domain(r) => r.matches_packet(info, domain_lower),
             Rule::IpCidr(r) => r.matches_packet(info),
             Rule::GeoIp(r) => {
                 if let Some(ref country) = info.geoip_country {
@@ -489,8 +494,8 @@ pub struct RuleWithAction {
 
 impl RuleWithAction {
     /// Check if this rule matches the given packet info
-    pub fn matches(&self, info: &PacketInfo) -> bool {
-        self.rule.matches(info)
+    pub fn matches(&self, info: &PacketInfo, domain_lower: Option<&str>) -> bool {
+        self.rule.matches(info, domain_lower)
     }
 }
 
@@ -529,9 +534,15 @@ impl RuleGroup {
     }
 
     /// Match a packet against this rule group
+    /// Match a packet against this rule group.
+    ///
+    /// Optimizes domain matching by lowercasing ONCE before the rule loop,
+    /// then passing the pre-lowercased domain to each rule's matches().
+    /// This avoids N × to_lowercase() allocations when there are N domain rules.
     pub fn match_packet(&self, info: &PacketInfo) -> Option<RuleMatchAction> {
+        let domain_lower = info.destination_domain.as_ref().map(|s| s.to_lowercase());
         for rule in &self.rules {
-            if rule.matches(info) {
+            if rule.matches(info, domain_lower.as_deref()) {
                 return Some(rule.action);
             }
         }
@@ -552,29 +563,29 @@ mod tests {
     #[test]
     fn test_domain_rule_exact() {
         let rule = DomainRule::new("example.com");
-        assert!(rule.rule_type.matches("example.com"));
-        assert!(rule.rule_type.matches("EXAMPLE.COM"));
-        assert!(!rule.rule_type.matches("sub.example.com"));
-        assert!(!rule.rule_type.matches("notexample.com"));
+        assert!(rule.rule_type.matches("example.com", None));
+        assert!(rule.rule_type.matches("EXAMPLE.COM", None));
+        assert!(!rule.rule_type.matches("sub.example.com", None));
+        assert!(!rule.rule_type.matches("notexample.com", None));
     }
 
     #[test]
     fn test_domain_rule_suffix() {
         let rule = DomainRule::new(".example.com");
-        assert!(rule.rule_type.matches("example.com"));
-        assert!(rule.rule_type.matches("sub.example.com"));
-        assert!(rule.rule_type.matches("deep.sub.example.com"));
-        assert!(!rule.rule_type.matches("notexample.com"));
-        assert!(!rule.rule_type.matches("example.com.cn"));
+        assert!(rule.rule_type.matches("example.com", None));
+        assert!(rule.rule_type.matches("sub.example.com", None));
+        assert!(rule.rule_type.matches("deep.sub.example.com", None));
+        assert!(!rule.rule_type.matches("notexample.com", None));
+        assert!(!rule.rule_type.matches("example.com.cn", None));
     }
 
     #[test]
     fn test_domain_rule_keyword() {
         let rule = DomainRule::new("keyword:google");
-        assert!(rule.rule_type.matches("google.com"));
-        assert!(rule.rule_type.matches("igoogle.com"));
-        assert!(rule.rule_type.matches("notgoogle.com"));
-        assert!(!rule.rule_type.matches("example.com"));
+        assert!(rule.rule_type.matches("google.com", None));
+        assert!(rule.rule_type.matches("igoogle.com", None));
+        assert!(rule.rule_type.matches("notgoogle.com", None));
+        assert!(!rule.rule_type.matches("example.com", None));
     }
 
     #[test]
@@ -665,16 +676,16 @@ mod tests {
     #[test]
     fn test_domain_rule_root_domain() {
         let rule = DomainRule::new("example.com");
-        assert!(rule.rule_type.matches("example.com"));
-        assert!(!rule.rule_type.matches("sub.example.com"));
+        assert!(rule.rule_type.matches("example.com", None));
+        assert!(!rule.rule_type.matches("sub.example.com", None));
     }
 
     #[test]
     fn test_domain_rule_full_match() {
         // Domain rules match the exact domain
         let rule = DomainRule::new("mail.google.com");
-        assert!(rule.rule_type.matches("mail.google.com"));
-        assert!(!rule.rule_type.matches("google.com"));
+        assert!(rule.rule_type.matches("mail.google.com", None));
+        assert!(!rule.rule_type.matches("google.com", None));
     }
 
     #[test]
