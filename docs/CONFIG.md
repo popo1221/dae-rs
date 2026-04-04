@@ -78,6 +78,19 @@ port = 8388
 method = "chacha20-ietf-poly1305"
 password = "your-password"
 
+# 订阅配置
+# 定时从订阅 URL 自动拉取并更新节点
+[[subscriptions]]
+url = "https://sub.example.com/clash"
+update_interval_secs = 3600
+verify_tls = true
+name = "主订阅"
+
+[[subscriptions]]
+url = "https://backup.example.com/sub"
+update_interval_secs = 7200
+verify_tls = true
+
 # 规则配置
 [rules]
 # 外部规则文件
@@ -282,6 +295,68 @@ vless://uuid@example.com:443?encryption=none...
 trojan://password@example.com:443
 ss://method:password@example.com:8388
 ```
+
+## 订阅配置
+
+除了手动配置节点，dae-rs 还支持通过订阅链接自动获取和更新节点。
+
+### 订阅配置字段
+
+| 字段 | 类型 | 默认值 | 说明 |
+|------|------|--------|------|
+| `url` | String | 必填 | 订阅地址（http/https） |
+| `update_interval_secs` | u64 | 3600 | 更新间隔（秒），默认1小时 |
+| `verify_tls` | bool | true | 是否验证TLS证书 |
+| `user_agent` | Option<String> | dae-rs默认 | 自定义 User-Agent |
+| `name` | Option<String> | None | 订阅别名，用于标识 |
+
+### 示例
+
+```toml
+# 主订阅 - Clash 格式
+[[subscriptions]]
+url = "https://sub.example.com/clash"
+update_interval_secs = 3600
+verify_tls = true
+name = "主节点"
+
+# 备用订阅 - 较长的更新间隔
+[[subscriptions]]
+url = "https://backup.example.com/sub"
+update_interval_secs = 7200
+verify_tls = true
+name = "备用节点"
+
+# 跳过 TLS 验证（不推荐，仅测试环境使用）
+[[subscriptions]]
+url = "http://internal-sub.local/sub"
+update_interval_secs = 1800
+verify_tls = false
+```
+
+### 工作机制
+
+1. **启动时拉取**：dae-rs 启动时会自动拉取所有订阅 URL
+2. **定时更新**：按 `update_interval_secs` 间隔定时更新节点列表
+3. **格式自动识别**：自动识别 SIP008/Clash YAML/Sing-Box JSON/URI 等格式
+4. **节点去重**：新节点与现有节点合并，自动去除重复
+
+### 支持的订阅格式
+
+订阅返回内容可以是以下任意格式：
+
+- **SIP008 JSON**：JSON 格式的节点列表
+- **Clash YAML**：Clash 格式的代理配置
+- **Sing-Box JSON**：Sing-Box 格式的出站配置
+- **Base64 编码**：以上任意格式经过 Base64 编码
+- **URI 列表**：纯文本，每行一个节点链接（vmess://, vless://, trojan://, ss://）
+
+### 注意事项
+
+- 订阅 URL 必须是 `http://` 或 `https://` 开头
+- `update_interval_secs` 必须大于 0
+- 建议使用 HTTPS 订阅，并保持 `verify_tls = true`
+- 节点变更后需要重启或发送 SIGHUP 重新加载规则
 
 ## 规则配置
 
