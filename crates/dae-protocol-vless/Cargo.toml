@@ -1,0 +1,23 @@
+[package]
+name = "dae-protocol-vless"
+version = "0.1.0"
+edition = "2021"
+description = "VLESS protocol implementation with Reality support for dae-rs"
+
+[dependencies]
+tokio = { version = "1", features = ["full"] }
+async-trait = "0.1"
+bytes = "1"
+thiserror = "1"
+tracing = "0.1"
+dae-core = { path = "../dae-core" }
+dae-proxy-core = { path = "../dae-proxy-core" }
+dae-transport = { path = "../dae-transport" }
+curve25519-dalek = { version = "4", features = ["rand_core"] }
+rand = "0.8"
+rand_core = "0.6"
+hmac = "0.12"
+sha2 = "0.10"
+
+[dev-dependencies]
+tokio-test = "0.4"
