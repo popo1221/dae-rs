@@ -1058,6 +1058,13 @@ impl VlessHandler {
 
     /// Parse target address from VLESS header
     fn parse_target_address(&self, buf: &[u8]) -> std::io::Result<VlessTargetAddress> {
+        // Validate minimum buffer size before accessing any indices
+        if buf.len() < 5 {
+            return Err(std::io::Error::new(
+                std::io::ErrorKind::InvalidData,
+                "buffer too small for VLESS address parsing (need at least 5 bytes)",
+            ));
+        }
         let atyp = buf[4];
         match VlessAddressType::from_u8(atyp) {
             Some(VlessAddressType::Ipv4) => {

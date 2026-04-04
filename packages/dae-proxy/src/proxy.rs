@@ -184,8 +184,8 @@ impl Proxy {
     pub async fn new(config: ProxyConfig) -> std::io::Result<Self> {
         info!("Initializing proxy with config: {:?}", config);
 
-        // Initialize eBPF maps
-        let maps = EbpfMaps::new();
+        // Initialize eBPF maps (in-memory implementation)
+        let maps = EbpfMaps::new_in_memory();
         let session_handle = Arc::new(RwLock::new(EbpfSessionHandle::new(maps.clone())));
         let routing_handle = Arc::new(EbpfRoutingHandle::new(maps.clone()));
         let stats_handle = Arc::new(RwLock::new(EbpfStatsHandle::new(maps)));
@@ -645,6 +645,9 @@ mod tests {
         assert_eq!(config.udp.listen_addr.port(), 1080);
         assert!(config.ss_listen.is_none());
         assert!(config.ss_server.is_none());
+        assert!(config.vless_listen.is_none());
+        assert!(config.vmess_listen.is_none());
+        assert!(config.trojan_listen.is_none());
     }
 
     #[tokio::test]
@@ -652,5 +655,88 @@ mod tests {
         let config = ConnectionPoolConfig::default();
         assert_eq!(config.tcp_timeout, Duration::from_secs(60));
         assert_eq!(config.udp_timeout, Duration::from_secs(30));
+        assert_eq!(config.tcp_keepalive, Duration::from_secs(10));
+    }
+
+    #[test]
+    fn test_ebpf_config_default() {
+        let config = EbpfConfig::default();
+        assert!(config.enabled);
+        assert_eq!(config.session_map_size, 65536);
+        assert_eq!(config.routing_map_size, 16384);
+        assert_eq!(config.stats_map_size, 256);
+    }
+
+    #[test]
+    fn test_ebpf_config_custom() {
+        let config = EbpfConfig {
+            enabled: false,
+            session_map_size: 131072,
+            routing_map_size: 32768,
+            stats_map_size: 512,
+        };
+        assert!(!config.enabled);
+        assert_eq!(config.session_map_size, 131072);
+        assert_eq!(config.routing_map_size, 32768);
+        assert_eq!(config.stats_map_size, 512);
+    }
+
+    #[test]
+    fn test_proxy_error_display() {
+        let err = ProxyError::TcpError("test error".to_string());
+        assert!(format!("{}", err).contains("TCP proxy error"));
+
+        let err = ProxyError::UdpError("test error".to_string());
+        assert!(format!("{}", err).contains("UDP proxy error"));
+
+        let err = ProxyError::EbpfError("test error".to_string());
+        assert!(format!("{}", err).contains("eBPF error"));
+
+        let err = ProxyError::ConfigError("test error".to_string());
+        assert!(format!("{}", err).contains("Configuration error"));
+
+        let err = ProxyError::ShutdownError("test error".to_string());
+        assert!(format!("{}", err).contains("Shutdown error"));
+
+        let err = ProxyError::ShadowsocksError("test error".to_string());
+        assert!(format!("{}", err).contains("Shadowsocks error"));
+    }
+
+    #[test]
+    fn test_proxy_error_debug() {
+        let err = ProxyError::TcpError("test".to_string());
+        let debug_str = format!("{:?}", err);
+        assert!(debug_str.contains("TcpError"));
+    }
+
+    #[test]
+    fn test_proxy_error_from_io() {
+        let io_err = std::io::Error::new(std::io::ErrorKind::NotFound, "not found");
+        let err: ProxyError = io_err.into();
+        match err {
+            ProxyError::ConfigError(s) => assert!(s.contains("not found")),
+            _ => panic!("Expected ConfigError variant"),
+        }
+    }
+
+    #[test]
+    fn test_proxy_config_debug() {
+        let config = ProxyConfig::default();
+        let debug_str = format!("{:?}", config);
+        assert!(debug_str.contains("ProxyConfig"));
+    }
+
+    #[test]
+    fn test_connection_pool_config_debug() {
+        let config = ConnectionPoolConfig::default();
+        let debug_str = format!("{:?}", config);
+        assert!(debug_str.contains("ConnectionPoolConfig"));
+    }
+
+    #[test]
+    fn test_ebpf_config_debug() {
+        let config = EbpfConfig::default();
+        let debug_str = format!("{:?}", config);
+        assert!(debug_str.contains("EbpfConfig"));
     }
 }

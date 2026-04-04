@@ -172,3 +172,174 @@ pub fn new_connection(
         keepalive_interval,
     )))
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_connection_state_default() {
+        assert_eq!(ConnectionState::default(), ConnectionState::New);
+    }
+
+    #[test]
+    fn test_protocol_default() {
+        assert_eq!(Protocol::default(), Protocol::Tcp);
+    }
+
+    #[test]
+    fn test_connection_state_all_variants() {
+        assert_eq!(ConnectionState::New, ConnectionState::New);
+        assert_eq!(ConnectionState::Active, ConnectionState::Active);
+        assert_eq!(ConnectionState::Closing, ConnectionState::Closing);
+        assert_eq!(ConnectionState::Closed, ConnectionState::Closed);
+    }
+
+    #[test]
+    fn test_protocol_all_variants() {
+        assert_eq!(Protocol::Tcp, Protocol::Tcp);
+        assert_eq!(Protocol::Udp, Protocol::Udp);
+    }
+
+    #[test]
+    fn test_connection_new_ipv4() {
+        let src: SocketAddr = "192.168.1.100:8080".parse().unwrap();
+        let dst: SocketAddr = "8.8.8.8:443".parse().unwrap();
+        let conn = Connection::new(src, dst, Protocol::Tcp, Duration::from_secs(30));
+
+        assert_eq!(conn.src_addr(), src);
+        assert_eq!(conn.dst_addr(), dst);
+        assert_eq!(conn.protocol(), Protocol::Tcp);
+        assert_eq!(conn.state(), ConnectionState::New);
+        assert!(!conn.is_active());
+    }
+
+    #[test]
+    fn test_connection_new_ipv6() {
+        let src: SocketAddr = "[::1]:8080".parse().unwrap();
+        let dst: SocketAddr = "[2001:4860:4860::8888]:443".parse().unwrap();
+        let conn = Connection::new(src, dst, Protocol::Udp, Duration::from_secs(60));
+
+        assert_eq!(conn.protocol(), Protocol::Udp);
+        assert_eq!(conn.state(), ConnectionState::New);
+    }
+
+    #[test]
+    fn test_connection_state_transitions() {
+        let src: SocketAddr = "192.168.1.100:8080".parse().unwrap();
+        let dst: SocketAddr = "8.8.8.8:443".parse().unwrap();
+        let mut conn = Connection::new(src, dst, Protocol::Tcp, Duration::from_secs(30));
+
+        assert_eq!(conn.state(), ConnectionState::New);
+
+        conn.establish();
+        assert_eq!(conn.state(), ConnectionState::Active);
+        assert!(conn.is_active());
+
+        conn.start_close();
+        assert_eq!(conn.state(), ConnectionState::Closing);
+        assert!(!conn.is_active());
+
+        conn.close();
+        assert_eq!(conn.state(), ConnectionState::Closed);
+        assert!(!conn.is_active());
+    }
+
+    #[test]
+    fn test_connection_set_state() {
+        let src: SocketAddr = "192.168.1.100:8080".parse().unwrap();
+        let dst: SocketAddr = "8.8.8.8:443".parse().unwrap();
+        let mut conn = Connection::new(src, dst, Protocol::Tcp, Duration::from_secs(30));
+
+        conn.set_state(ConnectionState::Active);
+        assert_eq!(conn.state(), ConnectionState::Active);
+
+        conn.set_state(ConnectionState::Closed);
+        assert_eq!(conn.state(), ConnectionState::Closed);
+    }
+
+    #[test]
+    fn test_connection_touch_updates_activity() {
+        let src: SocketAddr = "192.168.1.100:8080".parse().unwrap();
+        let dst: SocketAddr = "8.8.8.8:443".parse().unwrap();
+        let mut conn = Connection::new(src, dst, Protocol::Tcp, Duration::from_secs(30));
+
+        let initial_idle = conn.idle_time();
+        std::thread::sleep(Duration::from_millis(10));
+        conn.touch();
+        let new_idle = conn.idle_time();
+
+        // After touch, idle time should be very small
+        assert!(new_idle < initial_idle + Duration::from_millis(50));
+    }
+
+    #[test]
+    fn test_connection_age() {
+        let src: SocketAddr = "192.168.1.100:8080".parse().unwrap();
+        let dst: SocketAddr = "8.8.8.8:443".parse().unwrap();
+        let conn = Connection::new(src, dst, Protocol::Tcp, Duration::from_secs(30));
+
+        // Age should be very small initially
+        let age = conn.age();
+        assert!(age < Duration::from_secs(1));
+    }
+
+    #[test]
+    fn test_connection_is_expired_after_wait() {
+        let src: SocketAddr = "192.168.1.100:8080".parse().unwrap();
+        let dst: SocketAddr = "8.8.8.8:443".parse().unwrap();
+        let mut conn = Connection::new(src, dst, Protocol::Tcp, Duration::from_secs(30));
+
+        // Immediately after creation, should not be expired
+        assert!(!conn.is_expired(Duration::from_secs(30)));
+
+        // Wait for timeout to pass
+        std::thread::sleep(Duration::from_millis(15));
+        // Now with a very short timeout it should be expired
+        assert!(conn.is_expired(Duration::from_millis(10)));
+    }
+
+    #[test]
+    fn test_connection_debug_format() {
+        let src: SocketAddr = "192.168.1.100:8080".parse().unwrap();
+        let dst: SocketAddr = "8.8.8.8:443".parse().unwrap();
+        let conn = Connection::new(src, dst, Protocol::Tcp, Duration::from_secs(30));
+
+        let debug_str = format!("{:?}", conn);
+        assert!(debug_str.contains("Connection"));
+        assert!(debug_str.contains("192.168.1.100"));
+        assert!(debug_str.contains("8.8.8.8"));
+        assert!(debug_str.contains("Tcp"));
+    }
+
+    #[tokio::test]
+    async fn test_new_connection_shared() {
+        let src: SocketAddr = "192.168.1.100:8080".parse().unwrap();
+        let dst: SocketAddr = "8.8.8.8:443".parse().unwrap();
+        let shared = new_connection(src, dst, Protocol::Tcp, Duration::from_secs(30));
+
+        // Verify we can read from the shared connection
+        let conn = shared.read().await;
+        assert_eq!(conn.src_addr(), src);
+        assert_eq!(conn.dst_addr(), dst);
+        assert_eq!(conn.protocol(), Protocol::Tcp);
+    }
+
+    #[tokio::test]
+    async fn test_connection_write_and_read_state() {
+        let src: SocketAddr = "192.168.1.100:8080".parse().unwrap();
+        let dst: SocketAddr = "8.8.8.8:443".parse().unwrap();
+        let shared = new_connection(src, dst, Protocol::Udp, Duration::from_secs(30));
+
+        {
+            let mut conn = shared.write().await;
+            conn.establish();
+        }
+
+        {
+            let conn = shared.read().await;
+            assert!(conn.is_active());
+            assert_eq!(conn.protocol(), Protocol::Udp);
+        }
+    }
+}

@@ -71,6 +71,8 @@ pub fn tc_prog_main(ctx: TcContext) -> i32 {
 fn tc_prog(ctx: &mut TcContext) -> Result<i32, ()> {
     // Parse Ethernet header
     let eth = match EthHdr::from_ctx(ctx) {
+        // SAFETY: EthHdr::from_ctx returns None if bounds check fails,
+        // otherwise returns a valid pointer that can be safely dereferenced.
         Some(hdr) => unsafe { *hdr },
         None => {
             // Can't parse Ethernet header, pass
@@ -85,6 +87,8 @@ fn tc_prog(ctx: &mut TcContext) -> Result<i32, ()> {
     let (ip_offset, is_ipv4) = if eth.has_vlan() {
         // VLAN tag present
         let vlan = match VlanHdr::from_ctx_after_eth(ctx, core::mem::size_of::<EthHdr>()) {
+            // SAFETY: VlanHdr::from_ctx_after_eth returns None if bounds check fails,
+            // otherwise returns a valid pointer that can be safely dereferenced.
             Some(hdr) => unsafe { *hdr },
             None => {
                 return Ok(TC_ACT_OK);
@@ -106,6 +110,8 @@ fn tc_prog(ctx: &mut TcContext) -> Result<i32, ()> {
 
     // Parse IPv4 header
     let ip = match IpHdr::from_ctx_after_eth(ctx, ip_offset) {
+        // SAFETY: IpHdr::from_ctx_after_eth returns None if bounds check fails,
+        // otherwise returns a valid pointer that can be safely dereferenced.
         Some(hdr) => unsafe { *hdr },
         None => {
             return Ok(TC_ACT_OK);
@@ -126,6 +132,8 @@ fn tc_prog(ctx: &mut TcContext) -> Result<i32, ()> {
     let (src_port, dst_port) = match ip_proto {
         ip_proto::TCP => {
             let tcp = match TcpHdr::from_ctx_after_ip(ctx, ip_offset, ip_hdr_len) {
+                // SAFETY: TcpHdr::from_ctx_after_ip returns None if bounds check fails,
+                // otherwise returns a valid pointer that can be safely dereferenced.
                 Some(hdr) => unsafe { *hdr },
                 None => return Ok(TC_ACT_OK),
             };
@@ -133,6 +141,8 @@ fn tc_prog(ctx: &mut TcContext) -> Result<i32, ()> {
         }
         ip_proto::UDP => {
             let udp = match UdpHdr::from_ctx_after_ip(ctx, ip_offset, ip_hdr_len) {
+                // SAFETY: UdpHdr::from_ctx_after_ip returns None if bounds check fails,
+                // otherwise returns a valid pointer that can be safely dereferenced.
                 Some(hdr) => unsafe { *hdr },
                 None => return Ok(TC_ACT_OK),
             };
@@ -145,6 +155,7 @@ fn tc_prog(ctx: &mut TcContext) -> Result<i32, ()> {
     let session_key = SessionKey::new(src_ip, dst_ip, src_port, dst_port, ip_proto);
 
     // Look up or create session
+    // SAFETY: SESSIONS is a valid eBPF map; get() returns None if key not found.
     let session = match unsafe { SESSIONS.get(&session_key) } {
         Some(entry) => {
             // Update existing session

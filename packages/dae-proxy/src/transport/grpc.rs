@@ -372,12 +372,19 @@ impl GrpcClient {
     }
 
     /// Send a gRPC request and receive response
-    pub async fn unary<T: AsRef<[u8]>, R: AsRef<[u8]>>(&self, request: T) -> IoResult<Vec<u8>> {
-        // This would be implemented for unary gRPC calls
-        // For streaming (like VLESS uses), we use the transport directly
+    ///
+    /// # Note
+    ///
+    /// Unary gRPC calls are not supported. This implementation only supports
+    /// streaming gRPC (server-streaming and bidirectional) as used by VLESS Reality
+    /// Vision. For streaming gRPC, use the `GrpcStream` returned by
+    /// `GrpcTransport::stream()` directly.
+    ///
+    /// If you need unary gRPC support, see tracking issue #72.
+    pub async fn unary<T: AsRef<[u8]>, R: AsRef<[u8]>>(&self, _request: T) -> IoResult<Vec<u8>> {
         Err(IoError::new(
             ErrorKind::Unsupported,
-            "Unary gRPC not implemented - use GrpcTransport for streaming",
+            "Unary gRPC not implemented - only streaming gRPC is supported (see issue #72)",
         ))
     }
 }

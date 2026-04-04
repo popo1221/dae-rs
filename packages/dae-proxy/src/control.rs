@@ -408,7 +408,8 @@ mod tests {
             error: None,
         };
 
-        let json = serde_json::to_string(&result).unwrap();
+        let json = serde_json::to_string(&result)
+            .expect("test: serialization of NodeTestResult should not fail");
         assert!(json.contains("test-node"));
         assert!(json.contains("true"));
         assert!(json.contains("100"));

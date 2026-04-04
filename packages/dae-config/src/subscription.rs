@@ -135,13 +135,13 @@ pub enum SubscriptionError {
 impl std::fmt::Display for SubscriptionError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            SubscriptionError::NetworkError(s) => write!(f, "Network error: {}", s),
-            SubscriptionError::ParseError(s) => write!(f, "Parse error: {}", s),
+            SubscriptionError::NetworkError(s) => write!(f, "Network error: {s}"),
+            SubscriptionError::ParseError(s) => write!(f, "Parse error: {s}"),
             SubscriptionError::UnsupportedFormat => write!(f, "Unsupported subscription format"),
             SubscriptionError::AuthenticationRequired => write!(f, "Authentication required"),
-            SubscriptionError::UrlParseError(s) => write!(f, "URL parse error: {}", s),
+            SubscriptionError::UrlParseError(s) => write!(f, "URL parse error: {s}"),
             SubscriptionError::UnsupportedUriScheme(s) => {
-                write!(f, "Unsupported URI scheme: {}", s)
+                write!(f, "Unsupported URI scheme: {s}")
             }
         }
     }
@@ -158,7 +158,10 @@ pub struct SubscriptionConfig {
     pub update_interval: Duration,
     /// User agent for HTTP requests
     pub user_agent: String,
-    /// TLS certificate verification
+    /// TLS certificate verification.
+    ///
+    /// When `false`, TLS certificates are not verified (dangerous, not recommended).
+    /// Applied automatically when using [`SubscriptionConfig::fetch_and_parse()`].
     pub verify_tls: bool,
     /// Timeout for requests
     pub timeout: Duration,
@@ -201,6 +204,109 @@ impl SubscriptionConfig {
     pub fn with_insecure_tls(mut self) -> Self {
         self.verify_tls = false;
         self
+    }
+}
+
+impl SubscriptionConfig {
+    /// Fetch and parse a subscription
+    ///
+    /// Makes an HTTP GET request to the subscription URL and parses
+    /// the response. Respects `verify_tls` and `user_agent` settings.
+    ///
+    /// # Example
+    /// ```ignore
+    /// let config = SubscriptionConfig::new("https://example.com/sub");
+    /// let update = config.fetch_and_parse().await?;
+    /// ```
+    pub async fn fetch_and_parse(&self) -> Result<SubscriptionUpdate, SubscriptionError> {
+        let client = if self.verify_tls {
+            reqwest::Client::builder()
+                .user_agent(&self.user_agent)
+                .timeout(self.timeout)
+                .build()
+                .map_err(|e| SubscriptionError::NetworkError(e.to_string()))?
+        } else {
+            reqwest::Client::builder()
+                .user_agent(&self.user_agent)
+                .timeout(self.timeout)
+                .danger_accept_invalid_certs(true)
+                .build()
+                .map_err(|e| SubscriptionError::NetworkError(e.to_string()))?
+        };
+
+        let response = client
+            .get(&self.url)
+            .send()
+            .await
+            .map_err(|e| SubscriptionError::NetworkError(e.to_string()))?;
+
+        if response.status() == 401 {
+            return Err(SubscriptionError::AuthenticationRequired);
+        }
+
+        if !response.status().is_success() {
+            return Err(SubscriptionError::NetworkError(format!(
+                "HTTP {}: {}",
+                response.status().as_u16(),
+                response.status().canonical_reason().unwrap_or("Unknown")
+            )));
+        }
+
+        let bytes = response
+            .bytes()
+            .await
+            .map_err(|e| SubscriptionError::NetworkError(e.to_string()))?;
+
+        let mut update = parse_subscription(&bytes)?;
+
+        // Override detected tag with URL-based detection if not present
+        if update.tag.is_none() {
+            update.tag = extract_tag(&self.url, &bytes);
+        }
+
+        Ok(update)
+    }
+
+    /// Fetch raw subscription content (without parsing)
+    pub async fn fetch_raw(&self) -> Result<Vec<u8>, SubscriptionError> {
+        let client = if self.verify_tls {
+            reqwest::Client::builder()
+                .user_agent(&self.user_agent)
+                .timeout(self.timeout)
+                .build()
+                .map_err(|e| SubscriptionError::NetworkError(e.to_string()))?
+        } else {
+            reqwest::Client::builder()
+                .user_agent(&self.user_agent)
+                .timeout(self.timeout)
+                .danger_accept_invalid_certs(true)
+                .build()
+                .map_err(|e| SubscriptionError::NetworkError(e.to_string()))?
+        };
+
+        let response = client
+            .get(&self.url)
+            .send()
+            .await
+            .map_err(|e| SubscriptionError::NetworkError(e.to_string()))?;
+
+        if response.status() == 401 {
+            return Err(SubscriptionError::AuthenticationRequired);
+        }
+
+        if !response.status().is_success() {
+            return Err(SubscriptionError::NetworkError(format!(
+                "HTTP {}: {}",
+                response.status().as_u16(),
+                response.status().canonical_reason().unwrap_or("Unknown")
+            )));
+        }
+
+        response
+            .bytes()
+            .await
+            .map(|b| b.to_vec())
+            .map_err(|e| SubscriptionError::NetworkError(e.to_string()))
     }
 }
 
@@ -425,8 +531,7 @@ pub fn parse_base64_subscription(content: &[u8]) -> Result<Vec<String>, Subscrip
                 Ok(d) => d,
                 Err(e) => {
                     return Err(SubscriptionError::ParseError(format!(
-                        "Failed to decode base64: {}",
-                        e
+                        "Failed to decode base64: {e}"
                     )));
                 }
             }
@@ -435,16 +540,15 @@ pub fn parse_base64_subscription(content: &[u8]) -> Result<Vec<String>, Subscrip
 
     // Parse as string and split by lines
     let content_str = String::from_utf8(decoded)
-        .map_err(|e| SubscriptionError::ParseError(format!("Invalid UTF-8: {}", e)))?;
+        .map_err(|e| SubscriptionError::ParseError(format!("Invalid UTF-8: {e}")))?;
 
     parse_uri_list(&content_str)
 }
 
 /// Parse a SIP008 subscription
 pub fn parse_sip008_subscription(content: &[u8]) -> Result<SubscriptionUpdate, SubscriptionError> {
-    let sip: Sip008Subscription = serde_json::from_slice(content).map_err(|e| {
-        SubscriptionError::ParseError(format!("Failed to parse SIP008 JSON: {}", e))
-    })?;
+    let sip: Sip008Subscription = serde_json::from_slice(content)
+        .map_err(|e| SubscriptionError::ParseError(format!("Failed to parse SIP008 JSON: {e}")))?;
 
     if sip.version != 1 {
         return Err(SubscriptionError::ParseError(format!(
@@ -470,7 +574,7 @@ pub fn parse_sip008_subscription(content: &[u8]) -> Result<SubscriptionUpdate, S
                     let opts = server.plugin_opts.as_deref().unwrap_or("");
                     url.push_str(&format!(
                         "?plugin={}",
-                        urlencoding::encode(&format!("{};{}", plugin, opts))
+                        urlencoding::encode(&format!("{plugin};{opts}"))
                     ));
                 }
             }
@@ -496,16 +600,13 @@ pub fn parse_sip008_subscription(content: &[u8]) -> Result<SubscriptionUpdate, S
 /// Parse Clash YAML subscription content
 pub fn parse_clash_yaml(content: &str) -> Result<Vec<String>, SubscriptionError> {
     let sub: ClashSubscription = serde_yaml::from_str(content)
-        .map_err(|e| SubscriptionError::ParseError(format!("Failed to parse Clash YAML: {}", e)))?;
+        .map_err(|e| SubscriptionError::ParseError(format!("Failed to parse Clash YAML: {e}")))?;
 
     let proxies = sub.proxies.ok_or_else(|| {
         SubscriptionError::ParseError("No proxies found in Clash subscription".to_string())
     })?;
 
-    let links: Vec<String> = proxies
-        .iter()
-        .map(|proxy| clash_proxy_to_uri(proxy))
-        .collect();
+    let links: Vec<String> = proxies.iter().map(clash_proxy_to_uri).collect();
 
     Ok(links)
 }
@@ -519,9 +620,10 @@ fn clash_proxy_to_uri(proxy: &ClashProxy) -> String {
             // Shadowsocks: ss://method:password@server:port
             let method = proxy.cipher.as_deref().unwrap_or("chacha20-ietf-poly1305");
             let password = proxy.password.as_deref().unwrap_or("");
-            let user_info = format!("{}:{}", method, password);
+            let user_info = format!("{method}:{password}");
             let encoded = base64::engine::general_purpose::STANDARD.encode(user_info.as_bytes());
-            let mut uri = format!("ss://{}@{}:{}", encoded, proxy.server, proxy.port);
+            let mut uri = format!("ss://{encoded}@{}:{}", proxy.server, proxy.port);
+            // clippy: ss uri with encoded, proxy.server, proxy.port
 
             // Add plugin if present
             if let Some(ref plugin) = proxy.plugin {
@@ -529,12 +631,12 @@ fn clash_proxy_to_uri(proxy: &ClashProxy) -> String {
                     let opts = proxy.plugin_opts.as_deref().unwrap_or("");
                     uri.push_str(&format!(
                         "?plugin={}",
-                        urlencoding::encode(&format!("{};{}", plugin, opts))
+                        urlencoding::encode(&format!("{plugin};{opts}"))
                     ));
                 }
             }
 
-            uri.push_str(&format!("#{}", name_encoded));
+            uri.push_str(&format!("#{name_encoded}"));
             uri
         }
         "trojan" => {
@@ -560,14 +662,14 @@ fn clash_proxy_to_uri(proxy: &ClashProxy) -> String {
                 uri.push_str("&allowInsecure=1");
             }
 
-            uri.push_str(&format!("#{}", name_encoded));
+            uri.push_str(&format!("#{name_encoded}"));
             uri
         }
         "vmess" => {
             // VMess: vmess://base64-json
             let uuid = proxy.uuid.as_deref().unwrap_or("");
-            let security = proxy.security.as_deref().unwrap_or("auto");
-            let alter_id = proxy.alter_id.unwrap_or(0);
+            let _security = proxy.security.as_deref().unwrap_or("auto");
+            let _alter_id = proxy.alter_id.unwrap_or(0);
             let sni = proxy
                 .sni
                 .as_deref()
@@ -607,7 +709,7 @@ fn clash_proxy_to_uri(proxy: &ClashProxy) -> String {
 
             let json_str = serde_json::to_string(&json).unwrap_or_default();
             let encoded = base64::engine::general_purpose::STANDARD.encode(json_str.as_bytes());
-            format!("vmess://{}", encoded)
+            format!("vmess://{encoded}")
         }
         "vless" => {
             // VLESS: vless://uuid@server:port?params#name
@@ -636,7 +738,7 @@ fn clash_proxy_to_uri(proxy: &ClashProxy) -> String {
                 uri.push_str(&format!("?{}", params.join("&")));
             }
 
-            uri.push_str(&format!("#{}", name_encoded));
+            uri.push_str(&format!("#{name_encoded}"));
             uri
         }
         _ => {
@@ -649,7 +751,7 @@ fn clash_proxy_to_uri(proxy: &ClashProxy) -> String {
 /// Parse Sing-Box JSON subscription content
 pub fn parse_singbox_json(content: &str) -> Result<Vec<String>, SubscriptionError> {
     let sub: SingBoxSubscription = serde_json::from_str(content).map_err(|e| {
-        SubscriptionError::ParseError(format!("Failed to parse Sing-Box JSON: {}", e))
+        SubscriptionError::ParseError(format!("Failed to parse Sing-Box JSON: {e}"))
     })?;
 
     let outbounds = sub.outbounds.ok_or_else(|| {
@@ -658,7 +760,7 @@ pub fn parse_singbox_json(content: &str) -> Result<Vec<String>, SubscriptionErro
 
     let links: Vec<String> = outbounds
         .iter()
-        .filter_map(|outbound| singbox_outbound_to_uri(outbound))
+        .filter_map(singbox_outbound_to_uri)
         .collect();
 
     Ok(links)
@@ -690,7 +792,7 @@ fn singbox_outbound_to_uri(outbound: &SingBoxOutbound) -> Option<String> {
                 uri.push_str("&allowInsecure=1");
             }
 
-            uri.push_str(&format!("#{}", name_encoded));
+            uri.push_str(&format!("#{name_encoded}"));
             Some(uri)
         }
         "shadowsocks" => {
@@ -699,10 +801,10 @@ fn singbox_outbound_to_uri(outbound: &SingBoxOutbound) -> Option<String> {
                 .as_deref()
                 .unwrap_or("chacha20-ietf-poly1305");
             let password = outbound.password.as_deref().unwrap_or("");
-            let user_info = format!("{}:{}", method, password);
+            let user_info = format!("{method}:{password}");
             let encoded = base64::engine::general_purpose::STANDARD.encode(user_info.as_bytes());
-            let mut uri = format!("ss://{}@{}:{}", encoded, server, port);
-            uri.push_str(&format!("#{}", name_encoded));
+            let mut uri = format!("ss://{encoded}@{server}:{port}");
+            uri.push_str(&format!("#{name_encoded}"));
             Some(uri)
         }
         "vmess" => {
@@ -741,14 +843,14 @@ fn singbox_outbound_to_uri(outbound: &SingBoxOutbound) -> Option<String> {
 
             let json_str = serde_json::to_string(&json).ok()?;
             let encoded = base64::engine::general_purpose::STANDARD.encode(json_str.as_bytes());
-            Some(format!("vmess://{}", encoded))
+            Some(format!("vmess://{encoded}"))
         }
         "vless" => {
             let uuid = outbound.uuid.as_deref().unwrap_or("");
             let sni = outbound.tls_server_name.as_deref().unwrap_or("");
             let flow = outbound.flow.as_deref().unwrap_or("");
             let skip_verify = outbound.skip_cert_verify.unwrap_or(false);
-            let mut uri = format!("vless://{}@{}:{}", uuid, server, port);
+            let mut uri = format!("vless://{uuid}@{server}:{port}");
 
             let mut params = Vec::new();
             if !sni.is_empty() {
@@ -765,7 +867,7 @@ fn singbox_outbound_to_uri(outbound: &SingBoxOutbound) -> Option<String> {
                 uri.push_str(&format!("?{}", params.join("&")));
             }
 
-            uri.push_str(&format!("#{}", name_encoded));
+            uri.push_str(&format!("#{name_encoded}"));
             Some(uri)
         }
         _ => None, // Unsupported outbound type
@@ -838,12 +940,12 @@ fn parse_ss_uri(uri: &str, name: Option<String>) -> Result<NodeConfig, Subscript
     // Parse method:password from user_info (base64 encoded)
     let decoded_user_info = match base64::engine::general_purpose::STANDARD.decode(user_info) {
         Ok(decoded) => String::from_utf8(decoded)
-            .map_err(|e| SubscriptionError::ParseError(format!("Invalid SS user info: {}", e)))?,
+            .map_err(|e| SubscriptionError::ParseError(format!("Invalid SS user info: {e}")))?,
         Err(_) => {
             // Try URL-safe base64
             match base64::engine::general_purpose::URL_SAFE.decode(user_info) {
                 Ok(decoded) => String::from_utf8(decoded).map_err(|e| {
-                    SubscriptionError::ParseError(format!("Invalid SS user info: {}", e))
+                    SubscriptionError::ParseError(format!("Invalid SS user info: {e}"))
                 })?,
                 Err(_) => {
                     // Treat as plain user:password
@@ -870,11 +972,16 @@ fn parse_ss_uri(uri: &str, name: Option<String>) -> Result<NodeConfig, Subscript
     })?;
 
     // Handle query params if present (e.g., ?plugin=...)
+    // TODO(#79): Implement simple-obfs/v2ray-plugin option parsing.
+    // Plugin options are passed as base64-encoded query parameters:
+    // - simple-obfs: plugin=simple-obfs;host=example.com;tls
+    // - v2ray-plugin: plugin=v2ray-plugin;server;tls;host=example.com;path=/
+    // For now, we only capture the raw plugin string without parsing options.
     let _plugin = if let Some(query_pos) = server_part.find('?') {
         let query = &server_part[query_pos + 1..];
         for param in query.split('&') {
             if param.starts_with("plugin=") {
-                // Could parse plugin options here if needed
+                // Plugin option parsing not implemented yet - see issue #79
             }
         }
         Some(query)
@@ -887,7 +994,7 @@ fn parse_ss_uri(uri: &str, name: Option<String>) -> Result<NodeConfig, Subscript
         .map(|(p, _)| p)
         .unwrap_or(port_str)
         .parse()
-        .map_err(|e| SubscriptionError::ParseError(format!("Invalid port: {}", e)))?;
+        .map_err(|e| SubscriptionError::ParseError(format!("Invalid port: {e}")))?;
 
     Ok(NodeConfig {
         name: name.unwrap_or_else(|| "Shadowsocks".to_string()),
@@ -915,13 +1022,14 @@ fn parse_vmess_uri(uri: &str, name: Option<String>) -> Result<NodeConfig, Subscr
     let decoded = base64::engine::general_purpose::STANDARD
         .decode(uri_str.as_bytes())
         .or_else(|_| base64::engine::general_purpose::URL_SAFE.decode(uri_str.as_bytes()))
-        .map_err(|e| SubscriptionError::ParseError(format!("Invalid VMess base64: {}", e)))?;
+        .map_err(|e| SubscriptionError::ParseError(format!("Invalid VMess base64: {e}")))?;
 
     let json_str = String::from_utf8(decoded)
-        .map_err(|e| SubscriptionError::ParseError(format!("Invalid VMess JSON: {}", e)))?;
+        .map_err(|e| SubscriptionError::ParseError(format!("Invalid VMess JSON: {e}")))?;
 
     #[derive(Deserialize)]
     struct VmessJson {
+        #[allow(dead_code)]
         v: Option<String>,
         ps: Option<String>,
         add: Option<String>,
@@ -929,15 +1037,16 @@ fn parse_vmess_uri(uri: &str, name: Option<String>) -> Result<NodeConfig, Subscr
         id: Option<String>,
         net: Option<String>,
         #[serde(rename = "type")]
+        #[allow(dead_code)]
         type_: Option<String>,
         host: Option<String>,
+        #[allow(dead_code)]
         path: Option<String>,
         tls: Option<String>,
     }
 
-    let vmess: VmessJson = serde_json::from_str(&json_str).map_err(|e| {
-        SubscriptionError::ParseError(format!("Invalid VMess JSON structure: {}", e))
-    })?;
+    let vmess: VmessJson = serde_json::from_str(&json_str)
+        .map_err(|e| SubscriptionError::ParseError(format!("Invalid VMess JSON structure: {e}")))?;
 
     let node_name = name.or(vmess.ps).unwrap_or_else(|| "VMess".to_string());
     let server = vmess.add.ok_or_else(|| {
@@ -1006,22 +1115,22 @@ fn parse_vless_uri(uri: &str, name: Option<String>) -> Result<NodeConfig, Subscr
 
     let port: u16 = port_str
         .parse()
-        .map_err(|e| SubscriptionError::ParseError(format!("Invalid VLESS port: {}", e)))?;
+        .map_err(|e| SubscriptionError::ParseError(format!("Invalid VLESS port: {e}")))?;
 
     // Parse query parameters
     let mut sni = None;
-    let mut flow = None;
-    let mut skip_verify = false;
+    let mut _flow = None;
+    let mut _skip_verify = false;
 
     if let Some(query) = query {
         for param in query.split('&') {
             let param_decoded = urlencoding::decode(param).unwrap_or_default();
-            if param_decoded.starts_with("sni=") {
-                sni = Some(param_decoded[4..].to_string());
-            } else if param_decoded.starts_with("flow=") {
-                flow = Some(param_decoded[5..].to_string());
+            if let Some(stripped) = param_decoded.strip_prefix("sni=") {
+                sni = Some(stripped.to_string());
+            } else if let Some(stripped) = param_decoded.strip_prefix("flow=") {
+                _flow = Some(stripped.to_string());
             } else if param_decoded.contains("allowInsecure=1") {
-                skip_verify = true;
+                _skip_verify = true;
             }
         }
     }
@@ -1079,20 +1188,20 @@ fn parse_trojan_uri(uri: &str, name: Option<String>) -> Result<NodeConfig, Subsc
 
     let port: u16 = port_str
         .parse()
-        .map_err(|e| SubscriptionError::ParseError(format!("Invalid Trojan port: {}", e)))?;
+        .map_err(|e| SubscriptionError::ParseError(format!("Invalid Trojan port: {e}")))?;
 
     // Parse query parameters
     let mut sni = None;
-    let mut skip_verify = false;
+    let mut _skip_verify = false;
 
     if let Some(query_pos) = server_port.find('?') {
         let query = &server_port[query_pos + 1..];
         for param in query.split('&') {
             let param_decoded = urlencoding::decode(param).unwrap_or_default();
-            if param_decoded.starts_with("sni=") {
-                sni = Some(param_decoded[4..].to_string());
+            if let Some(stripped) = param_decoded.strip_prefix("sni=") {
+                sni = Some(stripped.to_string());
             } else if param_decoded.contains("allowInsecure=1") {
-                skip_verify = true;
+                _skip_verify = true;
             }
         }
     }
@@ -1126,7 +1235,7 @@ pub fn uris_to_node_configs(uris: &[String]) -> Result<Vec<NodeConfig>, Subscrip
             Ok(config) => configs.push(config),
             Err(e) => {
                 // Log error but continue parsing other URIs
-                eprintln!("Warning: Failed to parse URI '{}': {}", uri, e);
+                eprintln!("Warning: Failed to parse URI '{uri}': {e}");
             }
         }
     }
@@ -1739,5 +1848,421 @@ proxies:
         assert_eq!(configs.len(), 2);
         assert_eq!(configs[0].node_type, NodeType::Shadowsocks);
         assert_eq!(configs[1].node_type, NodeType::Trojan);
+    }
+
+    // ============================================================
+    // SubscriptionConfig Tests
+    // ============================================================
+
+    #[test]
+    fn test_subscription_config_new() {
+        let config = SubscriptionConfig::new("https://example.com/subscription");
+        assert_eq!(config.url, "https://example.com/subscription");
+        assert_eq!(config.update_interval, Duration::from_secs(3600));
+        assert!(config.verify_tls);
+        assert_eq!(config.user_agent, "dae-rs/0.1.0");
+        assert_eq!(config.timeout, Duration::from_secs(30));
+    }
+
+    #[test]
+    fn test_subscription_config_builder_pattern() {
+        let config = SubscriptionConfig::new("https://example.com/sub")
+            .with_update_interval(Duration::from_secs(7200))
+            .with_user_agent("CustomAgent/1.0")
+            .with_insecure_tls();
+
+        assert_eq!(config.url, "https://example.com/sub");
+        assert_eq!(config.update_interval, Duration::from_secs(7200));
+        assert_eq!(config.user_agent, "CustomAgent/1.0");
+        assert!(
+            !config.verify_tls,
+            "with_insecure_tls should set verify_tls to false"
+        );
+    }
+
+    #[test]
+    fn test_subscription_config_default() {
+        let config = SubscriptionConfig::default();
+        assert!(config.url.is_empty());
+        assert_eq!(config.update_interval, Duration::from_secs(3600));
+        assert!(config.verify_tls);
+        assert_eq!(config.user_agent, "dae-rs/0.1.0");
+        assert_eq!(config.timeout, Duration::from_secs(30));
+    }
+
+    #[test]
+    fn test_subscription_config_with_insecure_tls() {
+        let config = SubscriptionConfig::new("http://insecure.example.com/sub").with_insecure_tls();
+
+        assert!(!config.verify_tls);
+    }
+
+    #[test]
+    fn test_subscription_config_update_interval() {
+        let config = SubscriptionConfig::new("https://example.com/sub")
+            .with_update_interval(Duration::from_secs(86400));
+
+        assert_eq!(config.update_interval, Duration::from_secs(86400));
+    }
+
+    #[test]
+    fn test_subscription_config_user_agent() {
+        let config =
+            SubscriptionConfig::new("https://example.com/sub").with_user_agent("Mozilla/5.0");
+
+        assert_eq!(config.user_agent, "Mozilla/5.0");
+    }
+
+    // ============================================================
+    // Additional Parsing Tests
+    // ============================================================
+
+    #[test]
+    fn test_parse_clash_yaml_unsupported_type() {
+        let yaml = r#"
+proxies:
+  - name: "Unknown"
+    type: unknown-type
+    server: test.com
+    port: 443
+"#;
+        let result = parse_clash_yaml(yaml);
+        assert!(result.is_ok());
+        let links = result.unwrap();
+        assert!(links[0].starts_with("#Unsupported type:"));
+    }
+
+    #[test]
+    fn test_parse_singbox_json_unsupported_outbound() {
+        let json = r#"{
+  "outbounds": [
+    {"type": "wireguard", "tag": "Unsupported", "server": "test.com", "port": 443}
+  ]
+}"#;
+        let result = parse_singbox_json(json).unwrap();
+        assert!(result.is_empty());
+    }
+
+    #[test]
+    fn test_parse_uri_list_empty_content() {
+        let result = parse_uri_list("").unwrap();
+        assert!(result.is_empty());
+
+        let result = parse_uri_list("   \n\n   ").unwrap();
+        assert!(result.is_empty());
+    }
+
+    #[test]
+    fn test_parse_uri_list_filters_invalid() {
+        let content = "ss://valid\nhttp://invalid\nvmess://valid\nnot-a-proxy\nvless://valid";
+        let result = parse_uri_list(content).unwrap();
+        assert_eq!(result.len(), 3);
+        assert!(result.iter().all(|l| l.starts_with("ss://")
+            || l.starts_with("vmess://")
+            || l.starts_with("vless://")));
+    }
+
+    #[test]
+    fn test_uri_to_node_config_unsupported_scheme() {
+        let result = uri_to_node_config("https://example.com");
+        assert!(result.is_err());
+        assert!(matches!(
+            result.unwrap_err(),
+            SubscriptionError::UnsupportedUriScheme(_)
+        ));
+    }
+
+    #[test]
+    fn test_uri_to_node_config_ss_invalid_base64() {
+        let uri = "ss://!!!invalid-base64!!!@1.2.3.4:8388#Test";
+        let result = uri_to_node_config(uri);
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_uri_to_node_config_ss_plain_userinfo() {
+        let uri = "ss://plain:text@1.2.3.4:8388#Test";
+        let result = uri_to_node_config(uri);
+        assert!(result.is_ok());
+        let config = result.unwrap();
+        assert_eq!(config.node_type, NodeType::Shadowsocks);
+        assert_eq!(config.method.as_deref(), Some("plain"));
+        assert_eq!(config.password.as_deref(), Some("text"));
+    }
+
+    #[test]
+    fn test_uri_to_node_config_vmess_invalid_base64() {
+        let uri = "vmess://!!!invalid!!!";
+        let result = uri_to_node_config(uri);
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_uri_to_node_config_vmess_missing_server() {
+        use base64::Engine;
+        let json = serde_json::json!({
+            "v": "2",
+            "ps": "Test",
+            "port": 443,
+            "id": "12345678-1234-1234-1234-123456789012"
+        });
+        let encoded = base64::engine::general_purpose::STANDARD.encode(json.to_string().as_bytes());
+        let uri = format!("vmess://{}", encoded);
+        let result = uri_to_node_config(&uri);
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_uri_to_node_config_vless_invalid() {
+        let uri = "vless://no-at-sign";
+        let result = uri_to_node_config(uri);
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_uri_to_node_config_trojan_no_at() {
+        let uri = "trojan://no-at-sign";
+        let result = uri_to_node_config(uri);
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_parse_subscription_auto_base64_uri_list() {
+        use base64::Engine;
+        let raw = "ss://link1\nvmess://link2";
+        let encoded = base64::engine::general_purpose::STANDARD.encode(raw.as_bytes());
+
+        let result = parse_subscription(encoded.as_bytes());
+        assert!(result.is_ok());
+        let update = result.unwrap();
+        assert_eq!(update.links.len(), 2);
+        assert_eq!(update.format_detected, SubscriptionType::Base64);
+    }
+
+    #[test]
+    fn test_parse_subscription_auto_empty() {
+        let content = b"   \n\n   ";
+        let result = parse_subscription(content);
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_parse_subscription_auto_truly_empty_sip008() {
+        let json = br#"{"version": 1, "servers": []}"#;
+        let result = parse_subscription(json);
+        assert!(result.is_ok());
+        let update = result.unwrap();
+        assert!(update.links.is_empty());
+        assert_eq!(update.format_detected, SubscriptionType::Sip008);
+    }
+
+    #[test]
+    fn test_extract_tag_from_sip008_content() {
+        let json = br#"{
+            "version": 1,
+            "servers": [
+                {"remarks": "First Server", "server": "1.1.1.1", "server_port": 443, "password": "x", "method": "aes-256-gcm"}
+            ]
+        }"#;
+        let tag = extract_tag("", json);
+        assert_eq!(tag, Some("First Server".to_string()));
+    }
+
+    #[test]
+    fn test_extract_tag_priority_url_over_content() {
+        let url = "https://example.com/sub#URLTag";
+        let tag = extract_tag(url, b"something else");
+        assert_eq!(tag, Some("URLTag".to_string()));
+    }
+
+    #[test]
+    fn test_extract_tag_empty_url_fragment() {
+        let url = "https://example.com/sub#";
+        let tag = extract_tag(url, b"");
+        assert!(tag.is_none());
+    }
+
+    #[test]
+    fn test_node_config_debug() {
+        let config = NodeConfig {
+            name: "Test Node".to_string(),
+            node_type: NodeType::Shadowsocks,
+            server: "1.2.3.4".to_string(),
+            port: 443,
+            method: Some("aes-256-gcm".to_string()),
+            password: Some("secret".to_string()),
+            uuid: None,
+            trojan_password: None,
+            security: None,
+            tls: Some(true),
+            tls_server_name: Some("example.com".to_string()),
+            aead: Some(true),
+            capabilities: None,
+        };
+        let debug = format!("{:?}", config);
+        assert!(debug.contains("Test Node"));
+        assert!(debug.contains("Shadowsocks"));
+    }
+
+    #[test]
+    fn test_node_capabilities() {
+        let caps = NodeCapabilities {
+            fullcone: Some(true),
+            udp: Some(true),
+            v2ray: Some(false),
+        };
+        let debug = format!("{:?}", caps);
+        assert!(debug.contains("fullcone"));
+    }
+
+    #[test]
+    fn test_proxy_protocol_to_node_type() {
+        assert_eq!(
+            ProxyProtocol::Shadowsocks.to_node_type(),
+            NodeType::Shadowsocks
+        );
+        assert_eq!(ProxyProtocol::VMess.to_node_type(), NodeType::Vmess);
+        assert_eq!(ProxyProtocol::VLESS.to_node_type(), NodeType::Vless);
+        assert_eq!(ProxyProtocol::Trojan.to_node_type(), NodeType::Trojan);
+    }
+
+    #[test]
+    fn test_sip008_server_deserialization() {
+        let json = r#"{
+            "id": "srv-001",
+            "remarks": "Test Server",
+            "server": "test.example.com",
+            "server_port": 8443,
+            "password": "supersecret",
+            "method": "chacha20-ietf-poly1305",
+            "plugin": "v2ray-plugin",
+            "plugin_opts": "tls;host=example.com"
+        }"#;
+
+        let server: Sip008Server = serde_json::from_str(json).unwrap();
+        assert_eq!(server.id.as_deref(), Some("srv-001"));
+        assert_eq!(server.remarks.as_deref(), Some("Test Server"));
+        assert_eq!(server.server, "test.example.com");
+        assert_eq!(server.server_port, 8443);
+        assert_eq!(server.method, "chacha20-ietf-poly1305");
+        assert_eq!(server.plugin.as_deref(), Some("v2ray-plugin"));
+        assert_eq!(server.plugin_opts.as_deref(), Some("tls;host=example.com"));
+    }
+
+    #[test]
+    fn test_sip008_server_minimal() {
+        let json = r#"{
+            "server": "1.2.3.4",
+            "server_port": 443,
+            "password": "pwd",
+            "method": "aes-256-gcm"
+        }"#;
+
+        let server: Sip008Server = serde_json::from_str(json).unwrap();
+        assert!(server.id.is_none());
+        assert!(server.remarks.is_none());
+        assert!(server.plugin.is_none());
+        assert!(server.plugin_opts.is_none());
+    }
+
+    #[test]
+    fn test_subscription_update_debug() {
+        let update = SubscriptionUpdate {
+            tag: Some("MyTag".to_string()),
+            links: vec!["ss://link1".to_string()],
+            bytes_used: Some(1024),
+            bytes_remaining: Some(2048),
+            format_detected: SubscriptionType::ClashYaml,
+        };
+        let debug = format!("{:?}", update);
+        assert!(debug.contains("MyTag"));
+        assert!(debug.contains("1024"));
+    }
+
+    #[test]
+    fn test_subscription_config_clone() {
+        let config = SubscriptionConfig::new("https://example.com/sub")
+            .with_update_interval(Duration::from_secs(7200))
+            .with_insecure_tls();
+
+        let cloned = config.clone();
+        assert_eq!(cloned.url, config.url);
+        assert_eq!(cloned.update_interval, config.update_interval);
+        assert_eq!(cloned.verify_tls, config.verify_tls);
+    }
+
+    #[test]
+    fn test_clash_proxy_vmess_with_ws() {
+        let yaml = r#"
+proxies:
+  - name: "WS VMess"
+    type: vmess
+    server: example.com
+    port: 443
+    uuid: 12345678-1234-1234-1234-123456789012
+    alterId: 0
+    cipher: auto
+    network: ws
+    ws-path: /v2
+    ws-headers:
+      Host: example.com
+    tls: true
+"#;
+        let result = parse_clash_yaml(yaml).unwrap();
+        assert_eq!(result.len(), 1);
+        let uri = &result[0];
+        assert!(uri.starts_with("vmess://"));
+        use base64::Engine;
+        let encoded = uri.strip_prefix("vmess://").unwrap();
+        let decoded_bytes = base64::engine::general_purpose::STANDARD
+            .decode(encoded.as_bytes())
+            .unwrap();
+        let decoded = String::from_utf8(decoded_bytes).unwrap();
+        // The ws-path becomes "path" in the VMess JSON blob
+        assert!(decoded.contains(r#""path":"/v2"#) || decoded.contains("/v2"));
+    }
+
+    #[test]
+    fn test_clash_proxy_vless_with_flow() {
+        // VLESS serialization DOES include flow parameter
+        let yaml = r#"
+proxies:
+  - name: "XTLS VLESS"
+    type: vless
+    server: example.com
+    port: 443
+    uuid: 12345678-1234-1234-1234-123456789012
+    flow: xtls-rprx-vision
+"#;
+        let result = parse_clash_yaml(yaml).unwrap();
+        assert_eq!(result.len(), 1);
+        let uri = &result[0];
+        assert!(uri.starts_with("vless://"));
+        assert!(uri.contains("flow="));
+    }
+
+    #[test]
+    fn test_parse_subscription_url_safe_base64() {
+        use base64::Engine;
+        let raw = "ss://link1\nvmess://link2";
+        let encoded = base64::engine::general_purpose::URL_SAFE.encode(raw.as_bytes());
+
+        let result = parse_subscription(encoded.as_bytes());
+        assert!(result.is_ok());
+        assert_eq!(result.unwrap().links.len(), 2);
+    }
+
+    #[test]
+    fn test_subscription_update_clone() {
+        let update = SubscriptionUpdate {
+            tag: None,
+            links: vec!["ss://test".to_string()],
+            bytes_used: None,
+            bytes_remaining: None,
+            format_detected: SubscriptionType::Base64,
+        };
+        let cloned = update.clone();
+        assert_eq!(cloned.links.len(), 1);
+        assert_eq!(cloned.format_detected, SubscriptionType::Base64);
     }
 }

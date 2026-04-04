@@ -55,6 +55,8 @@ pub fn xdp_prog_main(mut ctx: XdpContext) -> u32 {
 fn xdp_prog(ctx: &mut XdpContext) -> Result<u32, ()> {
     // Parse Ethernet header
     let eth = match EthHdr::from_ctx(ctx) {
+        // SAFETY: EthHdr::from_ctx returns None if bounds check fails,
+        // otherwise returns a valid pointer that can be safely dereferenced.
         Some(hdr) => unsafe { *hdr },
         None => {
             // Can't parse Ethernet header, pass
@@ -71,6 +73,8 @@ fn xdp_prog(ctx: &mut XdpContext) -> Result<u32, ()> {
     let (ip_offset, is_ipv4) = if eth.has_vlan() {
         // VLAN tag present, check inner EtherType
         let vlan = match VlanHdr::from_ctx_after_eth(ctx, core::mem::size_of::<EthHdr>()) {
+            // SAFETY: VlanHdr::from_ctx_after_eth returns None if bounds check fails,
+            // otherwise returns a valid pointer that can be safely dereferenced.
             Some(hdr) => unsafe { *hdr },
             None => {
                 return Ok(XDP_PASS);
@@ -97,6 +101,8 @@ fn xdp_prog(ctx: &mut XdpContext) -> Result<u32, ()> {
 
     // Parse IPv4 header
     let ip = match IpHdr::from_ctx_after_eth(ctx, ip_offset) {
+        // SAFETY: IpHdr::from_ctx_after_eth returns None if bounds check fails,
+        // otherwise returns a valid pointer that can be safely dereferenced.
         Some(hdr) => unsafe { *hdr },
         None => {
             return Ok(XDP_PASS);
@@ -116,6 +122,7 @@ fn xdp_prog(ctx: &mut XdpContext) -> Result<u32, ()> {
     let session_key = SessionKey::new(src_ip, dst_ip, 0, 0, ip.protocol());
 
     // Look up or create session entry with MAC information
+    // SAFETY: SESSIONS is a valid eBPF map; get() returns None if key not found.
     let session = match unsafe { SESSIONS.get(&session_key) } {
         Some(entry) => {
             // Update existing session, preserve MAC if already set

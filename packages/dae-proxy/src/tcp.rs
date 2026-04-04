@@ -318,5 +318,32 @@ mod tests {
         let config = TcpProxyConfig::default();
         assert_eq!(config.listen_addr.port(), 1080);
         assert_eq!(config.connection_timeout, Duration::from_secs(60));
+        assert_eq!(config.keepalive_interval, Duration::from_secs(30));
+        assert_eq!(config.inbound_buffer_size, 32 * 1024);
+        assert_eq!(config.outbound_buffer_size, 32 * 1024);
+    }
+
+    #[test]
+    fn test_tcp_proxy_config_custom() {
+        let config = TcpProxyConfig {
+            listen_addr: "0.0.0.0:8080".parse().unwrap(),
+            connection_timeout: Duration::from_secs(120),
+            keepalive_interval: Duration::from_secs(60),
+            inbound_buffer_size: 16 * 1024,
+            outbound_buffer_size: 16 * 1024,
+        };
+        assert_eq!(config.listen_addr.port(), 8080);
+        assert_eq!(config.connection_timeout, Duration::from_secs(120));
+        assert_eq!(config.keepalive_interval, Duration::from_secs(60));
+        assert_eq!(config.inbound_buffer_size, 16 * 1024);
+        assert_eq!(config.outbound_buffer_size, 16 * 1024);
+    }
+
+    #[test]
+    fn test_tcp_proxy_config_debug() {
+        let config = TcpProxyConfig::default();
+        let debug_str = format!("{:?}", config);
+        assert!(debug_str.contains("TcpProxyConfig"));
+        assert!(debug_str.contains("1080"));
     }
 }

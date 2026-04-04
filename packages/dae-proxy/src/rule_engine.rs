@@ -91,7 +91,10 @@ impl PacketInfo {
     }
 
     /// Set destination domain
+    ///
+    /// Note: caller should normalize the domain before passing (lowercase once, not per-call).
     pub fn with_domain(mut self, domain: &str) -> Self {
+        // Normalize to lowercase once at entry point — avoid repeated conversion in hot paths
         self.destination_domain = Some(domain.to_lowercase());
         self
     }
@@ -383,17 +386,13 @@ impl RuleEngine {
         // For GeoLite2/GeoIP2 Country database, we need to access the country field
         match reader.lookup(*ip) {
             Ok(_result) => {
-                // In maxminddb 0.27, the LookupResult provides field access
-                // through traits. For country data, we need to use the proper
-                // deserialization. For now, return None and let the caller
-                // handle missing GeoIP data gracefully.
-                //
-                // A full implementation would require knowing the exact database
-                // schema and using the appropriate field access.
-                debug!("GeoIP lookup succeeded but country extraction not implemented for this database type");
+                // TODO(#75): Implement country extraction for maxminddb 0.27 API.
+                // The maxminddb 0.27 LookupResult requires proper field access via traits.
+                // For now, return None and let the caller handle missing GeoIP data gracefully.
                 None
             }
             Err(e) => {
+                // Log at debug level - this is expected for non-GeoIP databases or invalid IPs
                 debug!("GeoIP lookup failed: {:?}", e);
                 None
             }

@@ -7,6 +7,7 @@ use async_trait::async_trait;
 use std::collections::HashMap;
 use std::sync::Arc;
 
+pub use super::hash::{fnv1a_hash, sip_hash, Fnv1aHasher, SipHasher};
 pub use super::node::{Node, NodeError, NodeId};
 
 /// Connection fingerprint for hash-based policies
@@ -52,11 +53,18 @@ impl ConnectionFingerprint {
     }
 
     /// Calculate hash for consistent hashing
-    /// Uses FNV-1a hash algorithm
+    ///
+    /// Uses FNV-1a (Fowler–Noll–Vo) hash algorithm for non-cryptographic
+    /// hashing with good distribution properties. This is NOT SipHash
+    /// (which was incorrectly documented in the original implementation).
+    ///
+    /// FNV-1a is used here instead of SipHash because:
+    /// - Consistent hashing doesn't need anti-hash-flood protection
+    /// - FNV-1a is faster for non-keyed hashing
+    /// - Matches the documented behavior
     pub fn hash(&self) -> u64 {
-        use std::collections::hash_map::DefaultHasher;
         use std::hash::{Hash, Hasher};
-        let mut s = DefaultHasher::new();
+        let mut s = Fnv1aHasher::new();
         self.src_ip.hash(&mut s);
         self.dst_ip.hash(&mut s);
         self.src_port.hash(&mut s);
@@ -170,10 +178,12 @@ mod tests {
             if let SelectionPolicy::Specific(id2) = policy2 {
                 assert_eq!(id1, id2);
             } else {
-                panic!("Expected Specific");
+                // This should never happen - policy2 was cloned from policy1 which is Specific
+                unreachable!("clone() produced wrong variant");
             }
         } else {
-            panic!("Expected Specific");
+            // This should never happen - policy1 was directly set to Specific
+            unreachable!("initial policy was not Specific");
         }
     }
 }

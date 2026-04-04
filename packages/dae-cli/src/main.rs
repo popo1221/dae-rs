@@ -231,7 +231,11 @@ async fn run_proxy(
         match node.node_type {
             NodeType::Trojan => {
                 if let Some(ref password) = node.trojan_password {
-                    proxy_config.trojan_listen = Some("127.0.0.1:1080".parse().unwrap());
+                    proxy_config.trojan_listen = Some(
+                        "127.0.0.1:1080"
+                            .parse()
+                            .expect("invalid hardcoded trojan listen address"),
+                    );
                     proxy_config.trojan_server = Some(TrojanServerConfig {
                         addr: server_addr,
                         port,
@@ -246,7 +250,11 @@ async fn run_proxy(
                     let method = SsCipherType::from_str(method_str)
                         .unwrap_or(SsCipherType::Chacha20IetfPoly1305);
 
-                    proxy_config.ss_listen = Some("127.0.0.1:1080".parse().unwrap());
+                    proxy_config.ss_listen = Some(
+                        "127.0.0.1:1080"
+                            .parse()
+                            .expect("invalid hardcoded shadowsocks listen address"),
+                    );
                     proxy_config.ss_server = Some(SsServerConfig {
                         addr: server_addr,
                         port,
@@ -258,7 +266,11 @@ async fn run_proxy(
             }
             NodeType::Vless => {
                 if let Some(ref uuid) = node.uuid {
-                    proxy_config.vless_listen = Some("127.0.0.1:1080".parse().unwrap());
+                    proxy_config.vless_listen = Some(
+                        "127.0.0.1:1080"
+                            .parse()
+                            .expect("invalid hardcoded vless listen address"),
+                    );
                     proxy_config.vless_server = Some(VlessServerConfig {
                         addr: server_addr,
                         port,
@@ -274,7 +286,11 @@ async fn run_proxy(
                     let security = VmessSecurity::from_str(security_str)
                         .unwrap_or(VmessSecurity::Aes128GcmAead);
 
-                    proxy_config.vmess_listen = Some("127.0.0.1:1080".parse().unwrap());
+                    proxy_config.vmess_listen = Some(
+                        "127.0.0.1:1080"
+                            .parse()
+                            .expect("invalid hardcoded vmess listen address"),
+                    );
                     proxy_config.vmess_server = Some(VmessServerConfig {
                         addr: server_addr,
                         port,
