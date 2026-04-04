@@ -91,9 +91,7 @@ impl EbpfLoader {
         // Load the eBPF object file
         let path = Path::new(tc_object);
         if !path.exists() {
-            anyhow::bail!(
-                "TC object file not found: {tc_object}. Build the dae-tc crate first."
-            );
+            anyhow::bail!("TC object file not found: {tc_object}. Build the dae-tc crate first.");
         }
 
         debug!("Loading TC eBPF object from: {}", tc_object);
