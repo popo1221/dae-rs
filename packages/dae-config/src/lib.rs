@@ -8,7 +8,31 @@ pub mod rules;
 pub mod subscription;
 pub mod tracking;
 pub use rules::{RuleConfig, RuleConfigItem, RuleGroupConfig};
+pub use subscription::SubscriptionConfig;
 pub use tracking::TrackingConfig;
+
+/// Subscription entry for automatic node updates
+#[derive(Debug, Clone, Deserialize)]
+pub struct SubscriptionEntry {
+    /// Subscription URL (required)
+    pub url: String,
+    /// Update interval in seconds (default: 3600 = 1 hour)
+    #[serde(default = "default_subscription_interval")]
+    pub update_interval_secs: u64,
+    /// Enable TLS certificate verification (default: true)
+    #[serde(default = "default_true")]
+    pub verify_tls: bool,
+    /// Custom user agent (optional, uses dae-rs default if not set)
+    #[serde(default)]
+    pub user_agent: Option<String>,
+    /// Optional name/alias for this subscription
+    #[serde(default)]
+    pub name: Option<String>,
+}
+
+fn default_subscription_interval() -> u64 {
+    3600 // 1 hour
+}
 
 /// Configuration validation errors
 #[derive(Error, Debug)]
@@ -25,6 +49,8 @@ pub enum ConfigError {
     RuleFileNotFound(String),
     #[error("Rule file parse error: {0}")]
     RuleFileParseError(String),
+    #[error("Invalid subscription: {0}")]
+    InvalidSubscription(String),
     #[error("Validation error: {0}")]
     ValidationError(String),
 }
@@ -97,6 +123,9 @@ pub struct Config {
     /// Upstream nodes/proxy servers
     #[serde(default)]
     pub nodes: Vec<NodeConfig>,
+    /// Subscription URLs for automatic node updates
+    #[serde(default)]
+    pub subscriptions: Vec<SubscriptionEntry>,
     /// Rules configuration
     #[serde(default)]
     pub rules: RulesConfig,
@@ -831,6 +860,7 @@ impl Config {
                 pid_file: None,
             },
             nodes,
+            subscriptions: vec![],
             rules: RulesConfig::default(),
             logging: LoggingConfig {
                 level: legacy.global.log_level,
@@ -869,6 +899,9 @@ impl Config {
 
         // Validate nodes
         self.validate_nodes()?;
+
+        // Validate subscriptions
+        self.validate_subscriptions()?;
 
         // Validate rules
         self.validate_rules()?;
@@ -980,6 +1013,35 @@ impl Config {
         Ok(())
     }
 
+    /// Validate subscriptions configuration
+    fn validate_subscriptions(&self) -> Result<(), ConfigError> {
+        for sub in &self.subscriptions {
+            // URL is required and must be valid
+            if sub.url.is_empty() {
+                return Err(ConfigError::InvalidSubscription(
+                    "subscription URL cannot be empty".to_string(),
+                ));
+            }
+
+            // Must be a valid URL (http or https)
+            if !sub.url.starts_with("http://") && !sub.url.starts_with("https://") {
+                return Err(ConfigError::InvalidSubscription(format!(
+                    "subscription URL must start with http:// or https://: {}",
+                    sub.url
+                )));
+            }
+
+            // Update interval must be positive
+            if sub.update_interval_secs == 0 {
+                return Err(ConfigError::InvalidSubscription(
+                    "subscription update_interval_secs must be greater than 0".to_string(),
+                ));
+            }
+        }
+
+        Ok(())
+    }
+
     /// Validate rules configuration
     fn validate_rules(&self) -> Result<(), ConfigError> {
         // If config_file is specified, it must exist
@@ -1066,6 +1128,7 @@ mod tests {
         let config = Config {
             proxy: ProxyConfig::default(),
             nodes: vec![],
+            subscriptions: vec![],
             rules: RulesConfig::default(),
             logging: LoggingConfig::default(),
             transparent_proxy: TransparentProxyConfig::default(),
@@ -1077,6 +1140,7 @@ mod tests {
         assert_eq!(config.transparent_proxy.tun_interface, "dae0");
         assert_eq!(config.transparent_proxy.tun_ip, "10.0.0.1");
         assert_eq!(config.transparent_proxy.mtu, 1500);
+        assert!(config.subscriptions.is_empty());
     }
 
     #[test]
@@ -1130,6 +1194,7 @@ mod tests {
                 aead: None,
                 capabilities: None,
             }],
+            subscriptions: vec![],
             rules: RulesConfig::default(),
             logging: LoggingConfig::default(),
             transparent_proxy: TransparentProxyConfig::default(),
@@ -1157,6 +1222,7 @@ mod tests {
                 aead: None,
                 capabilities: None,
             }],
+            subscriptions: vec![],
             rules: RulesConfig::default(),
             logging: LoggingConfig::default(),
             transparent_proxy: TransparentProxyConfig::default(),
@@ -1234,6 +1300,7 @@ mod tests {
                     capabilities: None,
                 },
             ],
+            subscriptions: vec![],
             rules: RulesConfig::default(),
             logging: LoggingConfig::default(),
             transparent_proxy: TransparentProxyConfig::default(),
@@ -1248,5 +1315,65 @@ mod tests {
         assert_eq!(config.vless_nodes().len(), 1);
         assert_eq!(config.vmess_nodes().len(), 0);
         assert_eq!(config.trojan_nodes().len(), 0);
+    }
+
+    #[test]
+    fn test_validate_subscription_ok() {
+        let config = Config {
+            proxy: ProxyConfig::default(),
+            nodes: vec![],
+            subscriptions: vec![SubscriptionEntry {
+                url: "https://example.com/sub".to_string(),
+                update_interval_secs: 3600,
+                verify_tls: true,
+                user_agent: None,
+                name: Some("my-sub".to_string()),
+            }],
+            rules: RulesConfig::default(),
+            logging: LoggingConfig::default(),
+            transparent_proxy: TransparentProxyConfig::default(),
+            tracking: TrackingConfig::default(),
+        };
+        assert!(config.validate().is_ok());
+    }
+
+    #[test]
+    fn test_validate_subscription_invalid_url() {
+        let config = Config {
+            proxy: ProxyConfig::default(),
+            nodes: vec![],
+            subscriptions: vec![SubscriptionEntry {
+                url: "".to_string(), // Empty URL
+                update_interval_secs: 3600,
+                verify_tls: true,
+                user_agent: None,
+                name: None,
+            }],
+            rules: RulesConfig::default(),
+            logging: LoggingConfig::default(),
+            transparent_proxy: TransparentProxyConfig::default(),
+            tracking: TrackingConfig::default(),
+        };
+        assert!(config.validate().is_err());
+    }
+
+    #[test]
+    fn test_validate_subscription_bad_scheme() {
+        let config = Config {
+            proxy: ProxyConfig::default(),
+            nodes: vec![],
+            subscriptions: vec![SubscriptionEntry {
+                url: "ftp://example.com/sub".to_string(), // Wrong scheme
+                update_interval_secs: 3600,
+                verify_tls: true,
+                user_agent: None,
+                name: None,
+            }],
+            rules: RulesConfig::default(),
+            logging: LoggingConfig::default(),
+            transparent_proxy: TransparentProxyConfig::default(),
+            tracking: TrackingConfig::default(),
+        };
+        assert!(config.validate().is_err());
     }
 }

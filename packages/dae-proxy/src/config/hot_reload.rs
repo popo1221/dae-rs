@@ -411,6 +411,7 @@ mod tests {
         let event = ConfigEvent::Reloaded(Config {
             proxy: dae_config::ProxyConfig::default(),
             nodes: vec![],
+            subscriptions: vec![],
             rules: dae_config::RulesConfig::default(),
             logging: dae_config::LoggingConfig::default(),
             transparent_proxy: dae_config::TransparentProxyConfig::default(),
