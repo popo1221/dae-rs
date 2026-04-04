@@ -1,0 +1,14 @@
+{
+  "id": "session-1775268738419",
+  "startedAt": "2026-04-04T02:12:18.419Z",
+  "cwd": "/root/Projects/dae-rs",
+  "context": {},
+  "metrics": {
+    "edits": 0,
+    "commands": 0,
+    "tasks": 0,
+    "errors": 0
+  },
+  "endedAt": "2026-04-04T02:16:57.031Z",
+  "duration": 278613
+}
