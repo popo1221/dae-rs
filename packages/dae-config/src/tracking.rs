@@ -115,7 +115,7 @@ impl Default for TrackingSamplingConfig {
 }
 
 /// Tracking protocols configuration
-#[derive(Debug, Clone, Deserialize)]
+#[derive(Debug, Clone, Default, Deserialize)]
 pub struct TrackingProtocolsConfig {
     /// TCP tracking settings
     #[serde(default)]
@@ -126,16 +126,6 @@ pub struct TrackingProtocolsConfig {
     /// DNS tracking settings
     #[serde(default)]
     pub dns: TrackingProtocolSettings,
-}
-
-impl Default for TrackingProtocolsConfig {
-    fn default() -> Self {
-        Self {
-            tcp: TrackingProtocolSettings::default(),
-            udp: TrackingProtocolSettings::default(),
-            dns: TrackingProtocolSettings::default(),
-        }
-    }
 }
 
 /// Individual protocol tracking settings

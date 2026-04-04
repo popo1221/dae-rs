@@ -135,13 +135,13 @@ pub enum SubscriptionError {
 impl std::fmt::Display for SubscriptionError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            SubscriptionError::NetworkError(s) => write!(f, "Network error: {}", s),
-            SubscriptionError::ParseError(s) => write!(f, "Parse error: {}", s),
+            SubscriptionError::NetworkError(s) => write!(f, "Network error: {s}"),
+            SubscriptionError::ParseError(s) => write!(f, "Parse error: {s}"),
             SubscriptionError::UnsupportedFormat => write!(f, "Unsupported subscription format"),
             SubscriptionError::AuthenticationRequired => write!(f, "Authentication required"),
-            SubscriptionError::UrlParseError(s) => write!(f, "URL parse error: {}", s),
+            SubscriptionError::UrlParseError(s) => write!(f, "URL parse error: {s}"),
             SubscriptionError::UnsupportedUriScheme(s) => {
-                write!(f, "Unsupported URI scheme: {}", s)
+                write!(f, "Unsupported URI scheme: {s}")
             }
         }
     }
@@ -531,8 +531,7 @@ pub fn parse_base64_subscription(content: &[u8]) -> Result<Vec<String>, Subscrip
                 Ok(d) => d,
                 Err(e) => {
                     return Err(SubscriptionError::ParseError(format!(
-                        "Failed to decode base64: {}",
-                        e
+                        "Failed to decode base64: {e}"
                     )));
                 }
             }
@@ -541,16 +540,15 @@ pub fn parse_base64_subscription(content: &[u8]) -> Result<Vec<String>, Subscrip
 
     // Parse as string and split by lines
     let content_str = String::from_utf8(decoded)
-        .map_err(|e| SubscriptionError::ParseError(format!("Invalid UTF-8: {}", e)))?;
+        .map_err(|e| SubscriptionError::ParseError(format!("Invalid UTF-8: {e}")))?;
 
     parse_uri_list(&content_str)
 }
 
 /// Parse a SIP008 subscription
 pub fn parse_sip008_subscription(content: &[u8]) -> Result<SubscriptionUpdate, SubscriptionError> {
-    let sip: Sip008Subscription = serde_json::from_slice(content).map_err(|e| {
-        SubscriptionError::ParseError(format!("Failed to parse SIP008 JSON: {}", e))
-    })?;
+    let sip: Sip008Subscription = serde_json::from_slice(content)
+        .map_err(|e| SubscriptionError::ParseError(format!("Failed to parse SIP008 JSON: {e}")))?;
 
     if sip.version != 1 {
         return Err(SubscriptionError::ParseError(format!(
@@ -576,7 +574,7 @@ pub fn parse_sip008_subscription(content: &[u8]) -> Result<SubscriptionUpdate, S
                     let opts = server.plugin_opts.as_deref().unwrap_or("");
                     url.push_str(&format!(
                         "?plugin={}",
-                        urlencoding::encode(&format!("{};{}", plugin, opts))
+                        urlencoding::encode(&format!("{plugin};{opts}"))
                     ));
                 }
             }
@@ -602,16 +600,13 @@ pub fn parse_sip008_subscription(content: &[u8]) -> Result<SubscriptionUpdate, S
 /// Parse Clash YAML subscription content
 pub fn parse_clash_yaml(content: &str) -> Result<Vec<String>, SubscriptionError> {
     let sub: ClashSubscription = serde_yaml::from_str(content)
-        .map_err(|e| SubscriptionError::ParseError(format!("Failed to parse Clash YAML: {}", e)))?;
+        .map_err(|e| SubscriptionError::ParseError(format!("Failed to parse Clash YAML: {e}")))?;
 
     let proxies = sub.proxies.ok_or_else(|| {
         SubscriptionError::ParseError("No proxies found in Clash subscription".to_string())
     })?;
 
-    let links: Vec<String> = proxies
-        .iter()
-        .map(|proxy| clash_proxy_to_uri(proxy))
-        .collect();
+    let links: Vec<String> = proxies.iter().map(clash_proxy_to_uri).collect();
 
     Ok(links)
 }
@@ -625,9 +620,10 @@ fn clash_proxy_to_uri(proxy: &ClashProxy) -> String {
             // Shadowsocks: ss://method:password@server:port
             let method = proxy.cipher.as_deref().unwrap_or("chacha20-ietf-poly1305");
             let password = proxy.password.as_deref().unwrap_or("");
-            let user_info = format!("{}:{}", method, password);
+            let user_info = format!("{method}:{password}");
             let encoded = base64::engine::general_purpose::STANDARD.encode(user_info.as_bytes());
-            let mut uri = format!("ss://{}@{}:{}", encoded, proxy.server, proxy.port);
+            let mut uri = format!("ss://{encoded}@{}:{}", proxy.server, proxy.port);
+            // clippy: ss uri with encoded, proxy.server, proxy.port
 
             // Add plugin if present
             if let Some(ref plugin) = proxy.plugin {
@@ -635,12 +631,12 @@ fn clash_proxy_to_uri(proxy: &ClashProxy) -> String {
                     let opts = proxy.plugin_opts.as_deref().unwrap_or("");
                     uri.push_str(&format!(
                         "?plugin={}",
-                        urlencoding::encode(&format!("{};{}", plugin, opts))
+                        urlencoding::encode(&format!("{plugin};{opts}"))
                     ));
                 }
             }
 
-            uri.push_str(&format!("#{}", name_encoded));
+            uri.push_str(&format!("#{name_encoded}"));
             uri
         }
         "trojan" => {
@@ -666,14 +662,14 @@ fn clash_proxy_to_uri(proxy: &ClashProxy) -> String {
                 uri.push_str("&allowInsecure=1");
             }
 
-            uri.push_str(&format!("#{}", name_encoded));
+            uri.push_str(&format!("#{name_encoded}"));
             uri
         }
         "vmess" => {
             // VMess: vmess://base64-json
             let uuid = proxy.uuid.as_deref().unwrap_or("");
-            let security = proxy.security.as_deref().unwrap_or("auto");
-            let alter_id = proxy.alter_id.unwrap_or(0);
+            let _security = proxy.security.as_deref().unwrap_or("auto");
+            let _alter_id = proxy.alter_id.unwrap_or(0);
             let sni = proxy
                 .sni
                 .as_deref()
@@ -713,7 +709,7 @@ fn clash_proxy_to_uri(proxy: &ClashProxy) -> String {
 
             let json_str = serde_json::to_string(&json).unwrap_or_default();
             let encoded = base64::engine::general_purpose::STANDARD.encode(json_str.as_bytes());
-            format!("vmess://{}", encoded)
+            format!("vmess://{encoded}")
         }
         "vless" => {
             // VLESS: vless://uuid@server:port?params#name
@@ -742,7 +738,7 @@ fn clash_proxy_to_uri(proxy: &ClashProxy) -> String {
                 uri.push_str(&format!("?{}", params.join("&")));
             }
 
-            uri.push_str(&format!("#{}", name_encoded));
+            uri.push_str(&format!("#{name_encoded}"));
             uri
         }
         _ => {
@@ -755,7 +751,7 @@ fn clash_proxy_to_uri(proxy: &ClashProxy) -> String {
 /// Parse Sing-Box JSON subscription content
 pub fn parse_singbox_json(content: &str) -> Result<Vec<String>, SubscriptionError> {
     let sub: SingBoxSubscription = serde_json::from_str(content).map_err(|e| {
-        SubscriptionError::ParseError(format!("Failed to parse Sing-Box JSON: {}", e))
+        SubscriptionError::ParseError(format!("Failed to parse Sing-Box JSON: {e}"))
     })?;
 
     let outbounds = sub.outbounds.ok_or_else(|| {
@@ -764,7 +760,7 @@ pub fn parse_singbox_json(content: &str) -> Result<Vec<String>, SubscriptionErro
 
     let links: Vec<String> = outbounds
         .iter()
-        .filter_map(|outbound| singbox_outbound_to_uri(outbound))
+        .filter_map(singbox_outbound_to_uri)
         .collect();
 
     Ok(links)
@@ -796,7 +792,7 @@ fn singbox_outbound_to_uri(outbound: &SingBoxOutbound) -> Option<String> {
                 uri.push_str("&allowInsecure=1");
             }
 
-            uri.push_str(&format!("#{}", name_encoded));
+            uri.push_str(&format!("#{name_encoded}"));
             Some(uri)
         }
         "shadowsocks" => {
@@ -805,10 +801,10 @@ fn singbox_outbound_to_uri(outbound: &SingBoxOutbound) -> Option<String> {
                 .as_deref()
                 .unwrap_or("chacha20-ietf-poly1305");
             let password = outbound.password.as_deref().unwrap_or("");
-            let user_info = format!("{}:{}", method, password);
+            let user_info = format!("{method}:{password}");
             let encoded = base64::engine::general_purpose::STANDARD.encode(user_info.as_bytes());
-            let mut uri = format!("ss://{}@{}:{}", encoded, server, port);
-            uri.push_str(&format!("#{}", name_encoded));
+            let mut uri = format!("ss://{encoded}@{server}:{port}");
+            uri.push_str(&format!("#{name_encoded}"));
             Some(uri)
         }
         "vmess" => {
@@ -847,14 +843,14 @@ fn singbox_outbound_to_uri(outbound: &SingBoxOutbound) -> Option<String> {
 
             let json_str = serde_json::to_string(&json).ok()?;
             let encoded = base64::engine::general_purpose::STANDARD.encode(json_str.as_bytes());
-            Some(format!("vmess://{}", encoded))
+            Some(format!("vmess://{encoded}"))
         }
         "vless" => {
             let uuid = outbound.uuid.as_deref().unwrap_or("");
             let sni = outbound.tls_server_name.as_deref().unwrap_or("");
             let flow = outbound.flow.as_deref().unwrap_or("");
             let skip_verify = outbound.skip_cert_verify.unwrap_or(false);
-            let mut uri = format!("vless://{}@{}:{}", uuid, server, port);
+            let mut uri = format!("vless://{uuid}@{server}:{port}");
 
             let mut params = Vec::new();
             if !sni.is_empty() {
@@ -871,7 +867,7 @@ fn singbox_outbound_to_uri(outbound: &SingBoxOutbound) -> Option<String> {
                 uri.push_str(&format!("?{}", params.join("&")));
             }
 
-            uri.push_str(&format!("#{}", name_encoded));
+            uri.push_str(&format!("#{name_encoded}"));
             Some(uri)
         }
         _ => None, // Unsupported outbound type
@@ -944,12 +940,12 @@ fn parse_ss_uri(uri: &str, name: Option<String>) -> Result<NodeConfig, Subscript
     // Parse method:password from user_info (base64 encoded)
     let decoded_user_info = match base64::engine::general_purpose::STANDARD.decode(user_info) {
         Ok(decoded) => String::from_utf8(decoded)
-            .map_err(|e| SubscriptionError::ParseError(format!("Invalid SS user info: {}", e)))?,
+            .map_err(|e| SubscriptionError::ParseError(format!("Invalid SS user info: {e}")))?,
         Err(_) => {
             // Try URL-safe base64
             match base64::engine::general_purpose::URL_SAFE.decode(user_info) {
                 Ok(decoded) => String::from_utf8(decoded).map_err(|e| {
-                    SubscriptionError::ParseError(format!("Invalid SS user info: {}", e))
+                    SubscriptionError::ParseError(format!("Invalid SS user info: {e}"))
                 })?,
                 Err(_) => {
                     // Treat as plain user:password
@@ -998,7 +994,7 @@ fn parse_ss_uri(uri: &str, name: Option<String>) -> Result<NodeConfig, Subscript
         .map(|(p, _)| p)
         .unwrap_or(port_str)
         .parse()
-        .map_err(|e| SubscriptionError::ParseError(format!("Invalid port: {}", e)))?;
+        .map_err(|e| SubscriptionError::ParseError(format!("Invalid port: {e}")))?;
 
     Ok(NodeConfig {
         name: name.unwrap_or_else(|| "Shadowsocks".to_string()),
@@ -1026,13 +1022,14 @@ fn parse_vmess_uri(uri: &str, name: Option<String>) -> Result<NodeConfig, Subscr
     let decoded = base64::engine::general_purpose::STANDARD
         .decode(uri_str.as_bytes())
         .or_else(|_| base64::engine::general_purpose::URL_SAFE.decode(uri_str.as_bytes()))
-        .map_err(|e| SubscriptionError::ParseError(format!("Invalid VMess base64: {}", e)))?;
+        .map_err(|e| SubscriptionError::ParseError(format!("Invalid VMess base64: {e}")))?;
 
     let json_str = String::from_utf8(decoded)
-        .map_err(|e| SubscriptionError::ParseError(format!("Invalid VMess JSON: {}", e)))?;
+        .map_err(|e| SubscriptionError::ParseError(format!("Invalid VMess JSON: {e}")))?;
 
     #[derive(Deserialize)]
     struct VmessJson {
+        #[allow(dead_code)]
         v: Option<String>,
         ps: Option<String>,
         add: Option<String>,
@@ -1040,15 +1037,16 @@ fn parse_vmess_uri(uri: &str, name: Option<String>) -> Result<NodeConfig, Subscr
         id: Option<String>,
         net: Option<String>,
         #[serde(rename = "type")]
+        #[allow(dead_code)]
         type_: Option<String>,
         host: Option<String>,
+        #[allow(dead_code)]
         path: Option<String>,
         tls: Option<String>,
     }
 
-    let vmess: VmessJson = serde_json::from_str(&json_str).map_err(|e| {
-        SubscriptionError::ParseError(format!("Invalid VMess JSON structure: {}", e))
-    })?;
+    let vmess: VmessJson = serde_json::from_str(&json_str)
+        .map_err(|e| SubscriptionError::ParseError(format!("Invalid VMess JSON structure: {e}")))?;
 
     let node_name = name.or(vmess.ps).unwrap_or_else(|| "VMess".to_string());
     let server = vmess.add.ok_or_else(|| {
@@ -1117,22 +1115,22 @@ fn parse_vless_uri(uri: &str, name: Option<String>) -> Result<NodeConfig, Subscr
 
     let port: u16 = port_str
         .parse()
-        .map_err(|e| SubscriptionError::ParseError(format!("Invalid VLESS port: {}", e)))?;
+        .map_err(|e| SubscriptionError::ParseError(format!("Invalid VLESS port: {e}")))?;
 
     // Parse query parameters
     let mut sni = None;
-    let mut flow = None;
-    let mut skip_verify = false;
+    let mut _flow = None;
+    let mut _skip_verify = false;
 
     if let Some(query) = query {
         for param in query.split('&') {
             let param_decoded = urlencoding::decode(param).unwrap_or_default();
-            if param_decoded.starts_with("sni=") {
-                sni = Some(param_decoded[4..].to_string());
-            } else if param_decoded.starts_with("flow=") {
-                flow = Some(param_decoded[5..].to_string());
+            if let Some(stripped) = param_decoded.strip_prefix("sni=") {
+                sni = Some(stripped.to_string());
+            } else if let Some(stripped) = param_decoded.strip_prefix("flow=") {
+                _flow = Some(stripped.to_string());
             } else if param_decoded.contains("allowInsecure=1") {
-                skip_verify = true;
+                _skip_verify = true;
             }
         }
     }
@@ -1190,20 +1188,20 @@ fn parse_trojan_uri(uri: &str, name: Option<String>) -> Result<NodeConfig, Subsc
 
     let port: u16 = port_str
         .parse()
-        .map_err(|e| SubscriptionError::ParseError(format!("Invalid Trojan port: {}", e)))?;
+        .map_err(|e| SubscriptionError::ParseError(format!("Invalid Trojan port: {e}")))?;
 
     // Parse query parameters
     let mut sni = None;
-    let mut skip_verify = false;
+    let mut _skip_verify = false;
 
     if let Some(query_pos) = server_port.find('?') {
         let query = &server_port[query_pos + 1..];
         for param in query.split('&') {
             let param_decoded = urlencoding::decode(param).unwrap_or_default();
-            if param_decoded.starts_with("sni=") {
-                sni = Some(param_decoded[4..].to_string());
+            if let Some(stripped) = param_decoded.strip_prefix("sni=") {
+                sni = Some(stripped.to_string());
             } else if param_decoded.contains("allowInsecure=1") {
-                skip_verify = true;
+                _skip_verify = true;
             }
         }
     }
@@ -1237,7 +1235,7 @@ pub fn uris_to_node_configs(uris: &[String]) -> Result<Vec<NodeConfig>, Subscrip
             Ok(config) => configs.push(config),
             Err(e) => {
                 // Log error but continue parsing other URIs
-                eprintln!("Warning: Failed to parse URI '{}': {}", uri, e);
+                eprintln!("Warning: Failed to parse URI '{uri}': {e}");
             }
         }
     }

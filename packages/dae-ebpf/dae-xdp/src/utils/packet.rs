@@ -87,6 +87,9 @@ impl VlanHdr {
         let data = ctx.data();
         let data_end = ctx.data_end();
 
+        // SAFETY: ptr is guaranteed to be within packet buffer bounds.
+        // Caller ensures eth_offset + size_of::<VlanHdr>() <= data.len().
+        // The bounds check below verifies this before returning Some.
         let ptr = unsafe { (data as *const u8).add(eth_offset) as *const VlanHdr };
         if ptr as usize + core::mem::size_of::<VlanHdr>() > data_end {
             return None;
@@ -129,10 +132,10 @@ impl IpHdr {
         let data = ctx.data();
         let data_end = ctx.data_end();
 
-        let ptr = unsafe {
-            // Safety: we checked bounds via the if statement
-            (data as *const u8).add(eth_offset) as *const IpHdr
-        };
+        // SAFETY: ptr is guaranteed to be within packet buffer bounds.
+        // Caller ensures eth_offset + size_of::<IpHdr>() <= data.len().
+        // The bounds check below verifies this before returning Some.
+        let ptr = unsafe { (data as *const u8).add(eth_offset) as *const IpHdr };
         if ptr as usize + core::mem::size_of::<IpHdr>() > data_end {
             return None;
         }
@@ -195,10 +198,10 @@ impl TcpHdr {
         let data_end = ctx.data_end();
 
         let offset = ip_offset + ip_hdr_len as usize;
-        let ptr = unsafe {
-            // Safety: we checked bounds via the if statement
-            (data as *const u8).add(offset) as *const TcpHdr
-        };
+        // SAFETY: ptr is guaranteed to be within packet buffer bounds.
+        // Caller ensures offset + size_of::<TcpHdr>() <= data.len().
+        // The bounds check below verifies this before returning Some.
+        let ptr = unsafe { (data as *const u8).add(offset) as *const TcpHdr };
         if ptr as usize + core::mem::size_of::<TcpHdr>() > data_end {
             return None;
         }
@@ -270,10 +273,10 @@ impl UdpHdr {
         let data_end = ctx.data_end();
 
         let offset = ip_offset + ip_hdr_len as usize;
-        let ptr = unsafe {
-            // Safety: we checked bounds via the if statement
-            (data as *const u8).add(offset) as *const UdpHdr
-        };
+        // SAFETY: ptr is guaranteed to be within packet buffer bounds.
+        // Caller ensures offset + size_of::<UdpHdr>() <= data.len().
+        // The bounds check below verifies this before returning Some.
+        let ptr = unsafe { (data as *const u8).add(offset) as *const UdpHdr };
         if ptr as usize + core::mem::size_of::<UdpHdr>() > data_end {
             return None;
         }
