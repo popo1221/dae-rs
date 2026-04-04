@@ -55,20 +55,43 @@ pub fn get_interface(name: &str) -> Result<InterfaceInfo> {
     })
 }
 
-/// Get the IPv4 address of an interface
+/// Get the IPv4 address of a network interface by parsing `ip addr show` output.
 ///
-/// # Not Implemented
+/// This is a fallback implementation that parses the output of the `ip` command.
+/// For production use, consider using the netlink crate for proper address resolution.
 ///
-/// This function is a stub. IPv4 address parsing requires reading from
-/// `/sys/class/net/<name>/address` or using the `netlink` crate for proper
-/// address resolution.
-///
-/// See GitHub Issue #76 for tracking.
+/// See GitHub Issue #76.
 #[allow(dead_code)]
 fn get_interface_ipv4(name: &str) -> Result<Ipv4Addr> {
-    let _ = name;
-    // TODO(#76): Implement IPv4 address parsing via netlink or /sys/class/net
-    anyhow::bail!("IPv4 address parsing not implemented (see issue #76)")
+    let output = std::process::Command::new("ip")
+        .args(["-4", "addr", "show", name])
+        .output()
+        .context("Failed to execute 'ip -4 addr show'")?;
+
+    if !output.status.success() {
+        anyhow::bail!("'ip -4 addr show' failed for interface {}", name);
+    }
+
+    let stdout = String::from_utf8_lossy(&output.stdout);
+
+    // Parse output like: "inet 192.168.1.100/24 brd 192.168.1.255 scope global eth0"
+    for line in stdout.lines() {
+        let trimmed = line.trim();
+        if let Some(inet_pos) = trimmed.find("inet ") {
+            let after_inet = &trimmed[inet_pos + 5..];
+            if let Some(space_pos) = after_inet.find(' ') {
+                let addr = &after_inet[..space_pos];
+                if let Some(slash_pos) = addr.find('/') {
+                    let ip_str = &addr[..slash_pos];
+                    return ip_str
+                        .parse::<Ipv4Addr>()
+                        .with_context(|| format!("Failed to parse IPv4 address: {}", ip_str));
+                }
+            }
+        }
+    }
+
+    anyhow::bail!("No IPv4 address found for interface {}", name)
 }
 
 /// List all network interfaces

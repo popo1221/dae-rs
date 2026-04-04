@@ -1,7 +1,7 @@
 # ===================================================================
 # dae-rs - Single-stage Dockerfile for production
 # ===================================================================
-FROM ubuntu:22.04
+FROM ubuntu:24.04
 
 # metadata
 LABEL maintainer="dae-rs"

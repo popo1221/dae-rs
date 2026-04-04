@@ -972,19 +972,41 @@ fn parse_ss_uri(uri: &str, name: Option<String>) -> Result<NodeConfig, Subscript
     })?;
 
     // Handle query params if present (e.g., ?plugin=...)
-    // TODO(#79): Implement simple-obfs/v2ray-plugin option parsing.
     // Plugin options are passed as base64-encoded query parameters:
     // - simple-obfs: plugin=simple-obfs;host=example.com;tls
     // - v2ray-plugin: plugin=v2ray-plugin;server;tls;host=example.com;path=/
-    // For now, we only capture the raw plugin string without parsing options.
-    let _plugin = if let Some(query_pos) = server_part.find('?') {
+    let plugin_opts = if let Some(query_pos) = server_part.find('?') {
         let query = &server_part[query_pos + 1..];
+        let mut plugin_type = None;
+        let mut plugin_options = std::collections::HashMap::new();
+
         for param in query.split('&') {
             if param.starts_with("plugin=") {
-                // Plugin option parsing not implemented yet - see issue #79
+                // Decode base64 plugin value
+                let plugin_value = &param[7..]; // skip "plugin="
+                use base64::Engine;
+                if let Ok(decoded) = base64::engine::general_purpose::STANDARD.decode(plugin_value)
+                {
+                    let decoded_str = String::from_utf8_lossy(&decoded);
+                    // Parse plugin options (format: plugin-name;opt1=value1;opt2=value2)
+                    for (i, opt) in decoded_str.split(';').enumerate() {
+                        if i == 0 {
+                            plugin_type = Some(opt.to_string());
+                        } else if let Some((key, value)) = opt.split_once('=') {
+                            plugin_options.insert(key.to_string(), value.to_string());
+                        } else if !opt.is_empty() {
+                            // Boolean flags like "tls", "server"
+                            plugin_options.insert(opt.to_string(), "true".to_string());
+                        }
+                    }
+                }
             }
         }
-        Some(query)
+        if plugin_type.is_some() {
+            Some((plugin_type.unwrap(), plugin_options))
+        } else {
+            None
+        }
     } else {
         None
     };
