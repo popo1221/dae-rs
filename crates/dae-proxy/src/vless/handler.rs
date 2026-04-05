@@ -6,10 +6,13 @@ use std::io::ErrorKind;
 use std::net::{IpAddr, Ipv4Addr, Ipv6Addr, SocketAddr};
 use std::sync::Arc;
 
+use async_trait::async_trait;
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use tokio::net::{TcpStream, UdpSocket};
 use tracing::{debug, error, info};
 
+use crate::protocol::unified_handler::Handler;
+use crate::protocol::ProtocolType;
 use crate::vless::config::VlessClientConfig;
 use crate::vless::crypto::hmac_sha256;
 use crate::vless::protocol::VlessTargetAddress;
@@ -841,5 +844,29 @@ impl VlessHandler {
                 "invalid address type",
             )),
         }
+    }
+}
+
+/// Implement Handler trait for VlessHandler
+///
+/// This allows VlessHandler to be used through the unified Handler interface.
+#[async_trait]
+impl Handler for VlessHandler {
+    type Config = VlessClientConfig;
+
+    fn name(&self) -> &'static str {
+        "vless"
+    }
+
+    fn protocol(&self) -> ProtocolType {
+        ProtocolType::Vless
+    }
+
+    fn config(&self) -> &Self::Config {
+        &self.config
+    }
+
+    async fn handle(self: Arc<Self>, stream: TcpStream) -> std::io::Result<()> {
+        self.handle_vless(stream).await
     }
 }

@@ -111,8 +111,7 @@ pub use crate::protocol::{ProtocolRegistry, ProtocolType};
 
 // Unified Handler trait (primary interface)
 pub use crate::protocol::unified_handler::{
-    Handler as UnifiedHandler, HandlerConfig as UnifiedHandlerConfig, HandlerStats,
-    HandlerStatsExt, ProtocolHandlerAdapter,
+    Handler as UnifiedHandler, HandlerConfig as UnifiedHandlerConfig, HandlerStats, HandlerStatsExt,
 };
 
 // Deprecated: Use UnifiedHandler instead

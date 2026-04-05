@@ -9,11 +9,14 @@ use std::time::{SystemTime, UNIX_EPOCH};
 use aes_gcm::aead::Aead;
 use aes_gcm::Aes256Gcm;
 use aes_gcm::Nonce;
+use async_trait::async_trait;
 use tokio::io::AsyncReadExt;
 use tokio::net::{TcpStream, UdpSocket};
 use tracing::{debug, error, info, warn};
 
 use super::config::{VmessClientConfig, VmessTargetAddress};
+use crate::protocol::unified_handler::Handler;
+use crate::protocol::ProtocolType;
 
 /// VMess handler that implements the client-side protocol
 pub struct VmessHandler {
@@ -307,5 +310,29 @@ impl VmessHandler {
                 client.send_to(&response_buf[..m], &client_addr).await?;
             }
         }
+    }
+}
+
+/// Implement Handler trait for VmessHandler
+///
+/// This allows VmessHandler to be used through the unified Handler interface.
+#[async_trait]
+impl Handler for VmessHandler {
+    type Config = VmessClientConfig;
+
+    fn name(&self) -> &'static str {
+        "vmess"
+    }
+
+    fn protocol(&self) -> ProtocolType {
+        ProtocolType::Vmess
+    }
+
+    fn config(&self) -> &Self::Config {
+        &self.config
+    }
+
+    async fn handle(self: Arc<Self>, stream: TcpStream) -> std::io::Result<()> {
+        self.handle(stream).await
     }
 }

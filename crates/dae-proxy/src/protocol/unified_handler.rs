@@ -1,40 +1,43 @@
 //! Unified Handler trait - a single interface for all protocol handlers
 //!
 //! This module provides a unified [`Handler`] trait that all protocol handlers
-//! should implement, following Zed's clean architecture pattern.
+//! should implement.
 //!
 //! # Design Goals
 //!
 //! 1. **Single Source of Truth**: One trait for all protocol handlers
-//! 2. **Backward Compatible**: Existing ProtocolHandler implementations can use adapters
-//! 3. **Simple API**: Connection-centric approach like Zed's ProtocolHandler
+//! 2. **Stream-centric**: Works directly with TcpStream for simplicity
+//! 3. **Simple API**: Single handle method with Arc<Self> pattern
 //! 4. **Type Safe**: Generic Config associated type
 //!
 //! # Architecture
 //!
+//! All protocol handlers (Trojan, VLESS, VMess, SOCKS5, etc.) implement the
+//! unified `Handler` trait using the `Arc<Self>` + `TcpStream` pattern:
+//!
 //! ```text
 //! ┌─────────────────────────────────────────────────────────────┐
 //! │                      Handler Trait                          │
-//! │  (unified interface for all protocol handlers)              │
+//! │  async fn handle(self: Arc<Self>, stream: TcpStream)       │
 //! └─────────────────────────────────────────────────────────────┘
 //!         ▲                    │                    ▲
 //!         │                    │                    │
 //!    ┌────┴─────┐        ┌──────┴──────┐       ┌──────┴──────┐
-//!    │ Adapter  │        │ Direct Impl │       │ Adapter     │
-//!    │(Protocol │        │ (Trojan,    │       │ (Protocol   │
-//!    │ Handler) │        │  VLESS, etc)│       │ Handler)    │
+//!    │ Trojan   │        │   VLESS     │       │   VMess     │
+//!    │ Handler  │        │   Handler   │       │   Handler   │
 //!    └──────────┘        └─────────────┘       └─────────────┘
 //! ```
 //!
-//! # Example: Implementing Handler Directly
+//! # Example: Implementing Handler
 //!
 //! ```ignore
 //! use async_trait::async_trait;
-//! use dae_proxy::{Handler, Connection, ProxyError, ProtocolType};
+//! use dae_proxy::{Handler, ProxyError, ProtocolType};
+//! use std::sync::Arc;
+//! use tokio::net::TcpStream;
 //!
 //! struct MyHandler {
 //!     config: MyConfig,
-//!     stats: HandlerStats,
 //! }
 //!
 //! #[async_trait]
@@ -45,31 +48,18 @@
 //!     fn protocol(&self) -> ProtocolType { ProtocolType::Custom("my") }
 //!     fn config(&self) -> &Self::Config { &self.config }
 //!
-//!     async fn handle(&self, conn: Connection) -> Result<(), ProxyError> {
+//!     async fn handle(self: Arc<Self>, stream: TcpStream) -> std::io::Result<()> {
 //!         // Handle the connection
 //!         Ok(())
 //!     }
 //! }
 //! ```
-//!
-//! # Example: Using Adapter for ProtocolHandler
-//!
-//! ```ignore
-//! // ProtocolHandler implementation
-//! struct MyLegacyHandler { ... }
-//!
-//! impl ProtocolHandler for MyLegacyHandler { ... }
-//!
-//! // Wrap with adapter to use as Handler
-//! let handler: ProtocolHandlerAdapter<MyLegacyHandler> =
-//!     ProtocolHandlerAdapter::new(MyLegacyHandler::new());
-//! ```
 
 use async_trait::async_trait;
+use std::sync::Arc;
+use tokio::net::TcpStream;
 
-use crate::connection::Connection;
 use crate::protocol::ProtocolType;
-use crate::proxy::ProxyError;
 
 /// Handler configuration trait
 ///
@@ -79,16 +69,14 @@ pub trait HandlerConfig: Send + Sync + std::fmt::Debug {}
 /// Unified Handler trait - single interface for all protocol handlers
 ///
 /// This trait provides a unified interface for handling proxy protocol connections.
-/// All new protocol handlers should implement this trait directly.
-/// Existing ProtocolHandler implementations can use [`ProtocolHandlerAdapter`] for
-/// backward compatibility.
+/// All protocol handlers (Trojan, VLESS, VMess, SOCKS5, etc.) implement this trait.
 ///
-/// # Design Philosophy (Zed-inspired)
+/// # Design Philosophy
 ///
 /// - **Simple**: One method to handle connections
-/// - **Connection-centric**: Works directly with Connections
+/// - **Stream-centric**: Works directly with TcpStream
+/// - **Arc<Self> pattern**: Enables shared ownership for connection handling
 /// - **Type-safe**: Generic Config associated type
-/// - **Observable**: Built-in statistics support
 #[async_trait]
 pub trait Handler: Send + Sync {
     /// Configuration type for this handler
@@ -112,7 +100,11 @@ pub trait Handler: Send + Sync {
     /// 3. Parse the target address (if applicable)
     /// 4. Establish connection to target (or reject)
     /// 5. Relay traffic bidirectionally
-    async fn handle(&self, conn: Connection) -> Result<(), ProxyError>;
+    ///
+    /// # Arguments
+    /// * `self` - Arc<Self> enabling shared ownership during async operations
+    /// * `stream` - The TCP stream for the incoming connection
+    async fn handle(self: Arc<Self>, stream: TcpStream) -> std::io::Result<()>;
 
     /// Check if handler is healthy
     ///
@@ -126,7 +118,7 @@ pub trait Handler: Send + Sync {
     ///
     /// Called when configuration is hot-reloaded.
     /// Default implementation returns Ok.
-    async fn reload(&self, _new_config: Self::Config) -> Result<(), ProxyError> {
+    async fn reload(&self, _new_config: Self::Config) -> std::io::Result<()> {
         Ok(())
     }
 }
@@ -233,86 +225,6 @@ pub trait HandlerStatsExt {
 impl<T: Handler> HandlerStatsExt for T {
     fn stats(&self) -> HandlerStats {
         HandlerStats::new()
-    }
-}
-
-/// Adapter to wrap ProtocolHandler implementations as Handler
-///
-/// This allows existing ProtocolHandler implementations to be used
-/// through the unified Handler interface.
-///
-/// # Example
-///
-/// ```ignore
-/// use dae_proxy::protocol::ProtocolHandlerAdapter;
-///
-/// // Create a ProtocolHandler
-/// let socks5 = Socks5ProtocolHandler::new(config);
-///
-/// // Wrap it as a Handler
-/// let handler: ProtocolHandlerAdapter<Socks5ProtocolHandler> =
-///     ProtocolHandlerAdapter::new(socks5);
-/// ```
-#[derive(Debug)]
-#[allow(dead_code)]
-pub struct ProtocolHandlerAdapter<H> {
-    inner: H,
-    stats: HandlerStats,
-}
-
-impl<H> ProtocolHandlerAdapter<H> {
-    /// Create a new adapter wrapping a ProtocolHandler
-    pub fn new(inner: H) -> Self {
-        Self {
-            inner,
-            stats: HandlerStats::new(),
-        }
-    }
-
-    /// Get a reference to the inner ProtocolHandler
-    pub fn inner(&self) -> &H {
-        &self.inner
-    }
-
-    /// Get mutable reference to the inner ProtocolHandler
-    pub fn inner_mut(&mut self) -> &mut H {
-        &mut self.inner
-    }
-}
-
-// Marker type for ProtocolHandler adapter config
-#[derive(Debug)]
-pub struct ProtocolHandlerConfig;
-
-impl HandlerConfig for ProtocolHandlerConfig {}
-
-#[async_trait]
-impl<H> Handler for ProtocolHandlerAdapter<H>
-where
-    H: crate::protocol::ProtocolHandler + Send + Sync,
-{
-    type Config = ProtocolHandlerConfig;
-
-    fn name(&self) -> &'static str {
-        self.inner.name()
-    }
-
-    fn protocol(&self) -> ProtocolType {
-        // ProtocolHandler doesn't expose ProtocolType directly
-        // We infer it from the name
-        ProtocolType::from_str(self.inner.name()).unwrap_or(ProtocolType::Socks5)
-    }
-
-    fn config(&self) -> &Self::Config {
-        &ProtocolHandlerConfig
-    }
-
-    async fn handle(&self, _conn: Connection) -> Result<(), ProxyError> {
-        // ProtocolHandler uses Context, not Connection
-        // This adapter provides a bridge - but full implementation
-        // would need Context creation from Connection
-        // For now, this is a placeholder that demonstrates the pattern
-        Ok(())
     }
 }
 

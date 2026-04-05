@@ -6,6 +6,7 @@ use std::net::{IpAddr, Ipv4Addr, Ipv6Addr, SocketAddr};
 use std::time::Duration;
 
 use super::protocol::VmessServerConfig;
+use crate::protocol::unified_handler::HandlerConfig;
 
 /// VMess client configuration
 #[derive(Debug, Clone)]
@@ -30,6 +31,8 @@ impl Default for VmessClientConfig {
         }
     }
 }
+
+impl HandlerConfig for VmessClientConfig {}
 
 /// VMess target address
 #[derive(Debug, Clone)]

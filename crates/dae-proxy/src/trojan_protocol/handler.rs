@@ -6,6 +6,7 @@
 use std::net::{IpAddr, Ipv4Addr, Ipv6Addr, SocketAddr};
 use std::sync::Arc;
 
+use async_trait::async_trait;
 use subtle::ConstantTimeEq;
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use tokio::net::{TcpStream, UdpSocket};
@@ -13,6 +14,8 @@ use tracing::{debug, error, info};
 
 use super::config::{TrojanClientConfig, TrojanServerConfig};
 use super::protocol::{TrojanCommand, TrojanTargetAddress, TROJAN_CRLF};
+use crate::protocol::unified_handler::Handler;
+use crate::protocol::ProtocolType;
 
 /// Trojan handler that implements the client-side protocol
 pub struct TrojanHandler {
@@ -611,6 +614,30 @@ impl TrojanHandler {
                 client.send_to(&response_buf[..m], &client_addr).await?;
             }
         }
+    }
+}
+
+/// Implement Handler trait for TrojanHandler
+///
+/// This allows TrojanHandler to be used through the unified Handler interface.
+#[async_trait]
+impl Handler for TrojanHandler {
+    type Config = TrojanClientConfig;
+
+    fn name(&self) -> &'static str {
+        "trojan"
+    }
+
+    fn protocol(&self) -> ProtocolType {
+        ProtocolType::Trojan
+    }
+
+    fn config(&self) -> &Self::Config {
+        &self.config
+    }
+
+    async fn handle(self: Arc<Self>, stream: TcpStream) -> std::io::Result<()> {
+        self.handle(stream).await
     }
 }
 
