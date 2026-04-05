@@ -138,6 +138,7 @@ pub use simple_handler::{
 
 // Protocol submodules for future expansion
 pub mod http;
+pub mod relay;
 pub mod shadowsocks;
 pub mod socks5;
 pub mod vless;
