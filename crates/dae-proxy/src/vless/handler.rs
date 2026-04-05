@@ -807,6 +807,14 @@ impl VlessHandler {
                     ));
                 }
                 let domain_len = buf[5] as usize;
+                // Reject empty domains (domain_len == 0) for security
+                // Empty domains could indicate malformed packets or injection attempts
+                if domain_len == 0 {
+                    return Err(std::io::Error::new(
+                        std::io::ErrorKind::InvalidData,
+                        "empty domain not allowed",
+                    ));
+                }
                 if buf.len() < 6 + domain_len + 2 {
                     return Err(std::io::Error::new(
                         std::io::ErrorKind::InvalidData,
