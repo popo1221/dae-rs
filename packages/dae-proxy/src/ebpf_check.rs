@@ -8,7 +8,7 @@
 //! # Usage
 //!
 //! ```rust
-//! use ebpf_check::{detect_ebpf_support, can_use_ebpf};
+//! use dae_proxy::ebpf_check::{detect_ebpf_support, can_use_ebpf, EbpfSupportLevel};
 //!
 //! // Check support level
 //! let level = detect_ebpf_support();
@@ -21,7 +21,9 @@
 //! // Check if we can actually use eBPF (permissions + support)
 //! let (can_use, reason) = can_use_ebpf();
 //! if !can_use {
-//!     eprintln!("Cannot use eBPF: {}", reason.unwrap());
+//!     if let Some(r) = reason {
+//!         eprintln!("Cannot use eBPF: {}", r);
+//!     }
 //! }
 //! ```
 

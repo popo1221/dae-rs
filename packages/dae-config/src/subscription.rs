@@ -981,9 +981,8 @@ fn parse_ss_uri(uri: &str, name: Option<String>) -> Result<NodeConfig, Subscript
         let mut plugin_options = std::collections::HashMap::new();
 
         for param in query.split('&') {
-            if param.starts_with("plugin=") {
-                // Decode base64 plugin value
-                let plugin_value = &param[7..]; // skip "plugin="
+            if let Some(plugin_value) = param.strip_prefix("plugin=") {
+                // Decode base64 plugin value (already stripped "plugin=")
                 use base64::Engine;
                 if let Ok(decoded) = base64::engine::general_purpose::STANDARD.decode(plugin_value)
                 {
@@ -1002,11 +1001,7 @@ fn parse_ss_uri(uri: &str, name: Option<String>) -> Result<NodeConfig, Subscript
                 }
             }
         }
-        if plugin_type.is_some() {
-            Some((plugin_type.unwrap(), plugin_options))
-        } else {
-            None
-        }
+        plugin_type.map(|pt| (pt, plugin_options))
     } else {
         None
     };
