@@ -11,6 +11,9 @@ async-trait = "0.1"
 aes-gcm = "0.10"
 hkdf = "0.10"
 subtle = "2"
+tokio-tungstenite = "0.21"
+futures-util = "0.3"
+tungstenite = "0.21"
 
 [dev-dependencies]
 tokio-test = "0.4"

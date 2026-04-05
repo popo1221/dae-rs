@@ -28,6 +28,9 @@ dae-protocol-socks5 = { path = "../dae-protocol-socks5" }
 dae-protocol-http_proxy = { path = "../dae-protocol-http_proxy" }
 dae-protocol-hysteria2 = { path = "../dae-protocol-hysteria2", optional = true }
 dae-protocol-juicity = { path = "../dae-protocol-juicity", optional = true }
+dae-protocol-shadowsocks = { path = "../dae-protocol-shadowsocks" }
+dae-protocol-trojan = { path = "../dae-protocol-trojan" }
+dae-protocol-tuic = { path = "../dae-protocol-tuic", optional = true }
 clap = { version = "4", features = ["derive"] }
 ipnet = "2"
 maxminddb = "0.27"

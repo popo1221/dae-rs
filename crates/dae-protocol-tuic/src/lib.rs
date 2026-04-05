@@ -1,8 +1,8 @@
-//! TUIC protocol handler for dae-rs
+//! dae-protocol-tuic crate
 //!
-//! TUIC is a QUIC-based proxy protocol.
+//! TUIC protocol handler extracted from dae-proxy.
 
-/// Placeholder - TUIC protocol implementation pending
-pub mod tuic {
-    // TODO: Implement TUIC protocol
-}
+pub mod tuic;
+
+// Re-exports from the tuic module
+pub use tuic::{TuicCodec, TuicCommand, TuicClient, TuicCommandType, TuicConfig, TuicError, TuicHandler, TuicServer};

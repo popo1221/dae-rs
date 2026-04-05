@@ -16,6 +16,9 @@ members = [
     "crates/dae-protocol-http_proxy",
     "crates/dae-protocol-hysteria2",
     "crates/dae-protocol-juicity",
+    "crates/dae-protocol-shadowsocks",
+    "crates/dae-protocol-trojan",
+    "crates/dae-protocol-tuic",
     "benches",
 ]
 
