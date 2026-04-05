@@ -171,7 +171,7 @@ pub fn shared_dashboard_state() -> Arc<DashboardState> {
 
 /// WebSocket upgrade handler for dashboard
 pub async fn dashboard_handler(ws: WebSocketUpgrade) -> Response {
-    ws.on_upgrade(|socket| dashboard_socket(socket))
+    ws.on_upgrade(dashboard_socket)
 }
 
 /// Handle WebSocket connection for dashboard
