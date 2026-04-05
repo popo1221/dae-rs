@@ -58,6 +58,15 @@ Fix all issues from review-protocols and review-cicd:
 - ✅ Committed fix: consolidate relay implementations to use shared dae-relay crate
 - ✅ `cargo test --workspace` passes (all tests green)
 
+### 2026-04-05 19:30 GMT+8 - Test coverage with cargo-tarpaulin
+- ✅ Added `actions-rs/tarpaulin@v2` to CI workflow (`.github/workflows/ci.yml`)
+  - Added Test coverage step after tests
+  - Output directory: `./coverage`
+  - Args: `--workspace`
+- ✅ Added `actions/upload-artifact@v4` to upload coverage reports
+  - Artifact name: `coverage-report`
+  - Uploads coverage directory
+
 ---
 
 
