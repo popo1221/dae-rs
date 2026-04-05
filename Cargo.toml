@@ -19,6 +19,8 @@ members = [
     "crates/dae-protocol-shadowsocks",
     "crates/dae-protocol-trojan",
     "crates/dae-protocol-tuic",
+    "crates/dae-protocol-vless",
+    "crates/dae-protocol-vmess",
     "benches",
 ]
 

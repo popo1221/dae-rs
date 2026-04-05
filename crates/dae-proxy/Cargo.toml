@@ -31,6 +31,8 @@ dae-protocol-juicity = { path = "../dae-protocol-juicity", optional = true }
 dae-protocol-shadowsocks = { path = "../dae-protocol-shadowsocks" }
 dae-protocol-trojan = { path = "../dae-protocol-trojan" }
 dae-protocol-tuic = { path = "../dae-protocol-tuic", optional = true }
+dae-protocol-vless = { path = "../dae-protocol-vless" }
+dae-protocol-vmess = { path = "../dae-protocol-vmess" }
 clap = { version = "4", features = ["derive"] }
 ipnet = "2"
 maxminddb = "0.27"
