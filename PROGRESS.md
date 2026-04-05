@@ -23,6 +23,12 @@ Fix all issues from review-protocols and review-cicd:
   - MSRV: 1.75, Latest: stable
   - Updated `dtolnay/rust-toolchain` to use `${{ matrix.rust }}`
 
+### 2026-04-05 19:15 GMT+8 - panic! → unreachable!() Investigation
+- ✅ Investigated panic! in protocol handlers (juicity, shadowsocks, trojan, vmess)
+- **Result:** All 15 panic! statements are in `#[test]` functions (test assertions)
+- **Decision:** No replacement needed — test code panic! is correct behavior
+- Affected files: codec.rs (juicity), protocol.rs (shadowsocks, trojan), mod.rs (vmess, proxy)
+
 ---
 
 ## Completion Criteria

@@ -7,7 +7,6 @@ pub mod config;
 pub mod crypto;
 pub mod handler;
 pub mod protocol;
-pub mod relay;
 pub mod server;
 
 // Protocol types
@@ -28,5 +27,5 @@ pub use server::VlessServer;
 // Crypto
 pub use crypto::hmac_sha256;
 
-// Relay
-pub use relay::relay_data;
+// Relay (from dae-relay)
+pub use dae_relay::relay_bidirectional;

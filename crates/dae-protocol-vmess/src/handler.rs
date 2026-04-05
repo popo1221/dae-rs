@@ -280,19 +280,7 @@ impl VmessHandler {
         debug!("Connected to VMess server {}", remote_addr);
 
         // Relay data between client and remote
-        self.relay(client, remote).await
-    }
-
-    /// Relay data between client and remote
-    async fn relay(&self, client: TcpStream, remote: TcpStream) -> std::io::Result<()> {
-        let (mut cr, mut cw) = tokio::io::split(client);
-        let (mut rr, mut rw) = tokio::io::split(remote);
-
-        let client_to_remote = tokio::io::copy(&mut cr, &mut rw);
-        let remote_to_client = tokio::io::copy(&mut rr, &mut cw);
-
-        tokio::try_join!(client_to_remote, remote_to_client)?;
-        Ok(())
+        dae_relay::relay_bidirectional(client, remote).await
     }
 
     /// Handle UDP traffic

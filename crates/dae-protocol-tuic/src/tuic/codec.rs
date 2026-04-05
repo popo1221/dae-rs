@@ -276,7 +276,7 @@ impl TuicCodec {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use tokio::io::Cursor;
+    use std::io::Cursor;
 
     #[tokio::test]
     async fn test_auth_request_roundtrip() {

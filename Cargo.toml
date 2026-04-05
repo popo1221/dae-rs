@@ -5,6 +5,7 @@ members = [
     "crates/dae-cli",
     "crates/dae-config",
     "crates/dae-proxy",
+    "crates/dae-relay",
     "crates/dae-api",
     "crates/dae-ebpf-common",
     "crates/dae-xdp",

@@ -13,6 +13,7 @@ aes-gcm = "0.10"
 hmac = "0.12"
 sha2 = "0.10"
 serde = { version = "1", features = ["derive"] }
+dae-relay = { path = "../dae-relay" }
 
 [dev-dependencies]
 tokio-test = "0.4"

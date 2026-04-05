@@ -101,7 +101,7 @@ impl CommandHandler {
         mut client: TcpStream,
         dst_addr: &Socks5Address,
     ) -> std::io::Result<()> {
-        use super::relay::relay;
+        use dae_relay::relay_bidirectional as relay;
 
         // Resolve address
         let socket_addr = match dst_addr.to_socket_addr() {

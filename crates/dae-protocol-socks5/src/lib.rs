@@ -8,7 +8,6 @@ pub mod commands;
 mod consts;
 pub mod handler;
 pub mod handshake;
-pub mod relay;
 pub mod reply;
 
 // Re-export types for convenience
@@ -25,6 +24,9 @@ pub use consts::{
 };
 pub use handler::{Socks5Handler, Socks5HandlerConfig, Socks5Server};
 pub use reply::Socks5Reply;
+
+// Re-export relay from dae-relay for backward compatibility
+pub use dae_relay::relay_bidirectional;
 
 #[cfg(test)]
 mod tests {
