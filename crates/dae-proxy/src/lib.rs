@@ -50,7 +50,10 @@ pub use crate::control::{
 
 // Logging module exports
 pub use crate::core::{Context, Error, Result};
+// Juicity exports (QUIC-based, optional)
+#[cfg(feature = "protocol-juicity")]
 pub use crate::juicity::codec::{JuicityAddress, JuicityCodec, JuicityCommand, JuicityFrame};
+#[cfg(feature = "protocol-juicity")]
 pub use crate::juicity::{
     CongestionControl, JuicityClient, JuicityConfig, JuicityConnection, JuicityError,
     JuicityHandler, JuicityServer,
@@ -126,7 +129,10 @@ pub mod dns;
 pub mod ebpf_check;
 pub mod ebpf_integration;
 pub mod http_proxy;
+// QUIC-based protocols (optional - depend on quinn crate)
+#[cfg(feature = "protocol-hysteria2")]
 pub mod hysteria2;
+#[cfg(feature = "protocol-juicity")]
 pub mod juicity;
 pub mod logging;
 pub mod mac;
@@ -146,6 +152,8 @@ pub mod tcp;
 pub mod tracking;
 pub mod transport;
 pub mod trojan_protocol; // Module structure following Zed's architecture
+#[cfg(feature = "protocol-tuic")]
+pub mod tuic;
 pub mod tun;
 pub mod udp;
 pub mod vless;
@@ -160,7 +168,8 @@ pub use crate::process::{
 // MAC address rule engine exports
 pub use crate::mac::{MacAddr, MacRule, MacRuleSet, OuiDatabase};
 
-// Hysteria2 protocol exports
+// Hysteria2 protocol exports (QUIC-based, optional)
+#[cfg(feature = "protocol-hysteria2")]
 pub use crate::hysteria2::{Hysteria2Config, Hysteria2Error, Hysteria2Handler, Hysteria2Server};
 
 // DNS module exports

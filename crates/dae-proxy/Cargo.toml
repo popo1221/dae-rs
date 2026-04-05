@@ -5,29 +5,14 @@ edition = "2021"
 description = "Proxy protocols for dae-rs - Phase 3: User-space proxy core"
 
 [features]
-# Feature flags for optional compilation
-# Currently all protocols are always compiled due to deep module dependencies
-# Future work: gate individual protocols with proper cfg attributes throughout codebase
-default = []
-protocol-core = []
-transport-tcp = []
-transport-tls = []
-transport-ws = []
-transport-grpc = []
-transport-httpupgrade = []
-transport-meek = []
-transport-quic = []
-vless = []
-vmess = []
-shadowsocks = []
-trojan = []
-socks4 = []
-hysteria2 = []
-tuic = []
-juicity = []
+# QUIC-based protocols (optional - quinn adds ~2-3MB binary size)
+# Enable these only if you need QUIC-based protocols
+protocol-hysteria2 = ["quinn"]
+protocol-tuic = ["quinn"]
+protocol-juicity = ["quinn"]
 
 [dependencies]
-# Always included (core)
+# Core (always included)
 tokio = { version = "1", features = ["full"] }
 tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["env-filter"] }
@@ -60,17 +45,18 @@ hkdf = "0.10"
 bitflags = "2"
 tokio-tun = "0.9"
 subtle = "2"
+lazy_static = "1.4"
 
 # Metrics and observability
 prometheus = "0.13"
 axum = "0.7"
 tower-http = { version = "0.6", features = ["cors"] }
-lazy_static = "1.4"
 
-# QUIC protocol support
-quinn = "0.10"
+# QUIC protocol support (only for hysteria2, tuic, juicity)
+# quinn adds ~2-3MB to binary size
+quinn = { version = "0.10", optional = true }
 
-# eBPF support via aya (async runtime integration)
+# eBPF support
 # Note: aya 0.13+ requires nightly Rust for eBPF compilation,
 # but the user-space API works on stable Rust.
 aya = "0.13"

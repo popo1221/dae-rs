@@ -558,7 +558,9 @@ mod tests {
 
         let mut buf = Vec::new();
         let mut writer = Cursor::new(&mut buf);
-        TuicCodec::write_auth_request(&mut writer, &request).await.unwrap();
+        TuicCodec::write_auth_request(&mut writer, &request)
+            .await
+            .unwrap();
 
         let mut reader = Cursor::new(&buf);
         let decoded = TuicCodec::read_auth_request(&mut reader).await.unwrap();

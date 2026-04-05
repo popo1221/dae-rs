@@ -5,8 +5,8 @@
 //!
 //! Protocol reference: https://github.com/tuic-org/tuic
 
-pub mod tuic;
 pub mod codec;
+pub mod tuic;
 
-pub use tuic::{TuicHandler, TuicServer, TuicClient, TuicConfig, TuicError, TuicCommandType};
 pub use codec::{TuicCodec, TuicCommand};
+pub use tuic::{TuicClient, TuicCommandType, TuicConfig, TuicError, TuicHandler, TuicServer};
