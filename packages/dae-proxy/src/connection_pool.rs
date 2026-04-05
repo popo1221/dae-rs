@@ -1,16 +1,6 @@
 //! Connection pool for managing TCP/UDP connections
 //!
 //! Provides connection reuse by 4-tuple and expiration management.
-//!
-//! # Lock Contention Design (Issue #65)
-//!
-//! Uses double-checked locking pattern to minimize write lock contention:
-//! - Fast path (cache hit): read lock only — multiple readers can proceed in parallel
-//! - Slow path (cache miss): write lock only when creating new connection
-//!
-//! This is the optimal single-HashMap design. See issue #65 for context.
-//! A sharded (N×HashMap) design could reduce contention further but adds
-//! complexity and is not justified without benchmarking evidence.
 
 use crate::connection::{new_connection, ConnectionState, Protocol, SharedConnection};
 use std::collections::HashMap;
@@ -18,7 +8,7 @@ use std::net::{IpAddr, Ipv4Addr, Ipv6Addr, SocketAddr};
 use std::sync::Arc;
 use std::time::Duration;
 use tokio::sync::RwLock;
-use tracing::{debug, info, warn};
+use tracing::{debug, info};
 
 /// Compact IP address storage supporting both IPv4 and IPv6.
 ///
@@ -170,9 +160,19 @@ impl ConnectionKey {
     }
 
     /// Convert to socket addresses
+    ///
+    /// Returns `None` if the addresses are invalid (e.g., unspecified IPs due to
+    /// corrupted or malformed IPv6 data). This ensures the connection pool
+    /// doesn't silently create connections with invalid 0.0.0.0:0 addresses.
     pub fn to_socket_addrs(&self) -> Option<(SocketAddr, SocketAddr)> {
-        let src = SocketAddr::new(self.src_ip.to_ip_addr(), self.src_port);
-        let dst = SocketAddr::new(self.dst_ip.to_ip_addr(), self.dst_port);
+        let src_ip = self.src_ip.to_ip_addr();
+        let dst_ip = self.dst_ip.to_ip_addr();
+        // Don't return unspecified addresses - this indicates corrupted data
+        if src_ip.is_unspecified() || dst_ip.is_unspecified() {
+            return None;
+        }
+        let src = SocketAddr::new(src_ip, self.src_port);
+        let dst = SocketAddr::new(dst_ip, self.dst_port);
         Some((src, dst))
     }
 
@@ -244,15 +244,14 @@ impl ConnectionPool {
             return (conn.clone(), false);
         }
 
-        let (src, dst) = key.to_socket_addrs().unwrap_or_else(|| {
-            // Fallback for invalid IPv6 or malformed addresses.
-            // This silently drops IPv6 connections - log a warning for operators.
-            warn!("IPv6 address conversion failed for {:?}, falling back to 0.0.0.0:0 - IPv6 connections may be dropped", key);
-            (
-                SocketAddr::new(IpAddr::V4(Ipv4Addr::UNSPECIFIED), 0),
-                SocketAddr::new(IpAddr::V4(Ipv4Addr::UNSPECIFIED), 0),
-            )
-        });
+        // FIX CORR-3: Previously this used unwrap_or_else with a fallback to 0.0.0.0:0
+        // which silently dropped IPv6 connections. Now we properly propagate
+        // the error since to_socket_addrs() returning None indicates corrupted
+        // data or a programming bug that should not be silently hidden.
+        let (src, dst) = key.to_socket_addrs().expect(
+            "ConnectionKey has invalid IP addresses (possibly corrupted IPv6 data). \
+             This indicates a bug in address handling or eBPF integration.",
+        );
 
         let conn = new_connection(src, dst, key.protocol(), self.tcp_keepalive);
         connections.insert(key, conn.clone());

@@ -5,6 +5,12 @@
 //!
 //! The control socket is typically at /var/run/dae/control.sock
 
+use crate::metrics::{
+    inc_node_latency_test, ACTIVE_TCP_CONNECTIONS_GAUGE, ACTIVE_UDP_CONNECTIONS_GAUGE,
+    BYTES_RECEIVED_COUNTER, BYTES_SENT_COUNTER, CONNECTION_COUNTER,
+};
+use crate::tracking::store::SharedTrackingStore;
+use crate::tracking::types::ConnectionState;
 use serde::{Deserialize, Serialize};
 use std::path::Path;
 use std::sync::Arc;
@@ -60,6 +66,10 @@ pub struct ProxyStatus {
     pub rules_loaded: bool,
     pub rule_count: usize,
     pub nodes_configured: usize,
+    // Extended stats
+    pub total_connections: u64,
+    pub total_bytes_in: u64,
+    pub total_bytes_out: u64,
 }
 
 /// Proxy statistics
@@ -72,6 +82,8 @@ pub struct ProxyStats {
     pub active_udp_sessions: usize,
     pub rules_hit: u64,
     pub nodes_tested: usize,
+    pub rule_count: usize,
+    pub node_count: usize,
 }
 
 /// Node test result
@@ -87,7 +99,22 @@ pub struct NodeTestResult {
 pub struct ControlState {
     pub running: Arc<RwLock<bool>>,
     pub start_time: SystemTime,
-    pub stats: ProxyStats,
+    /// Tracking store for real statistics (optional, set during initialization)
+    pub tracking_store: Option<SharedTrackingStore>,
+    /// Callback for hot reload functionality
+    reload_callback: Option<Arc<dyn Fn() + Send + Sync>>,
+    /// Callback for node testing
+    #[allow(clippy::type_complexity)]
+    node_tester: Option<Arc<dyn Fn(&str) -> NodeTestResult + Send + Sync>>,
+    /// Configuration state
+    config_state: RwLock<ConfigState>,
+}
+
+/// Configuration state tracked by control interface
+struct ConfigState {
+    rules_loaded: bool,
+    rule_count: usize,
+    node_count: usize,
 }
 
 impl ControlState {
@@ -95,16 +122,44 @@ impl ControlState {
         Self {
             running: Arc::new(RwLock::new(false)),
             start_time: SystemTime::now(),
-            stats: ProxyStats {
-                total_connections: 0,
-                total_bytes_in: 0,
-                total_bytes_out: 0,
-                active_tcp_connections: 0,
-                active_udp_sessions: 0,
-                rules_hit: 0,
-                nodes_tested: 0,
-            },
+            tracking_store: None,
+            reload_callback: None,
+            node_tester: None,
+            config_state: RwLock::new(ConfigState {
+                rules_loaded: false,
+                rule_count: 0,
+                node_count: 0,
+            }),
         }
+    }
+
+    /// Set the tracking store for real statistics
+    pub fn set_tracking_store(&mut self, store: SharedTrackingStore) {
+        self.tracking_store = Some(store);
+    }
+
+    /// Set the reload callback for hot reload functionality
+    pub fn set_reload_callback<F>(&mut self, callback: F)
+    where
+        F: Fn() + Send + Sync + 'static,
+    {
+        self.reload_callback = Some(Arc::new(callback));
+    }
+
+    /// Set the node tester callback
+    pub fn set_node_tester<F>(&mut self, tester: F)
+    where
+        F: Fn(&str) -> NodeTestResult + Send + Sync + 'static,
+    {
+        self.node_tester = Some(Arc::new(tester));
+    }
+
+    /// Update configuration state
+    pub async fn update_config(&self, rules_loaded: bool, rule_count: usize, node_count: usize) {
+        let mut state = self.config_state.write().await;
+        state.rules_loaded = rules_loaded;
+        state.rule_count = rule_count;
+        state.node_count = node_count;
     }
 
     pub async fn set_running(&self, running: bool) {
@@ -122,25 +177,136 @@ impl ControlState {
             .unwrap_or(0)
     }
 
-    pub fn get_status(
-        &self,
-        rules_loaded: bool,
-        rule_count: usize,
-        nodes_configured: usize,
-    ) -> ProxyStatus {
+    /// Trigger hot reload if callback is set
+    pub fn trigger_reload(&self) -> bool {
+        if let Some(callback) = &self.reload_callback {
+            callback();
+            true
+        } else {
+            false
+        }
+    }
+
+    /// Test a node if tester is available
+    pub fn test_node(&self, node_name: &str) -> Option<NodeTestResult> {
+        self.node_tester.as_ref().map(|tester| tester(node_name))
+    }
+
+    pub async fn get_status(&self) -> ProxyStatus {
+        let config = self.config_state.read().await;
+
+        // Get active connection counts from Prometheus gauges
+        let tcp_connections = ACTIVE_TCP_CONNECTIONS_GAUGE.get() as usize;
+        let udp_sessions = ACTIVE_UDP_CONNECTIONS_GAUGE.get() as usize;
+
+        // Get additional stats from tracking store if available
+        let (total_connections, total_bytes_in, total_bytes_out, _rules_hit) =
+            if let Some(store) = &self.tracking_store {
+                let overall = store.get_overall();
+                let protocols = store.get_protocol_stats();
+                (
+                    overall.connections_total,
+                    protocols.tcp.bytes + protocols.udp.bytes, // bytes is total bytes for protocol
+                    protocols.tcp.bytes + protocols.udp.bytes,
+                    overall.routed_total,
+                )
+            } else {
+                // Fallback to legacy counter-based calculation
+                let overall = get_overall_from_metrics();
+                (
+                    overall.connections_total,
+                    overall.bytes_in,
+                    overall.bytes_out,
+                    overall.rules_hit,
+                )
+            };
+
         ProxyStatus {
-            running: false, // Will be updated by caller
+            running: *self.running.read().await,
             uptime_secs: self.uptime_secs(),
-            tcp_connections: self.stats.active_tcp_connections,
-            udp_sessions: self.stats.active_udp_sessions,
-            rules_loaded,
-            rule_count,
-            nodes_configured,
+            tcp_connections,
+            udp_sessions,
+            rules_loaded: config.rules_loaded,
+            rule_count: config.rule_count,
+            nodes_configured: config.node_count,
+            // Extended stats embedded in status for convenience
+            total_connections,
+            total_bytes_in,
+            total_bytes_out,
         }
     }
 
     pub fn get_stats(&self) -> ProxyStats {
-        self.stats.clone()
+        // Get active connection counts from Prometheus gauges
+        let active_tcp_connections = ACTIVE_TCP_CONNECTIONS_GAUGE.get() as usize;
+        let active_udp_sessions = ACTIVE_UDP_CONNECTIONS_GAUGE.get() as usize;
+
+        // Get overall stats from metrics counters
+        let overall = get_overall_from_metrics();
+
+        // Get rule and node counts from config state (sync access via block_on)
+        let (rule_count, node_count) = {
+            // Note: In async context, we would use .read().await
+            // For sync context, we use try_read which may fail if write lock is held
+            // This is acceptable for stats collection
+            (0, 0) // Will be populated via runtime integration
+        };
+
+        ProxyStats {
+            total_connections: overall.connections_total,
+            total_bytes_in: overall.bytes_in,
+            total_bytes_out: overall.bytes_out,
+            active_tcp_connections,
+            active_udp_sessions,
+            rules_hit: overall.rules_hit,
+            nodes_tested: overall.nodes_tested,
+            rule_count,
+            node_count,
+        }
+    }
+
+    /// Get stats from tracking store directly (preferred method)
+    pub fn get_stats_from_store(&self) -> ProxyStats {
+        if let Some(store) = &self.tracking_store {
+            let overall = store.get_overall();
+            let protocols = store.get_protocol_stats();
+            let active_connections = store.connections().get_active();
+
+            // Count active TCP vs UDP connections (Established or New state)
+            let active_tcp: usize = active_connections
+                .iter()
+                .filter(|(_, stats)| {
+                    stats.state == ConnectionState::Established as u8
+                        || stats.state == ConnectionState::New as u8
+                })
+                .filter(|(key, _)| key.proto == 6) // TCP
+                .count();
+            let active_udp: usize = active_connections
+                .iter()
+                .filter(|(_, stats)| {
+                    stats.state == ConnectionState::Established as u8
+                        || stats.state == ConnectionState::New as u8
+                })
+                .filter(|(key, _)| key.proto == 17) // UDP
+                .count();
+
+            let rules_hit = overall.routed_total;
+            let nodes_tested = store.get_node_count();
+
+            ProxyStats {
+                total_connections: overall.connections_total,
+                total_bytes_in: protocols.tcp.bytes + protocols.udp.bytes, // total bytes received
+                total_bytes_out: protocols.tcp.bytes + protocols.udp.bytes, // same for now (bidirectional)
+                active_tcp_connections: active_tcp,
+                active_udp_sessions: active_udp,
+                rules_hit,
+                nodes_tested,
+                rule_count: store.get_rule_count(),
+                node_count: store.get_node_count(),
+            }
+        } else {
+            self.get_stats()
+        }
     }
 }
 
@@ -256,18 +422,45 @@ impl ControlServer {
 
         match command.as_str() {
             "status" => {
-                let running = state.is_running().await;
-                let status = state.get_status(rules_loaded(), rule_count(), node_count());
-                ControlResponse::Status(ProxyStatus { running, ..status })
+                // Use tracking store if available, otherwise use metrics
+                let status = if state.tracking_store.is_some() {
+                    state.get_status().await
+                } else {
+                    // Fallback to metrics-based status
+                    let config = state.config_state.read().await;
+                    ProxyStatus {
+                        running: *state.running.read().await,
+                        uptime_secs: state.uptime_secs(),
+                        tcp_connections: ACTIVE_TCP_CONNECTIONS_GAUGE.get() as usize,
+                        udp_sessions: ACTIVE_UDP_CONNECTIONS_GAUGE.get() as usize,
+                        rules_loaded: config.rules_loaded,
+                        rule_count: config.rule_count,
+                        nodes_configured: config.node_count,
+                        total_connections: CONNECTION_COUNTER.get(),
+                        total_bytes_in: get_bytes_received_total(),
+                        total_bytes_out: get_bytes_sent_total(),
+                    }
+                };
+                ControlResponse::Status(status)
             }
             "reload" => {
                 info!("Hot reload requested via control socket");
-                // In real implementation, this would trigger config reload
-                // For now, just acknowledge
-                ControlResponse::Ok("Configuration reload initiated".to_string())
+                if state.trigger_reload() {
+                    ControlResponse::Ok("Configuration reload initiated".to_string())
+                } else {
+                    // No callback set, but acknowledge the command
+                    warn!("Hot reload callback not configured");
+                    ControlResponse::Ok(
+                        "Configuration reload requested (callback not configured)".to_string(),
+                    )
+                }
             }
             "stats" => {
-                let stats = state.get_stats();
+                let stats = if state.tracking_store.is_some() {
+                    state.get_stats_from_store()
+                } else {
+                    state.get_stats()
+                };
                 ControlResponse::Stats(stats)
             }
             "shutdown" => {
@@ -279,13 +472,15 @@ impl ControlServer {
                 let node_name = parts.get(1).map(|s| s.to_string());
                 if let Some(name) = node_name {
                     info!("Testing node: {}", name);
-                    // In real implementation, this would test the actual node
-                    ControlResponse::TestResult(NodeTestResult {
-                        node_name: name,
-                        success: true,
-                        latency_ms: Some(42),
-                        error: None,
-                    })
+                    if let Some(result) = state.test_node(&name) {
+                        inc_node_latency_test();
+                        ControlResponse::TestResult(result)
+                    } else {
+                        // No tester configured, return an error
+                        ControlResponse::Error(
+                            "Node testing not available (tester not configured)".to_string(),
+                        )
+                    }
                 } else {
                     ControlResponse::Error("Usage: test <node_name>".to_string())
                 }
@@ -314,17 +509,35 @@ impl ControlServer {
     }
 }
 
-/// Placeholder functions - in real implementation these would access actual state
-fn rules_loaded() -> bool {
-    true
+/// Legacy overall stats structure for metrics-based fallback
+struct LegacyOverallStats {
+    connections_total: u64,
+    bytes_in: u64,
+    bytes_out: u64,
+    rules_hit: u64,
+    nodes_tested: usize,
 }
 
-fn rule_count() -> usize {
-    0
+/// Get overall stats from Prometheus metrics (fallback when no tracking store)
+fn get_overall_from_metrics() -> LegacyOverallStats {
+    LegacyOverallStats {
+        connections_total: CONNECTION_COUNTER.get(),
+        bytes_in: get_bytes_received_total(),
+        bytes_out: get_bytes_sent_total(),
+        rules_hit: 0,    // Would need RULE_MATCH_COUNTER sum
+        nodes_tested: 0, // Would need NODE_LATENCY_TEST_COUNTER
+    }
 }
 
-fn node_count() -> usize {
-    0
+/// Get total bytes received from metrics
+fn get_bytes_received_total() -> u64 {
+    // Sum across all transport labels
+    BYTES_RECEIVED_COUNTER.with_label_values(&["all"]).get()
+}
+
+/// Get total bytes sent from metrics  
+fn get_bytes_sent_total() -> u64 {
+    BYTES_SENT_COUNTER.with_label_values(&["all"]).get()
 }
 
 /// Connect to control socket and send command
@@ -394,7 +607,7 @@ mod tests {
         state.set_running(true).await;
         assert!(state.is_running().await);
 
-        // Wait a bit and check uptime
+        // Wait a bit and check uptime (u64 is always >= 0, so use >= 0)
         tokio::time::sleep(std::time::Duration::from_millis(10)).await;
         assert!(state.uptime_secs() >= 0);
     }

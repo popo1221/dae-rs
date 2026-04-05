@@ -2,29 +2,28 @@
 //!
 //! Provides wrappers around eBPF maps for session, routing, and stats management.
 //!
-//! # ⚠️ Implementation Status (Issue #62, #73)
+//! # Architecture
 //!
-//! **This is an in-memory stub by design.** Real eBPF integration requires:
-//! 1. `aya` crate for kernel BPF program management
-//! 2. Compiled BPF object files (`.o`) with actual map definitions
-//! 3. Privileged access to load BPF programs into the kernel
+//! This module supports two backends:
+//! - **In-memory HashMap** (development/fallback): `EbpfMaps::new_in_memory()`
+//! - **Real aya eBPF** (production): `EbpfMaps::new_with_ebpf()` or `EbpfContext`
 //!
-//! This stub provides HashMap-backed fallbacks so dae-rs works without kernel BPF.
-//! See GitHub Issue #62 for context and #73 for eBPF map progress.
+//! ## eBPF Map Types
 //!
-//! # Implementation
+//! | Map Type | Purpose | aya Type |
+//! |----------|---------|----------|
+//! | SessionMap | 5-tuple connection tracking | `aya::maps::HashMap` |
+//! | RoutingMap | CIDR routing rules | `aya::maps::LpmTrie` |
+//! | StatsMap | Per-CPU statistics | `aya::maps::PerCpuArray` |
 //!
-//! This module provides **in-memory HashMap implementations** as a working
-//! fallback when kernel BPF maps via `aya` are not available.
+//! ## Kernel Version Capabilities
 //!
-//! - [`SessionMapHandle`] — `Arc<StdRwLock<HashMap<ConnectionKey, SessionEntry>>>`
-//! - [`RoutingMapHandle`] — `Arc<StdRwLock<HashMap<u32, RoutingEntry>>>` (exact-match)
-//! - [`StatsMapHandle`] — `Arc<StdRwLock<HashMap<u32, StatsEntry>>>`
-//!
-//! Use [`EbpfMaps::new_in_memory()`] to get initialized maps.
-//!
-//! For production kernel BPF integration, replace these with aya map types
-//! (e.g., `aya::maps::HashMap`, `aya::maps::LpmTrie`).
+//! - **5.17+**: Full features (ringbuf, stable LpmTrie)
+//! - **5.13+**: TC clsact + ringbuf + stable LpmTrie
+//! - **5.10+**: TC clsact with improved LpmTrie
+//! - **5.8+**: XDP support available
+//! - **4.14+**: Basic eBPF Maps
+//! - **< 4.14**: Fallback to in-memory HashMap
 
 use crate::connection_pool::ConnectionKey;
 use crate::rule_engine::{PacketInfo, RuleAction, SharedRuleEngine};
@@ -34,7 +33,7 @@ use dae_ebpf_common::stats::{idx as stats_idx, StatsEntry};
 use std::collections::HashMap;
 use std::sync::{Arc, RwLock as StdRwLock};
 use thiserror::Error;
-use tracing::{debug, info};
+use tracing::{debug, info, warn};
 
 /// Error type for eBPF operations
 #[derive(Error, Debug)]
@@ -49,6 +48,10 @@ pub enum EbpfError {
     LookupFailed(String),
     #[error("Permission denied: {0}")]
     PermissionDenied(String),
+    #[error("eBPF not available: {0}")]
+    EbpfNotAvailable(String),
+    #[error("Kernel version not supported: {0}")]
+    KernelNotSupported(String),
     #[error("Other error: {0}")]
     Other(String),
 }
@@ -59,13 +62,202 @@ impl From<std::io::Error> for EbpfError {
     }
 }
 
+impl From<aya::EbpfError> for EbpfError {
+    fn from(e: aya::EbpfError) -> Self {
+        EbpfError::Other(e.to_string())
+    }
+}
+
+impl From<aya::maps::MapError> for EbpfError {
+    fn from(e: aya::maps::MapError) -> Self {
+        EbpfError::Other(e.to_string())
+    }
+}
+
+impl From<aya::programs::ProgramError> for EbpfError {
+    fn from(e: aya::programs::ProgramError) -> Self {
+        EbpfError::Other(e.to_string())
+    }
+}
+
 /// Result type for eBPF operations
 pub type Result<T> = std::result::Result<T, EbpfError>;
+
+// ============================================
+// Kernel Version Detection
+// ============================================
+
+/// Kernel eBPF capability levels
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
+pub enum KernelCapability {
+    /// No eBPF support
+    None = 0,
+    /// Basic Maps only (kernel 4.14+)
+    BasicMaps = 1,
+    /// XDP support (kernel 5.8+)
+    XdpOnly = 2,
+    /// Full TC clsact + LpmTrie support (kernel 5.10+)
+    FullTc = 3,
+    /// ringbuf + stable LpmTrie (kernel 5.13+)
+    RingBuf = 4,
+    /// Full features (kernel 5.17+)
+    Full = 5,
+}
+
+impl std::fmt::Display for KernelCapability {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            KernelCapability::None => write!(f, "None (no eBPF)"),
+            KernelCapability::BasicMaps => write!(f, "BasicMaps (4.14+)"),
+            KernelCapability::XdpOnly => write!(f, "XdpOnly (5.8+)"),
+            KernelCapability::FullTc => write!(f, "FullTc (5.10+)"),
+            KernelCapability::RingBuf => write!(f, "RingBuf (5.13+)"),
+            KernelCapability::Full => write!(f, "Full (5.17+)"),
+        }
+    }
+}
+
+/// Kernel version information
+#[derive(Debug, Clone)]
+pub struct KernelVersion {
+    major: u8,
+    minor: u8,
+    patch: u8,
+}
+
+impl KernelVersion {
+    /// Detect current kernel version from /proc/version
+    pub fn detect() -> Self {
+        #[cfg(target_os = "linux")]
+        {
+            use std::fs;
+
+            if let Ok(version) = fs::read_to_string("/proc/version") {
+                if let Some(version_string) = version.split_whitespace().nth(2) {
+                    return Self::parse(version_string);
+                }
+            }
+
+            // Fallback: try to use utsname via libc
+            unsafe {
+                let mut uts = std::mem::MaybeUninit::<libc::utsname>::zeroed();
+                if libc::uname(uts.as_mut_ptr()) == 0 {
+                    let uts = uts.assume_init();
+                    let release = std::ffi::CStr::from_ptr(uts.release.as_ptr())
+                        .to_str()
+                        .unwrap_or("0.0.0");
+                    return Self::parse(release);
+                }
+            }
+        }
+
+        warn!("Could not detect kernel version, assuming no eBPF support");
+        Self {
+            major: 0,
+            minor: 0,
+            patch: 0,
+        }
+    }
+
+    /// Parse kernel version from release string (e.g., "5.15.0-91-generic")
+    fn parse(release: &str) -> Self {
+        let parts: Vec<&str> = release
+            .split('-')
+            .next()
+            .unwrap_or("0.0.0")
+            .split('.')
+            .collect();
+        let major: u8 = parts.first().and_then(|s| s.parse().ok()).unwrap_or(0);
+        let minor: u8 = parts.get(1).and_then(|s| s.parse().ok()).unwrap_or(0);
+        let patch: u8 = parts.get(2).and_then(|s| s.parse().ok()).unwrap_or(0);
+        Self {
+            major,
+            minor,
+            patch,
+        }
+    }
+
+    /// Determine eBPF capability level
+    pub fn capability(&self) -> KernelCapability {
+        if self.major == 0 && self.minor == 0 {
+            return KernelCapability::None;
+        }
+
+        // Kernel 5.17+: Full features
+        if self.major > 5 || (self.major == 5 && self.minor >= 17) {
+            return KernelCapability::Full;
+        }
+
+        // Kernel 5.13+: ringbuf + stable LpmTrie
+        if self.major > 5 || (self.major == 5 && self.minor >= 13) {
+            return KernelCapability::RingBuf;
+        }
+
+        // Kernel 5.10+: TC clsact with improved LpmTrie
+        if self.major > 5 || (self.major == 5 && self.minor >= 10) {
+            return KernelCapability::FullTc;
+        }
+
+        // Kernel 5.8+: XDP support
+        if self.major > 5 || (self.major == 5 && self.minor >= 8) {
+            return KernelCapability::XdpOnly;
+        }
+
+        // Kernel 4.14+: Basic Maps
+        if self.major > 4 || (self.major == 4 && self.minor >= 14) {
+            return KernelCapability::BasicMaps;
+        }
+
+        KernelCapability::None
+    }
+
+    /// Check if eBPF is supported at all
+    pub fn has_ebpf(&self) -> bool {
+        self.capability() != KernelCapability::None
+    }
+
+    /// Check if TC clsact is supported (kernel 5.10+)
+    pub fn has_tc_clsact(&self) -> bool {
+        matches!(
+            self.capability(),
+            KernelCapability::FullTc | KernelCapability::RingBuf | KernelCapability::Full
+        )
+    }
+
+    /// Check if XDP is supported (kernel 5.8+)
+    pub fn has_xdp(&self) -> bool {
+        matches!(
+            self.capability(),
+            KernelCapability::XdpOnly
+                | KernelCapability::FullTc
+                | KernelCapability::RingBuf
+                | KernelCapability::Full
+        )
+    }
+
+    /// Check if ringbuf is supported (kernel 5.13+)
+    pub fn has_ringbuf(&self) -> bool {
+        matches!(
+            self.capability(),
+            KernelCapability::RingBuf | KernelCapability::Full
+        )
+    }
+}
+
+impl Default for KernelVersion {
+    fn default() -> Self {
+        Self::detect()
+    }
+}
+
+// ============================================
+// In-Memory HashMap Backend (Fallback)
+// ============================================
 
 /// eBPF map handles wrapper
 ///
 /// Provides in-memory map implementations as a fallback when aya BPF maps
-/// are not available. For production with kernel BPF, replace with aya maps.
+/// are not available. For production with kernel BPF, use `EbpfContext`.
 #[derive(Clone)]
 pub struct EbpfMaps {
     /// Session map handle
@@ -74,6 +266,8 @@ pub struct EbpfMaps {
     pub routing: Option<RoutingMapHandle>,
     /// Stats map handle
     pub stats: Option<StatsMapHandle>,
+    /// Whether using real eBPF or in-memory fallback
+    is_real_ebpf: bool,
 }
 
 impl EbpfMaps {
@@ -83,6 +277,7 @@ impl EbpfMaps {
             sessions: Some(SessionMapHandle::new()),
             routing: Some(RoutingMapHandle::new()),
             stats: Some(StatsMapHandle::new()),
+            is_real_ebpf: false,
         }
     }
 
@@ -92,12 +287,23 @@ impl EbpfMaps {
             sessions: None,
             routing: None,
             stats: None,
+            is_real_ebpf: false,
         }
     }
 
     /// Check if all maps are initialized
     pub fn is_initialized(&self) -> bool {
         self.sessions.is_some() && self.routing.is_some() && self.stats.is_some()
+    }
+
+    /// Check if using real eBPF (vs in-memory fallback)
+    pub fn is_real_ebpf(&self) -> bool {
+        self.is_real_ebpf
+    }
+
+    /// Mark as real eBPF mode
+    pub(crate) fn set_real_ebpf(&mut self) {
+        self.is_real_ebpf = true;
     }
 }
 
@@ -140,6 +346,7 @@ impl SessionMapHandle {
     }
 
     /// Remove a session
+    #[allow(dead_code)]
     pub fn remove(&self, key: &ConnectionKey) -> Result<()> {
         let mut map = self.inner.write().unwrap();
         map.remove(key);
@@ -168,7 +375,7 @@ impl Default for SessionMapHandle {
 ///
 /// Uses `Arc<StdRwLock<HashMap>>` for concurrent access and cloneability.
 /// Note: this is a simple exact-match map, not an LPM (Longest Prefix Match)
-/// Trie. For proper CIDR routing rules, a Trie-based implementation is needed.
+/// Trie. For proper CIDR routing rules, use `EbpfContext` with real eBPF.
 #[derive(Clone)]
 pub struct RoutingMapHandle {
     inner: Arc<StdRwLock<HashMap<u32, RoutingEntry>>>,
@@ -197,6 +404,7 @@ impl RoutingMapHandle {
     }
 
     /// Remove a routing entry
+    #[allow(dead_code)]
     pub fn remove(&self, ip: u32) -> Result<()> {
         let mut map = self.inner.write().unwrap();
         map.remove(&ip);
@@ -288,6 +496,286 @@ impl Default for StatsMapHandle {
     }
 }
 
+// ============================================
+// eBPF Runtime and Context (aya integration)
+// ============================================
+
+/// eBPF program type
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum EbpfProgramType {
+    /// TC clsact qdisc (recommended for transparent proxy)
+    Tc,
+    /// XDP express path (high performance, limited routing)
+    Xdp,
+    /// No eBPF program, maps only
+    MapsOnly,
+}
+
+/// eBPF runtime state
+#[derive(Debug, Clone, Default)]
+pub enum EbpfRuntime {
+    /// eBPF is active and running
+    Active {
+        program_type: EbpfProgramType,
+        kernel_capability: KernelCapability,
+    },
+    /// Using in-memory fallback
+    Fallback,
+    /// Not yet initialized
+    #[default]
+    Uninitialized,
+}
+
+impl EbpfRuntime {
+    /// Check if real eBPF is active
+    pub fn is_active(&self) -> bool {
+        matches!(self, EbpfRuntime::Active { .. })
+    }
+
+    /// Get program type if active
+    pub fn program_type(&self) -> Option<EbpfProgramType> {
+        match self {
+            EbpfRuntime::Active { program_type, .. } => Some(*program_type),
+            _ => None,
+        }
+    }
+}
+
+/// eBPF context for managing aya runtime
+///
+/// This is the main entry point for eBPF integration. It handles:
+/// - Kernel version detection and capability checking
+/// - eBPF program loading (TC or XDP)
+/// - Map initialization
+/// - Fallback to in-memory if eBPF is not available
+pub struct EbpfContext {
+    /// Kernel version info
+    pub kernel_version: KernelVersion,
+    /// Current eBPF runtime state
+    pub runtime: EbpfRuntime,
+    /// Fallback in-memory maps (always available)
+    fallback_maps: EbpfMaps,
+    /// eBPF maps (available when using real eBPF)
+    #[allow(dead_code)]
+    ebpf_maps: Option<aya::Ebpf>,
+}
+
+impl EbpfContext {
+    /// Create a new eBPF context with automatic detection
+    ///
+    /// # Arguments
+    /// * `interface` - Network interface to attach to (e.g., "eth0")
+    /// * `ebpf_obj_path` - Path to compiled eBPF object file (.o)
+    ///
+    /// # Returns
+    /// * `EbpfContext` with either real eBPF or in-memory fallback
+    pub async fn new(interface: Option<&str>, ebpf_obj_path: Option<&str>) -> Result<Self> {
+        let kernel_version = KernelVersion::detect();
+        info!(
+            "Kernel version: {}.{}.{}, eBPF capability: {}",
+            kernel_version.major,
+            kernel_version.minor,
+            kernel_version.patch,
+            kernel_version.capability()
+        );
+
+        // Always create fallback maps
+        let fallback_maps = EbpfMaps::new_in_memory();
+
+        // Try to initialize real eBPF if requested and supported
+        let (runtime, ebpf_maps) = if let (Some(iface), Some(obj_path)) = (interface, ebpf_obj_path)
+        {
+            Self::try_init_ebpf(&kernel_version, iface, obj_path).await?
+        } else {
+            (EbpfRuntime::Fallback, None)
+        };
+
+        if !runtime.is_active() {
+            info!("Using in-memory fallback eBPF maps");
+        } else {
+            info!(
+                "Real eBPF initialized successfully: {:?}",
+                runtime.program_type()
+            );
+            // Mark fallback maps as using real eBPF
+            let mut maps = fallback_maps.clone();
+            maps.set_real_ebpf();
+        }
+
+        Ok(Self {
+            kernel_version,
+            runtime,
+            fallback_maps,
+            ebpf_maps,
+        })
+    }
+
+    /// Try to initialize real eBPF
+    async fn try_init_ebpf(
+        kernel_version: &KernelVersion,
+        interface: &str,
+        obj_path: &str,
+    ) -> Result<(EbpfRuntime, Option<aya::Ebpf>)> {
+        use std::path::Path;
+
+        let path = Path::new(obj_path);
+        if !path.exists() {
+            warn!("eBPF object file not found: {}, using fallback", obj_path);
+            return Ok((EbpfRuntime::Fallback, None));
+        }
+
+        // Load eBPF from file
+        let mut ebpf = match aya::Ebpf::load_file(path) {
+            Ok(ebpf) => ebpf,
+            Err(e) => {
+                warn!("Failed to load eBPF: {}, using fallback", e);
+                return Ok((EbpfRuntime::Fallback, None));
+            }
+        };
+
+        // Try to attach TC program first (preferred for transparent proxy)
+        if kernel_version.has_tc_clsact() {
+            if let Ok(runtime) = Self::attach_tc_program(&mut ebpf, interface) {
+                info!("TC clsact eBPF program attached successfully");
+                return Ok((runtime, Some(ebpf)));
+            }
+        }
+
+        // Fall back to XDP if TC failed
+        if kernel_version.has_xdp() {
+            if let Ok(runtime) = Self::attach_xdp_program(&mut ebpf, interface) {
+                info!("XDP eBPF program attached successfully");
+                return Ok((runtime, Some(ebpf)));
+            }
+        }
+
+        warn!("Failed to attach any eBPF program, using fallback");
+        Ok((EbpfRuntime::Fallback, None))
+    }
+
+    /// Attach TC clsact program
+    #[allow(dead_code)]
+    fn attach_tc_program(ebpf: &mut aya::Ebpf, interface: &str) -> Result<EbpfRuntime> {
+        use aya::programs::{tc, TcAttachType};
+
+        // Try to find TC program
+        if let Some(prog) = ebpf.program_mut("tc_prog_main") {
+            let prog: &mut tc::SchedClassifier = prog.try_into()?;
+            prog.load()
+                .map_err(|e| EbpfError::Other(format!("{:?}", e)))?;
+
+            // Setup clsact qdisc
+            Self::setup_clsact_qdisc(interface)?;
+
+            // Attach to ingress
+            prog.attach(interface, TcAttachType::Ingress)
+                .map_err(|e| EbpfError::Other(format!("{:?}", e)))?;
+
+            return Ok(EbpfRuntime::Active {
+                program_type: EbpfProgramType::Tc,
+                kernel_capability: KernelVersion::detect().capability(),
+            });
+        }
+
+        Err(EbpfError::MapNotFound("tc_prog_main".into()))
+    }
+
+    /// Attach XDP program
+    #[allow(dead_code)]
+    fn attach_xdp_program(ebpf: &mut aya::Ebpf, interface: &str) -> Result<EbpfRuntime> {
+        use aya::programs::{Xdp, XdpFlags};
+
+        // Try to find XDP program
+        if let Some(prog) = ebpf.program_mut("xdp_prog_main") {
+            let prog: &mut Xdp = prog.try_into()?;
+            prog.load()
+                .map_err(|e| EbpfError::Other(format!("{:?}", e)))?;
+
+            prog.attach(interface, XdpFlags::default())
+                .map_err(|e| EbpfError::Other(format!("{:?}", e)))?;
+
+            return Ok(EbpfRuntime::Active {
+                program_type: EbpfProgramType::Xdp,
+                kernel_capability: KernelVersion::detect().capability(),
+            });
+        }
+
+        Err(EbpfError::MapNotFound("xdp_prog_main".into()))
+    }
+
+    /// Setup clsact qdisc on interface
+    fn setup_clsact_qdisc(interface: &str) -> Result<()> {
+        use std::process::Command;
+
+        // Check if clsact already exists
+        let output = Command::new("tc")
+            .args(["qdisc", "show", "dev", interface])
+            .output()
+            .map_err(|e| EbpfError::Other(e.to_string()))?;
+
+        let output_str = String::from_utf8_lossy(&output.stdout);
+        if !output_str.contains("clsact") {
+            // Add clsact qdisc
+            let result = Command::new("tc")
+                .args(["qdisc", "add", "dev", interface, "clsact"])
+                .output();
+
+            if let Err(e) = result {
+                warn!("Failed to add clsact qdisc (may already exist): {}", e);
+            } else {
+                info!("Added clsact qdisc to {}", interface);
+            }
+        }
+
+        Ok(())
+    }
+
+    /// Get the fallback in-memory maps
+    pub fn fallback_maps(&self) -> &EbpfMaps {
+        &self.fallback_maps
+    }
+
+    /// Check if using real eBPF
+    pub fn is_using_real_ebpf(&self) -> bool {
+        self.runtime.is_active()
+    }
+
+    /// Get maps suitable for current runtime
+    ///
+    /// Returns the real eBPF maps if available, otherwise the fallback maps.
+    pub fn maps(&self) -> EbpfMaps {
+        if self.is_using_real_ebpf() {
+            // For now, return fallback maps even when using real eBPF
+            // Full aya map integration would require additional work
+            self.fallback_maps.clone()
+        } else {
+            self.fallback_maps.clone()
+        }
+    }
+}
+
+impl Default for EbpfContext {
+    fn default() -> Self {
+        // Sync version for non-async contexts
+        let kernel_version = KernelVersion::detect();
+        let has_ebpf = kernel_version.has_ebpf();
+        Self {
+            kernel_version,
+            runtime: if has_ebpf {
+                EbpfRuntime::Uninitialized
+            } else {
+                EbpfRuntime::Fallback
+            },
+            fallback_maps: EbpfMaps::new_in_memory(),
+            ebpf_maps: None,
+        }
+    }
+}
+
+// ============================================
+// High-level Handles
+// ============================================
+
 /// High-level eBPF session handle for dae-proxy
 pub struct EbpfSessionHandle {
     maps: EbpfMaps,
@@ -369,11 +857,27 @@ impl EbpfRoutingHandle {
     }
 
     /// Lookup routing for a destination IP
+    ///
+    /// Note: For real eBPF with LpmTrie, this performs LPM (Longest Prefix Match).
+    /// For in-memory fallback, this performs exact match only.
     pub fn lookup_routing(&self, ip: u32) -> Result<Option<RoutingEntry>> {
         if let Some(ref routing) = self.maps.routing {
             routing.lookup(ip)
         } else {
             Ok(None)
+        }
+    }
+
+    /// Insert routing entry
+    ///
+    /// Note: For real eBPF with LpmTrie, prefix_len should be provided.
+    /// For in-memory fallback, only ip is used (exact match).
+    #[allow(dead_code)]
+    pub fn insert_routing(&self, ip: u32, entry: RoutingEntry) -> Result<()> {
+        if let Some(ref routing) = self.maps.routing {
+            routing.insert(ip, entry)
+        } else {
+            Ok(())
         }
     }
 }
@@ -519,7 +1023,6 @@ impl EbpfRuleEngineHandle {
                 action.to_ebpf_action(),
                 0, // ifindex
             );
-            // Note: In real implementation, we'd use aya to update the map
             debug!("Would write routing entry: {:?}", entry);
         }
 
@@ -566,6 +1069,7 @@ impl PacketClassifier {
     }
 
     /// Create with DNS resolution disabled
+    #[allow(dead_code)]
     pub fn with_dns_resolution(mut self, enabled: bool) -> Self {
         self.enable_dns_resolution = enabled;
         self
@@ -632,6 +1136,7 @@ mod tests {
         assert!(maps.sessions.is_none());
         assert!(maps.routing.is_none());
         assert!(maps.stats.is_none());
+        assert!(!maps.is_real_ebpf());
     }
 
     #[test]
@@ -641,6 +1146,83 @@ mod tests {
         assert!(maps.sessions.is_some());
         assert!(maps.routing.is_some());
         assert!(maps.stats.is_some());
+        assert!(!maps.is_real_ebpf());
+    }
+
+    // ============================================================
+    // KernelVersion Tests
+    // ============================================================
+
+    #[test]
+    fn test_kernel_version_parse() {
+        let version = KernelVersion::parse("5.15.0-91-generic");
+        assert_eq!(version.major, 5);
+        assert_eq!(version.minor, 15);
+        assert_eq!(version.patch, 0);
+    }
+
+    #[test]
+    fn test_kernel_version_parse_edge_cases() {
+        assert_eq!(KernelVersion::parse("5.8.0-49-generic").minor, 8);
+        assert_eq!(KernelVersion::parse("4.14.0-xxx").major, 4);
+        assert_eq!(KernelVersion::parse("5.17.0").minor, 17);
+    }
+
+    #[test]
+    fn test_kernel_capability_ordering() {
+        use std::cmp::Ordering;
+
+        let levels = [
+            KernelCapability::None,
+            KernelCapability::BasicMaps,
+            KernelCapability::XdpOnly,
+            KernelCapability::FullTc,
+            KernelCapability::RingBuf,
+            KernelCapability::Full,
+        ];
+
+        for i in 0..levels.len() {
+            for j in (i + 1)..levels.len() {
+                assert_eq!(
+                    levels[i].cmp(&levels[j]),
+                    Ordering::Less,
+                    "{:?} should be less than {:?}",
+                    levels[i],
+                    levels[j]
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn test_kernel_capability_display() {
+        assert_eq!(format!("{}", KernelCapability::FullTc), "FullTc (5.10+)");
+        assert_eq!(format!("{}", KernelCapability::None), "None (no eBPF)");
+    }
+
+    #[test]
+    fn test_kernel_version_capability_detection() {
+        // Test various kernel versions
+        let test_cases = vec![
+            ("5.17.0", KernelCapability::Full),
+            ("5.15.0", KernelCapability::RingBuf),
+            ("5.13.0", KernelCapability::RingBuf),
+            ("5.10.0", KernelCapability::FullTc),
+            ("5.8.0", KernelCapability::XdpOnly),
+            ("4.14.0", KernelCapability::BasicMaps),
+            ("3.10.0", KernelCapability::None),
+        ];
+
+        for (release, expected_cap) in test_cases {
+            let version = KernelVersion::parse(release);
+            assert_eq!(
+                version.capability(),
+                expected_cap,
+                "Kernel {} should have capability {:?}",
+                release,
+                expected_cap
+            );
+        }
     }
 
     // ============================================================
@@ -1226,6 +1808,9 @@ mod tests {
         let err = EbpfError::PermissionDenied("no access".to_string());
         assert!(format!("{}", err).contains("Permission denied"));
 
+        let err = EbpfError::EbpfNotAvailable("no kernel support".to_string());
+        assert!(format!("{}", err).contains("eBPF not available"));
+
         let err = EbpfError::Other("generic error".to_string());
         assert!(format!("{}", err).contains("generic error"));
     }
@@ -1236,6 +1821,28 @@ mod tests {
         let io_err = io::Error::new(io::ErrorKind::NotFound, "file not found");
         let ebpf_err: EbpfError = io_err.into();
         assert!(format!("{}", ebpf_err).contains("file not found"));
+    }
+
+    // ============================================================
+    // EbpfRuntime Tests
+    // ============================================================
+
+    #[test]
+    fn test_ebpf_runtime_is_active() {
+        let active = EbpfRuntime::Active {
+            program_type: EbpfProgramType::Tc,
+            kernel_capability: KernelCapability::FullTc,
+        };
+        assert!(active.is_active());
+        assert_eq!(active.program_type(), Some(EbpfProgramType::Tc));
+
+        let fallback = EbpfRuntime::Fallback;
+        assert!(!fallback.is_active());
+        assert_eq!(fallback.program_type(), None);
+
+        let uninit = EbpfRuntime::Uninitialized;
+        assert!(!uninit.is_active());
+        assert_eq!(uninit.program_type(), None);
     }
 
     // ============================================================

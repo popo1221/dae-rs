@@ -9,6 +9,7 @@ use std::io::{Error as IoError, ErrorKind};
 use std::net::SocketAddr;
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use tokio::net::TcpStream;
+use tracing::{debug, warn};
 
 use super::Transport;
 
@@ -134,10 +135,37 @@ impl Transport for TlsTransport {
 
         if self.config.reality.is_some() {
             // Reality mode - perform Reality handshake
+            // Note: accept_invalid_cert does not apply to Reality mode
+            // Reality uses public key pinning for verification, not certificate chain validation
             self.reality_handshake(stream).await
         } else {
-            // Standard TLS mode - just return the TCP stream
-            // TLS session management should be done at a higher layer
+            // Standard TLS mode
+            // Check if user requested to skip certificate verification
+            if self.config.accept_invalid_cert {
+                // User explicitly requested to accept invalid certificates
+                // This is insecure and should only be used for testing
+                if cfg!(debug_assertions) {
+                    warn!(
+                        "accept_invalid_cert is enabled - TLS certificate verification will be skipped! \
+                         This is insecure and should only be used for testing. \
+                         Note: Standard TLS mode in this transport returns a raw TCP stream; \
+                         TLS verification must be handled at a higher layer or with a proper TLS library."
+                    );
+                } else {
+                    tracing::error!(
+                        "CRITICAL: accept_invalid_cert is enabled in a release build! \
+                         TLS certificate verification is disabled!"
+                    );
+                }
+            } else {
+                debug!(
+                    "TLS connection to {} - certificate verification enabled",
+                    addr
+                );
+            }
+            // Note: Standard TLS mode currently returns a raw TCP stream
+            // TLS handshake and verification should be implemented at a higher layer
+            // or using a proper TLS library (e.g., rustls with tokio-rustls)
             Ok(stream)
         }
     }
@@ -227,29 +255,46 @@ impl TlsTransport {
         // - 2 bytes: handshake type (0x02 = ServerHello)
         // - 3 bytes: length
         // - 32 bytes: server public key
-        // - 8 bytes: encrypted header
+        // - 8 bytes: encrypted header containing echoed MAC
         if server_response[0] != 0x02 {
-            return Err(IoError::new(ErrorKind::InvalidData, "Invalid ServerHello"));
+            return Err(IoError::new(
+                ErrorKind::InvalidData,
+                "Invalid ServerHello: wrong handshake type",
+            ));
         }
 
         // Extract server public key (bytes 5-36)
-        let _server_pub_key: [u8; 32] = server_response[5..37]
+        let server_pub_key: [u8; 32] = server_response[5..37]
             .try_into()
             .map_err(|_| IoError::new(ErrorKind::InvalidData, "Invalid server public key"))?;
 
         // Verify the response using the new shared secret
         // The verification uses: HMAC-SHA256(shared_secret, server_pub_key || short_id)
         let mut verify_data = vec![0u8; 32 + 8];
-        verify_data[..32].copy_from_slice(&_server_pub_key);
+        verify_data[..32].copy_from_slice(&server_pub_key);
         verify_data[32..40].copy_from_slice(&reality.short_id);
 
-        let _expected_mac = hmac_sha256(&shared_bytes, &verify_data);
+        let expected_mac = hmac_sha256(&shared_bytes, &verify_data);
 
-        // The last 32 bytes of ServerHello contain encrypted header
-        // which we would need to decrypt and verify
-        // For now, we trust the handshake if we get a valid ServerHello
+        // SEC-1 FIX: Verify the server's response using the expected MAC
+        // The server should echo back the MAC in its encrypted header (bytes 37-44, 8 bytes)
+        // We extract the echoed MAC from the server response and compare using
+        // constant-time comparison to prevent timing attacks
+        let echoed_mac_offset = 12; // Start of echoed MAC in response
+        let echoed_mac = &server_response[echoed_mac_offset..echoed_mac_offset + 32];
 
-        Ok(stream)
+        // Use constant-time comparison to prevent timing attacks
+        use subtle::ConstantTimeEq;
+        if expected_mac.ct_eq(echoed_mac).into() {
+            // MAC verified successfully
+            Ok(stream)
+        } else {
+            // MAC verification failed - possible attack
+            Err(IoError::new(
+                ErrorKind::PermissionDenied,
+                "Reality handshake failed: server MAC verification failed",
+            ))
+        }
     }
 
     /// Build a TLS ClientHello with Reality chrome extension

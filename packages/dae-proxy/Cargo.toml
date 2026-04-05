@@ -47,5 +47,12 @@ lazy_static = "1.4"
 # Hysteria2 protocol support
 quinn = "0.10"
 
+# eBPF support via aya (async runtime integration)
+# Note: aya 0.13+ requires nightly Rust for eBPF compilation,
+# but the user-space API works on stable Rust.
+aya = "0.13"
+aya-log = "0.1"
+libc = "0.2"
+
 [dev-dependencies]
 tokio-test = "0.4"

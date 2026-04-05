@@ -1,0 +1,27 @@
+{
+  "scope_name": "dae-rs-full",
+  "scan_time": "2026-04-04T14:29:23+08:00",
+  "repo_path": "/root/Projects/dae-rs",
+  "total_files": 144,
+  "total_units": 9,
+  "completed_units": [
+    {"id": 1, "name": "proxy-core", "file": "packages/dae-proxy/src/proxy.rs", "score": 9, "status": "completed"},
+    {"id": 2, "name": "connection-pool", "file": "packages/dae-proxy/src/connection_pool.rs", "score": 9, "status": "completed"},
+    {"id": 3, "name": "node-selector", "file": "packages/dae-proxy/src/node/selector.rs", "score": 8, "status": "completed"},
+    {"id": 4, "name": "tcp-proxy", "file": "packages/dae-proxy/src/tcp.rs", "score": 8, "status": "completed"},
+    {"id": 5, "name": "udp-proxy", "file": "packages/dae-proxy/src/udp.rs", "score": 7, "status": "completed"},
+    {"id": 6, "name": "rules-engine", "file": "packages/dae-proxy/src/rules.rs + rule_engine.rs", "score": 8, "status": "completed"},
+    {"id": 7, "name": "ebpf-integration", "file": "packages/dae-proxy/src/ebpf_integration.rs", "score": 7, "status": "completed"},
+    {"id": 8, "name": "socks5", "file": "packages/dae-proxy/src/socks5.rs", "score": 8, "status": "completed"},
+    {"id": 9, "name": "trojan-handler", "file": "packages/dae-proxy/src/trojan_protocol/handler.rs", "score": 8, "status": "completed"}
+  ],
+  "pending_units": [
+    {"id": 10, "name": "vless", "file": "packages/dae-proxy/src/vless.rs", "score": 10, "lines": 1526},
+    {"id": 11, "name": "vmess", "file": "packages/dae-proxy/src/vmess.rs", "score": 10, "lines": 1229},
+    {"id": 12, "name": "tun", "file": "packages/dae-proxy/src/tun.rs", "score": 9, "lines": 1414},
+    {"id": 13, "name": "shadowsocks", "file": "packages/dae-proxy/src/shadowsocks.rs", "score": 8, "lines": 633},
+    {"id": 14, "name": "node-manager", "file": "packages/dae-proxy/src/node/manager.rs", "score": 8, "lines": 507},
+    {"id": 15, "name": "protocol-dispatcher", "file": "packages/dae-proxy/src/protocol_dispatcher.rs", "score": 8, "lines": 372},
+    {"id": 16, "name": "ebpf-integration-full", "file": "packages/dae-proxy/src/ebpf_integration.rs", "score": 7, "lines": 1290}
+  ]
+}

@@ -55,7 +55,7 @@ mod tests {
 
     #[test]
     fn test_tcp_transport_default() {
-        let transport = TcpTransport::default();
+        let transport = TcpTransport::new();
         assert_eq!(transport.name(), "tcp");
     }
 }

@@ -2,19 +2,14 @@
 //!
 //! Provides in-memory storage and aggregation for tracking data.
 //!
-//! # Performance Notes (Issue #66)
+//! # Implementation Status
 //!
-//! Uses `RwLock<HashMap>` (single-shard). This is sufficient because:
-//! 1. The tracking store is used for HTTP API / metrics export only
-//! 2. The store methods (update_connection, record_connection_data) are NEVER
-//!    called from the packet processing hot path — they're invoked only from
-//!    the metrics HTTP server for aggregated reporting
-//! 3. For HTTP API access patterns, `RwLock<HashMap>` is more than adequate
+//! This module is **partially implemented**. It uses `RwLock<HashMap>` instead
+//! of the initially planned `dashmap` dependency. The current implementation
+//! works but may have performance limitations under high concurrency.
 //!
-//! A sharded (`dashmap` or multi-`RwLock`) implementation would only be
-//! beneficial if these methods were called per-packet, which they are not.
-//!
-//! See issue #66 on GitHub.
+//! See issue #66 on GitHub for tracking potential optimization (e.g., dashmap
+//! or concurrent hashmap replacement).
 
 use crate::tracking::types::*;
 use axum::{
@@ -285,6 +280,66 @@ impl TrackingStore {
     #[allow(dead_code)]
     pub fn get_protocol_stats(&self) -> ProtocolStats {
         self.protocols.read().unwrap().clone()
+    }
+
+    // ==================== Accessor Methods ====================
+
+    /// Get connection tracking store
+    #[allow(dead_code)]
+    pub fn connections(&self) -> &ConnectionTrackingStore {
+        &self.connections
+    }
+
+    /// Get node tracking store
+    #[allow(dead_code)]
+    pub fn nodes(&self) -> &NodeTrackingStore {
+        &self.nodes
+    }
+
+    /// Get rule tracking store
+    #[allow(dead_code)]
+    pub fn rules(&self) -> &RuleTrackingStore {
+        &self.rules
+    }
+
+    /// Get number of active connections (TCP and UDP combined)
+    #[allow(dead_code)]
+    pub fn get_active_connection_count(&self) -> usize {
+        self.connections.get_active().len()
+    }
+
+    /// Get number of active TCP connections
+    #[allow(dead_code)]
+    pub fn get_active_tcp_count(&self) -> usize {
+        self.connections
+            .get_active()
+            .iter()
+            .filter(|(key, _)| key.proto == 6) // TCP
+            .filter(|(_, stats)| stats.state != ConnectionState::Closed as u8)
+            .count()
+    }
+
+    /// Get number of active UDP sessions
+    #[allow(dead_code)]
+    pub fn get_active_udp_count(&self) -> usize {
+        self.connections
+            .get_active()
+            .iter()
+            .filter(|(key, _)| key.proto == 17) // UDP
+            .filter(|(_, stats)| stats.state != ConnectionState::Closed as u8)
+            .count()
+    }
+
+    /// Get number of configured nodes
+    #[allow(dead_code)]
+    pub fn get_node_count(&self) -> usize {
+        self.nodes.get_all().len()
+    }
+
+    /// Get number of configured rules
+    #[allow(dead_code)]
+    pub fn get_rule_count(&self) -> usize {
+        self.rules.get_all().len()
     }
 
     // ==================== Export ====================

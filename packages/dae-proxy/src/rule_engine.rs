@@ -386,19 +386,25 @@ impl RuleEngine {
         };
 
         // Use maxminddb 0.27 API - lookup returns LookupResult
-        // The LookupResult contains fields based on the database type
-        // For GeoLite2/GeoIP2 Country database, we need to access the country field
-        // Note: maxminddb 0.27's Vec<u8>-backed Reader does not support field indexing.
-        // For proper GeoIP country extraction, either:
-        // 1. Upgrade to maxminddb 1.x which has better typed LookupResult
-        // 2. Use the geoip2 crate directly instead of maxminddb
-        // For now, return None - callers should handle missing GeoIP gracefully
+        // For GeoLite2/GeoIP2 Country database, we decode as geoip2::Country
         match reader.lookup(*ip) {
-            Ok(_result) => {
-                // TODO(#75): Implement proper country extraction when maxminddb API supports it
-                // The maxminddb 0.27 Vec<u8> backed LookupResult doesn't support field Index access.
-                // This is a known limitation - GeoIP rules will not match by country code.
-                None
+            Ok(result) => {
+                // Decode the lookup result as a Country struct
+                match result.decode::<maxminddb::geoip2::Country>() {
+                    Ok(Some(country)) => {
+                        // Return the ISO country code (e.g., "US", "CN")
+                        country.country.iso_code.map(|code| code.to_uppercase())
+                    }
+                    Ok(None) => {
+                        // IP not found in database
+                        debug!("IP not found in GeoIP database");
+                        None
+                    }
+                    Err(e) => {
+                        debug!("Failed to decode GeoIP result: {:?}", e);
+                        None
+                    }
+                }
             }
             Err(e) => {
                 // Log at debug level - this is expected for non-GeoIP databases or invalid IPs

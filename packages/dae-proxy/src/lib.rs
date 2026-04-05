@@ -119,6 +119,7 @@ pub mod connection_pool;
 pub mod control;
 pub mod core;
 pub mod dns;
+pub mod ebpf_check;
 pub mod ebpf_integration;
 pub mod http_proxy;
 pub mod hysteria2;
