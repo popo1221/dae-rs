@@ -23,6 +23,7 @@ pub use consts::{
     REP_CONNECTION_NOT_ALLOWED, REP_CONNECTION_REFUSED, REP_GENERAL_FAILURE, REP_HOST_UNREACHABLE,
     REP_NETWORK_UNREACHABLE, REP_SUCCESS, REP_TTL_EXPIRED, USERNAME_PASSWORD, VER,
 };
+pub use error::Socks5Error;
 pub use handler::{Socks5Handler, Socks5HandlerConfig, Socks5Server};
 pub use reply::Socks5Reply;
 

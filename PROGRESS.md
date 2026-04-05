@@ -74,6 +74,17 @@ Fix all issues from review-protocols and review-cicd:
   - Uses separate rust-cache key (`dae-rs-bench`)
   - Separate job to avoid slowing down regular CI
 
+### 2026-04-05 19:40 GMT+8 - Unify error handling with thiserror
+- ✅ Added `thiserror` dependency to:
+  - dae-protocol-http_proxy
+  - dae-protocol-socks4
+  - dae-protocol-socks5
+- ✅ Created error module for each crate with consistent error types:
+  - HttpProxyError (AuthFailed, Protocol, Io, InvalidRequest, HostUnreachable, Timeout)
+  - Socks4Error (Protocol, Io, InvalidRequest, ConnectionFailed, Ipv4Only)
+  - Socks5Error (AuthFailed, Protocol, Io, InvalidRequest, NoAcceptableAuth, CommandNotSupported, AddressTypeNotSupported, ConnectionNotAllowed)
+- ✅ `cargo check -p dae-protocol-http_proxy -p dae-protocol-socks4 -p dae-protocol-socks5` passes
+
 ---
 
 
@@ -85,3 +96,4 @@ Fix all issues from review-protocols and review-cicd:
 - [x] Rust version matrix added to CI
 - [x] `panic!` → `unreachable!()` done (investigation confirmed panic! only in test code)
 - [x] relay_bidirectional extracted to shared crate
+- [x] thiserror unified across protocol crates (http_proxy, socks4, socks5)
