@@ -128,6 +128,7 @@ pub extern "C" fn tc_prog_main(ctx: *mut __sk_buff) -> i32 {
 fn tc_prog(ctx: &mut TcContext) -> Result<i32, ()> {
     // Parse Ethernet header
     let eth = match EthHdr::from_ctx(ctx) {
+        // SAFETY: EthHdr::from_ctx returns Some only when valid ethernet header exists in packet buffer
         Some(hdr) => unsafe { *hdr },
         None => {
             // Can't parse Ethernet header, pass
@@ -142,6 +143,7 @@ fn tc_prog(ctx: &mut TcContext) -> Result<i32, ()> {
     let (ip_offset, is_ipv4) = if eth.has_vlan() {
         // VLAN tag present - need to look at the VLAN header to get actual EtherType
         let vlan = match VlanHdr::from_ctx_after_eth(ctx, core::mem::size_of::<EthHdr>()) {
+            // SAFETY: VlanHdr::from_ctx_after_eth returns Some when VLAN tag is present and valid
             Some(hdr) => unsafe { *hdr },
             None => {
                 return Ok(TC_ACT_OK);
@@ -163,6 +165,7 @@ fn tc_prog(ctx: &mut TcContext) -> Result<i32, ()> {
 
     // Parse IPv4 header
     let ip = match IpHdr::from_ctx_after_eth(ctx, ip_offset) {
+        // SAFETY: IpHdr::from_ctx_after_eth returns Some when IPv4 header is present and valid
         Some(hdr) => unsafe { *hdr },
         None => {
             return Ok(TC_ACT_OK);
@@ -183,6 +186,7 @@ fn tc_prog(ctx: &mut TcContext) -> Result<i32, ()> {
     let (src_port, dst_port) = match ip_proto {
         ip_proto::TCP => {
             let tcp = match TcpHdr::from_ctx_after_ip(ctx, ip_offset, ip_hdr_len) {
+                // SAFETY: TcpHdr::from_ctx_after_ip returns Some when TCP header is present and valid
                 Some(hdr) => unsafe { *hdr },
                 None => return Ok(TC_ACT_OK),
             };
@@ -190,6 +194,7 @@ fn tc_prog(ctx: &mut TcContext) -> Result<i32, ()> {
         }
         ip_proto::UDP => {
             let udp = match UdpHdr::from_ctx_after_ip(ctx, ip_offset, ip_hdr_len) {
+                // SAFETY: UdpHdr::from_ctx_after_ip returns Some when UDP header is present and valid
                 Some(hdr) => unsafe { *hdr },
                 None => return Ok(TC_ACT_OK),
             };
@@ -202,9 +207,11 @@ fn tc_prog(ctx: &mut TcContext) -> Result<i32, ()> {
     let session_key = SessionKey::new(src_ip, dst_ip, src_port, dst_port, ip_proto);
 
     // Get current timestamp
+    // SAFETY: bpf_ktime_get_ns is a BPF helper that always returns a valid timestamp
     let now = unsafe { bpf_ktime_get_ns() };
 
     // Look up or create session
+    // SAFETY: SESSIONS map access is safe - we provide a valid key and handle the Option returned
     let session = match unsafe { SESSIONS.get(&session_key) } {
         Some(entry) => {
             // Update existing session
