@@ -8,8 +8,13 @@
 
 use std::net::SocketAddr;
 use std::sync::Arc;
+
+use async_trait::async_trait;
 use tokio::net::{TcpListener, TcpStream};
 use tracing::{debug, error, info};
+
+use crate::protocol::unified_handler::{Handler, HandlerConfig};
+use crate::protocol::ProtocolType;
 
 pub mod address;
 pub mod auth;
@@ -143,6 +148,33 @@ impl Socks5Handler {
         // Phase 3: Request processing
         let cmd_handler = commands::CommandHandler::new(self.config.tcp_timeout_secs);
         cmd_handler.handle_request(client).await
+    }
+}
+
+/// Implement HandlerConfig for Socks5HandlerConfig
+impl HandlerConfig for Socks5HandlerConfig {}
+
+/// Implement Handler trait for Socks5Handler
+///
+/// This allows Socks5Handler to be used through the unified Handler interface.
+#[async_trait]
+impl Handler for Socks5Handler {
+    type Config = Socks5HandlerConfig;
+
+    fn name(&self) -> &'static str {
+        "socks5"
+    }
+
+    fn protocol(&self) -> ProtocolType {
+        ProtocolType::Socks5
+    }
+
+    fn config(&self) -> &Self::Config {
+        &self.config
+    }
+
+    async fn handle(self: Arc<Self>, stream: TcpStream) -> std::io::Result<()> {
+        self.handle(stream).await
     }
 }
 

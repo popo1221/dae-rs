@@ -5,6 +5,7 @@
 use std::net::{IpAddr, Ipv4Addr, Ipv6Addr};
 use std::sync::Arc;
 
+use async_trait::async_trait;
 use tokio::io::AsyncReadExt;
 use tokio::net::{TcpStream, UdpSocket};
 use tracing::{debug, error, info};
@@ -12,6 +13,8 @@ use tracing::{debug, error, info};
 use super::config::SsClientConfig;
 use super::protocol::TargetAddress;
 use crate::protocol::relay::relay_bidirectional;
+use crate::protocol::unified_handler::{Handler, HandlerConfig};
+use crate::protocol::ProtocolType;
 
 /// Shadowsocks handler that implements the ss-local side
 pub struct ShadowsocksHandler {
@@ -199,5 +202,32 @@ impl ShadowsocksHandler {
                 }
             }
         }
+    }
+}
+
+/// Implement HandlerConfig for SsClientConfig
+impl HandlerConfig for SsClientConfig {}
+
+/// Implement Handler trait for ShadowsocksHandler
+///
+/// This allows ShadowsocksHandler to be used through the unified Handler interface.
+#[async_trait]
+impl Handler for ShadowsocksHandler {
+    type Config = SsClientConfig;
+
+    fn name(&self) -> &'static str {
+        "shadowsocks"
+    }
+
+    fn protocol(&self) -> ProtocolType {
+        ProtocolType::Shadowsocks
+    }
+
+    fn config(&self) -> &Self::Config {
+        &self.config
+    }
+
+    async fn handle(self: Arc<Self>, stream: TcpStream) -> std::io::Result<()> {
+        self.handle(stream).await
     }
 }

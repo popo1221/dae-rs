@@ -14,11 +14,15 @@ pub use parser::HttpConnectRequest;
 use std::net::SocketAddr;
 use std::str::FromStr;
 use std::sync::Arc;
+
+use async_trait::async_trait;
 use tokio::io::{AsyncBufReadExt, AsyncWriteExt};
 use tokio::net::TcpStream;
 use tracing::{debug, error, info, warn};
 
 use crate::protocol::relay::relay_bidirectional;
+use crate::protocol::unified_handler::{Handler, HandlerConfig};
+use crate::protocol::ProtocolType;
 
 /// HTTP proxy constants
 mod consts {
@@ -208,6 +212,33 @@ impl HttpProxyHandler {
     /// Relay data between client and remote
     async fn relay(&self, client: TcpStream, remote: TcpStream) -> std::io::Result<()> {
         relay_bidirectional(client, remote).await
+    }
+}
+
+/// Implement HandlerConfig for HttpProxyHandlerConfig
+impl HandlerConfig for HttpProxyHandlerConfig {}
+
+/// Implement Handler trait for HttpProxyHandler
+///
+/// This allows HttpProxyHandler to be used through the unified Handler interface.
+#[async_trait]
+impl Handler for HttpProxyHandler {
+    type Config = HttpProxyHandlerConfig;
+
+    fn name(&self) -> &'static str {
+        "http_proxy"
+    }
+
+    fn protocol(&self) -> ProtocolType {
+        ProtocolType::Http
+    }
+
+    fn config(&self) -> &Self::Config {
+        &self.config
+    }
+
+    async fn handle(self: Arc<Self>, stream: TcpStream) -> std::io::Result<()> {
+        self.handle(stream).await
     }
 }
 
