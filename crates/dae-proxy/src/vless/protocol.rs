@@ -12,6 +12,10 @@ pub const VLESS_HEADER_MIN_SIZE: usize = 38; // v1 + uuid(16) + ver(1) + cmd(1) 
 #[allow(dead_code)]
 pub const VLESS_REQUEST_HEADER_SIZE: usize = 22; // port(4) + atyp(1) + addr + iv(16)
 
+/// Maximum domain name length per VLESS protocol (255 bytes as u8)
+/// This is the protocol limit for the domain length field.
+const MAX_DOMAIN_LEN: usize = 255;
+
 /// VLESS command types
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum VlessCommand {
@@ -104,6 +108,10 @@ impl VlessTargetAddress {
                     return None;
                 }
                 let domain_len = payload[1] as usize;
+                // Reject empty domains (domain_len == 0) for security
+                if domain_len == 0 {
+                    return None;
+                }
                 if payload.len() < 4 + domain_len {
                     return None;
                 }
@@ -153,6 +161,14 @@ impl VlessTargetAddress {
                 bytes
             }
             VlessTargetAddress::Domain(domain, _) => {
+                // Validate domain length before encoding to prevent truncation
+                // VLESS protocol uses u8 for domain length field (max 255)
+                if domain.len() > MAX_DOMAIN_LEN {
+                    // Domain too long - cannot encode safely
+                    // Return a Vec that will cause parsing to fail downstream
+                    // This prevents silent truncation which would corrupt data
+                    return vec![0x02, 0x00]; // Invalid encoding - empty domain
+                }
                 let mut bytes = vec![0x02, domain.len() as u8];
                 bytes.extend_from_slice(domain.as_bytes());
                 bytes
