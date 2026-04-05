@@ -21,7 +21,6 @@ use std::net::SocketAddr;
 use std::path::PathBuf;
 use std::sync::Arc;
 use std::time::Duration;
-use thiserror::Error;
 use tokio::signal;
 use tokio::sync::RwLock;
 use tracing::{error, info, warn};
@@ -30,28 +29,8 @@ use coordinator::Coordinator;
 use dispatcher::Dispatcher;
 use lifecycle::Lifecycle;
 
-/// Proxy error types
-#[derive(Error, Debug)]
-pub enum ProxyError {
-    #[error("TCP proxy error: {0}")]
-    TcpError(String),
-    #[error("UDP proxy error: {0}")]
-    UdpError(String),
-    #[error("eBPF error: {0}")]
-    EbpfError(String),
-    #[error("Configuration error: {0}")]
-    ConfigError(String),
-    #[error("Shutdown error: {0}")]
-    ShutdownError(String),
-    #[error("Shadowsocks error: {0}")]
-    ShadowsocksError(String),
-}
-
-impl From<std::io::Error> for ProxyError {
-    fn from(e: std::io::Error) -> Self {
-        ProxyError::ConfigError(e.to_string())
-    }
-}
+// Re-export ProxyError from the centralized error module
+pub use crate::core::error::ProxyError;
 
 /// Proxy configuration
 #[derive(Debug, Clone)]
@@ -402,30 +381,27 @@ mod tests {
 
     #[test]
     fn test_proxy_error_display() {
-        let err = ProxyError::TcpError("test error".to_string());
-        assert!(format!("{}", err).contains("TCP proxy error"));
+        let err = ProxyError::Connect(std::io::Error::new(std::io::ErrorKind::Other, "test error"));
+        assert!(format!("{}", err).contains("connect failed"));
 
-        let err = ProxyError::UdpError("test error".to_string());
-        assert!(format!("{}", err).contains("UDP proxy error"));
+        let err = ProxyError::Auth("test error".to_string());
+        assert!(format!("{}", err).contains("authentication failed"));
 
-        let err = ProxyError::EbpfError("test error".to_string());
-        assert!(format!("{}", err).contains("eBPF error"));
+        let err = ProxyError::Protocol("test error".to_string());
+        assert!(format!("{}", err).contains("protocol error"));
 
-        let err = ProxyError::ConfigError("test error".to_string());
-        assert!(format!("{}", err).contains("Configuration error"));
+        let err = ProxyError::Dispatch("test error".to_string());
+        assert!(format!("{}", err).contains("dispatch error"));
 
-        let err = ProxyError::ShutdownError("test error".to_string());
-        assert!(format!("{}", err).contains("Shutdown error"));
-
-        let err = ProxyError::ShadowsocksError("test error".to_string());
-        assert!(format!("{}", err).contains("Shadowsocks error"));
+        let err = ProxyError::Config("test error".to_string());
+        assert!(format!("{}", err).contains("configuration error"));
     }
 
     #[test]
     fn test_proxy_error_debug() {
-        let err = ProxyError::TcpError("test".to_string());
+        let err = ProxyError::Protocol("test".to_string());
         let debug_str = format!("{:?}", err);
-        assert!(debug_str.contains("TcpError"));
+        assert!(debug_str.contains("Protocol"));
     }
 
     #[test]
@@ -433,8 +409,8 @@ mod tests {
         let io_err = std::io::Error::new(std::io::ErrorKind::NotFound, "not found");
         let err: ProxyError = io_err.into();
         match err {
-            ProxyError::ConfigError(s) => assert!(s.contains("not found")),
-            _ => panic!("Expected ConfigError variant"),
+            ProxyError::Connect(_) => {}
+            _ => panic!("Expected Connect variant"),
         }
     }
 
