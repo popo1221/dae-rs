@@ -213,7 +213,7 @@ impl VmessHandler {
                     // Find first occurrence of address type marker in the entire decrypted header
                     if let Some(pos) = decrypted_header
                         .iter()
-                        .position(|&b| matches!(b, 0x01 | 0x02 | 0x03))
+                        .position(|&b| matches!(b, 0x01..=0x03))
                     {
                         debug!(
                             "VMess TCP: {} found address type marker 0x{:02x} at pos {}, \
