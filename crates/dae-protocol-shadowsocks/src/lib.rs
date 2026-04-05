@@ -7,7 +7,6 @@ pub mod config;
 pub mod handler;
 pub mod plugin;
 pub mod protocol;
-pub mod relay;
 pub mod server;
 pub mod ssr;
 
@@ -21,3 +20,6 @@ pub use plugin::{
 pub use protocol::{SsCipherType, TargetAddress};
 pub use server::ShadowsocksServer;
 pub use ssr::{SsrClientConfig, SsrHandler, SsrObfs, SsrObfsHandler, SsrProtocol, SsrServerConfig};
+
+// Re-export relay from dae-relay for backward compatibility
+pub use dae_relay::relay_bidirectional;

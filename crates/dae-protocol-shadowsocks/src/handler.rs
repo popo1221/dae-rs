@@ -11,7 +11,6 @@ use tracing::{debug, error, info};
 
 use super::config::SsClientConfig;
 use super::protocol::TargetAddress;
-use super::relay::relay_bidirectional;
 
 /// Shadowsocks handler that implements the ss-local side
 pub struct ShadowsocksHandler {
@@ -105,7 +104,7 @@ impl ShadowsocksHandler {
 
     /// Relay data between client and Shadowsocks server
     async fn relay(&self, client: TcpStream, remote: TcpStream) -> std::io::Result<()> {
-        relay_bidirectional(client, remote).await
+        dae_relay::relay_bidirectional(client, remote).await
     }
 
     /// Handle UDP traffic

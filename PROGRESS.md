@@ -29,7 +29,21 @@ Fix all issues from review-protocols and review-cicd:
 - **Decision:** No replacement needed — test code panic! is correct behavior
 - Affected files: codec.rs (juicity), protocol.rs (shadowsocks, trojan), mod.rs (vmess, proxy)
 
+### 2026-04-05 19:20 GMT+8 - relay_bidirectional extraction to shared crate
+- ✅ Created `crates/dae-relay/` crate with shared relay function
+- ✅ Added `dae-relay` to workspace members
+- ✅ Updated protocol crates to use shared relay:
+  - dae-protocol-socks5 (removed relay.rs, added re-export)
+  - dae-protocol-vless (removed relay.rs, added re-export)
+  - dae-protocol-vmess (updated handler to use dae_relay::relay_bidirectional)
+  - dae-protocol-trojan (removed inline relay from types.rs, updated handler)
+  - dae-protocol-shadowsocks (removed relay.rs, updated handler)
+  - dae-protocol-http_proxy (removed inline relay function)
+- ✅ `cargo check --workspace` passes
+- ✅ `cargo test --workspace` passes
+
 ---
+
 
 ## Completion Criteria
 
@@ -38,4 +52,4 @@ Fix all issues from review-protocols and review-cicd:
 - [ ] Integration test import fixed
 - [ ] Rust version matrix added to CI
 - [ ] `panic!` → `unreachable!()` done
-- [ ] relay_bidirectional extracted to shared crate
+- [x] relay_bidirectional extracted to shared crate

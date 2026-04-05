@@ -17,7 +17,7 @@ use crate::protocol::VlessTargetAddress;
 use crate::protocol::{
     VlessAddressType, VlessCommand, VLESS_HEADER_MIN_SIZE, VLESS_VERSION,
 };
-use crate::relay::relay_data;
+use crate::relay_data;
 
 /// Protocol type enum for handler trait
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]

@@ -200,25 +200,8 @@ impl HttpProxyHandler {
         info!("HTTP CONNECT tunnel established: -> {}", target_addr);
 
         // Relay data between client and remote
-        self.relay(client, remote).await
+        dae_relay::relay_bidirectional(client, remote).await
     }
-
-    /// Relay data between client and remote
-    async fn relay(&self, client: TcpStream, remote: TcpStream) -> std::io::Result<()> {
-        relay_bidirectional(client, remote).await
-    }
-}
-
-/// Relay data bidirectionally between client and remote TCP streams.
-async fn relay_bidirectional(client: TcpStream, remote: TcpStream) -> std::io::Result<()> {
-    let (mut client_read, mut client_write) = tokio::io::split(client);
-    let (mut remote_read, mut remote_write) = tokio::io::split(remote);
-
-    let client_to_remote = tokio::io::copy(&mut client_read, &mut remote_write);
-    let remote_to_client = tokio::io::copy(&mut remote_read, &mut client_write);
-
-    tokio::try_join!(client_to_remote, remote_to_client)?;
-    Ok(())
 }
 
 /// HTTP proxy server

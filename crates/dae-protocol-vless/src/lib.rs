@@ -29,3 +29,13 @@ pub use crypto::hmac_sha256;
 
 // Relay (from dae-relay)
 pub use dae_relay::relay_bidirectional;
+
+use tokio::net::TcpStream;
+
+/// Relay data between client and remote
+///
+/// This function is a wrapper around `dae_relay::relay_bidirectional`
+/// that provides the VLESS-specific interface.
+pub async fn relay_data(client: TcpStream, remote: TcpStream) -> std::io::Result<()> {
+    relay_bidirectional(client, remote).await
+}

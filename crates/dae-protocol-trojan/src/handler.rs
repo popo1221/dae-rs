@@ -13,7 +13,7 @@ use tracing::{debug, error, info};
 
 use super::config::{TrojanClientConfig, TrojanServerConfig};
 use super::protocol::{TrojanCommand, TrojanTargetAddress, TROJAN_CRLF};
-use super::types::{relay_bidirectional, ProtocolType};
+use super::types::relay_bidirectional;
 
 /// Trojan handler that implements the client-side protocol
 pub struct TrojanHandler {
