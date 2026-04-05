@@ -14,7 +14,15 @@ pub struct SsServerConfig {
     pub addr: String,
     /// Server port
     pub port: u16,
-    /// Encryption method
+    /// Encryption method (AEAD only)
+    ///
+    /// ⚠️ **Only AEAD ciphers are supported:**
+    /// - `SsCipherType::Chacha20IetfPoly1305` (recommended)
+    /// - `SsCipherType::Aes256Gcm`
+    /// - `SsCipherType::Aes128Gcm`
+    ///
+    /// Stream ciphers (rc4-md5, aes-ctr, aes-cfb, etc.) are **not supported**.
+    /// See GitHub Issue #78 for details.
     pub method: SsCipherType,
     /// Password/key
     pub password: String,
