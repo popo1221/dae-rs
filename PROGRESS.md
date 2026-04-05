@@ -42,14 +42,24 @@ Fix all issues from review-protocols and review-cicd:
 - ✅ `cargo check --workspace` passes
 - ✅ `cargo test --workspace` passes
 
+### 2026-04-05 19:25 GMT+8 - Integration test import + pre-existing relay bugs
+- ✅ Integration test `use dae_proxy::socks5::Socks5HandlerConfig` was already fixed
+  - Correct import is `use dae_proxy::Socks5HandlerConfig` (direct re-export, not via socks5 module)
+- ✅ Fixed `tokio::io::Cursor` → `std::io::Cursor` in dae-protocol-tuic (test-only import)
+- ✅ Fixed `use super::relay::relay` → `use dae_relay::relay_bidirectional` in dae-protocol-socks5
+- ✅ Fixed `crate::relay::relay_data` import in dae-protocol-vless (added relay_data wrapper to lib.rs)
+- ✅ Fixed relay usage in dae-protocol-shadowsocks, dae-protocol-trojan, dae-protocol-http_proxy
+- ✅ Committed fix: consolidate relay implementations to use shared dae-relay crate
+- ✅ `cargo test --workspace` passes (all tests green)
+
 ---
 
 
 ## Completion Criteria
 
-- [ ] `cargo test --workspace` passes
+- [x] `cargo test --workspace` passes
 - [ ] `cargo clippy --workspace` passes (errors, not warnings)
-- [ ] Integration test import fixed
-- [ ] Rust version matrix added to CI
-- [ ] `panic!` → `unreachable!()` done
+- [x] Integration test import fixed
+- [x] Rust version matrix added to CI
+- [x] `panic!` → `unreachable!()` done (investigation confirmed panic! only in test code)
 - [x] relay_bidirectional extracted to shared crate
