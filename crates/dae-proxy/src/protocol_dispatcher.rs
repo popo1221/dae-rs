@@ -78,7 +78,7 @@ impl Default for ProtocolDispatcherConfig {
 /// Protocol dispatcher that routes connections to appropriate handlers
 pub struct ProtocolDispatcher {
     config: ProtocolDispatcherConfig,
-    socks5_handler: Option<Arc<crate::socks5::Socks5Handler>>,
+    socks5_handler: Option<Arc<dae_protocol_socks5::Socks5Handler>>,
     http_handler: Option<Arc<crate::http_proxy::HttpProxyHandler>>,
 }
 
@@ -93,7 +93,7 @@ impl ProtocolDispatcher {
     }
 
     /// Create with SOCKS5 handler
-    pub fn with_socks5_handler(mut self, handler: Arc<crate::socks5::Socks5Handler>) -> Self {
+    pub fn with_socks5_handler(mut self, handler: Arc<dae_protocol_socks5::Socks5Handler>) -> Self {
         self.socks5_handler = Some(handler);
         self
     }
@@ -105,7 +105,7 @@ impl ProtocolDispatcher {
     }
 
     /// Set SOCKS5 handler
-    pub fn set_socks5_handler(&mut self, handler: Arc<crate::socks5::Socks5Handler>) {
+    pub fn set_socks5_handler(&mut self, handler: Arc<dae_protocol_socks5::Socks5Handler>) {
         self.socks5_handler = Some(handler);
     }
 
@@ -197,7 +197,7 @@ impl ProtocolDispatcher {
 pub struct CombinedProxyServer {
     #[allow(dead_code)]
     config: ProtocolDispatcherConfig,
-    socks5_server: Option<Arc<crate::socks5::Socks5Server>>,
+    socks5_server: Option<Arc<dae_protocol_socks5::Socks5Server>>,
     http_server: Option<Arc<crate::http_proxy::HttpProxyServer>>,
 }
 
@@ -212,7 +212,7 @@ impl CombinedProxyServer {
 
         // Create SOCKS5 server if configured
         if let Some(addr) = config.socks5_addr {
-            let s5_server = crate::socks5::Socks5Server::new(addr).await?;
+            let s5_server = dae_protocol_socks5::Socks5Server::new(addr).await?;
             server.socks5_server = Some(Arc::new(s5_server));
         }
 

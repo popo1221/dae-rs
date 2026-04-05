@@ -31,7 +31,6 @@ pub use crate::shadowsocks::{
     ssr::{SsrClientConfig, SsrHandler, SsrObfs, SsrObfsHandler, SsrProtocol, SsrServerConfig},
     ShadowsocksHandler, ShadowsocksServer, SsCipherType, SsClientConfig, SsServerConfig,
 };
-pub use crate::socks5::{Socks5Handler, Socks5Server};
 pub use crate::tcp::{TcpProxy, TcpProxyConfig};
 pub use crate::udp::{UdpProxy, UdpProxyConfig};
 pub use crate::vless::{
@@ -146,8 +145,21 @@ pub mod proxy_chain;
 pub mod rule_engine;
 pub mod rules;
 pub mod shadowsocks;
-pub mod socks4;
-pub mod socks5;
+
+// Protocol crates (extracted from dae-proxy)
+pub use dae_protocol_socks4::{
+    Socks4Address, Socks4Command, Socks4Config, Socks4Reply, Socks4Request, Socks4Server,
+};
+pub use dae_protocol_socks5::{
+    Socks5Address,
+    auth::{
+        AuthHandler, CombinedAuthHandler, NoAuthHandler, UserCredentials, UsernamePasswordHandler,
+    },
+    commands::Socks5Command,
+    handshake::Handshake,
+    reply::Socks5Reply,
+    Socks5Handler, Socks5HandlerConfig, Socks5Server,
+};
 pub mod tcp;
 pub mod tracking;
 pub mod transport;

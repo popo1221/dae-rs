@@ -15,4 +15,4 @@
 pub mod handler;
 
 // Re-export common types for convenience
-pub use crate::socks5::{Socks5Handler, Socks5Server};
+pub use dae_protocol_socks5::{Socks5Handler, Socks5Server};
