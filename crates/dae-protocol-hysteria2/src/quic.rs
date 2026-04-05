@@ -63,6 +63,34 @@ pub enum CongestionControl {
     NewReno,
 }
 
+/// QUIC frame codec for encoding/decoding QUIC protocol messages
+///
+/// This provides serialization/deserialization of QUIC frames
+/// for the Hysteria2 protocol.
+#[derive(Debug, Clone, Default)]
+pub struct QuicCodec;
+
+impl QuicCodec {
+    /// Create a new QUIC codec
+    pub fn new() -> Self {
+        Self
+    }
+
+    /// Encode a QUIC frame into bytes
+    pub fn encode(&self, _frame: &[u8]) -> Result<Vec<u8>, QuicError> {
+        // Placeholder - full implementation would encode actual QUIC frames
+        warn!("QuicCodec::encode not fully implemented");
+        Ok(_frame.to_vec())
+    }
+
+    /// Decode bytes into a QUIC frame
+    pub fn decode(&self, _data: &[u8]) -> Result<Vec<u8>, QuicError> {
+        // Placeholder - full implementation would decode actual QUIC frames
+        warn!("QuicCodec::decode not fully implemented");
+        Ok(_data.to_vec())
+    }
+}
+
 /// QUIC connection state
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum QuicState {
