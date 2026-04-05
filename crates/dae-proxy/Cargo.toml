@@ -21,7 +21,7 @@ thiserror = "1"
 anyhow = "1"
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
-dae-ebpf-common = { path = "../dae-ebpf/dae-ebpf-common" }
+dae-ebpf-common = { path = "../dae-ebpf-common" }
 dae-config = { path = "../dae-config" }
 clap = { version = "4", features = ["derive"] }
 ipnet = "2"

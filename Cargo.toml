@@ -6,11 +6,11 @@ members = [
     "crates/dae-config",
     "crates/dae-proxy",
     "crates/dae-api",
-    "crates/dae-ebpf/dae-ebpf-common",
-    "crates/dae-ebpf/dae-xdp",
-    "crates/dae-ebpf/dae-tc",
-    "crates/dae-ebpf/dae-ebpf",
-    "crates/dae-ebpf/dae-ebpf-direct",
+    "crates/dae-ebpf-common",
+    "crates/dae-xdp",
+    "crates/dae-tc",
+    "crates/dae-ebpf",
+    "crates/dae-ebpf-direct",
     "benches",
 ]
 
