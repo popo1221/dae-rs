@@ -4,11 +4,16 @@
 //! This module provides QUIC integration using the quinn library.
 //! QUIC is the underlying transport protocol for Hysteria2.
 //!
-//! Key features:
+//! **WARNING:** This module is not yet implemented.
+//! Do not enable the `quic` feature - the exported API returns NotImplemented errors.
+//!
+//! Key features (when implemented):
 //! - HTTP/3 based QUIC implementation
 //! - 0-RTT connection establishment
 //! - Multiplexed streams
 //! - Built-in congestion control
+
+#![allow(dead_code)]
 
 use std::net::SocketAddr;
 use std::time::Duration;

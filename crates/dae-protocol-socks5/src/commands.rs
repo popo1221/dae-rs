@@ -3,6 +3,7 @@
 //! Handles CONNECT (0x01), BIND (0x02), and UDP ASSOCIATE (0x03) commands.
 
 use std::net::{Ipv4Addr, SocketAddr};
+use std::sync::Arc;
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use tokio::net::TcpStream;
 use tracing::info;
@@ -33,11 +34,29 @@ impl Socks5Command {
 /// Command handler for SOCKS5 commands
 pub struct CommandHandler {
     tcp_timeout_secs: u64,
+    udp_rcvbuf: Option<usize>,
+    udp_timeout_secs: u64,
 }
 
 impl CommandHandler {
     pub fn new(tcp_timeout_secs: u64) -> Self {
-        Self { tcp_timeout_secs }
+        Self {
+            tcp_timeout_secs,
+            udp_rcvbuf: None,
+            udp_timeout_secs: 30,
+        }
+    }
+
+    /// Set UDP receive buffer size
+    pub fn with_udp_rcvbuf(mut self, size: usize) -> Self {
+        self.udp_rcvbuf = Some(size);
+        self
+    }
+
+    /// Set UDP timeout in seconds
+    pub fn with_udp_timeout(mut self, secs: u64) -> Self {
+        self.udp_timeout_secs = secs;
+        self
     }
 
     /// Handle SOCKS5 request (phase 3)
@@ -188,6 +207,11 @@ impl CommandHandler {
     }
 
     /// Handle UDP ASSOCIATE command
+    ///
+    /// RFC 1928: The UDP ASSOCIATE command requests the server to set up a UDP relay
+    /// to handle UDP datagrams. The client sends the initial request, and the server
+    /// responds with a UDP relay address. The TCP connection remains open to manage
+    /// the UDP relay lifecycle.
     pub async fn handle_udp_associate(
         &self,
         mut client: TcpStream,
@@ -215,14 +239,15 @@ impl CommandHandler {
             client_addr, udp_bind_addr
         );
 
-        // Keep TCP connection open for UDP relay control
-        // In a full implementation, we would:
-        // 1. Wait for client to send UDP datagrams
-        // 2. Forward them to target
-        // 3. Relay responses back
-        // For now, just wait for EOF on TCP connection
-        let mut buf = [0u8; 1];
-        let _ = client.read_exact(&mut buf).await;
+        // Note: Full UDP relay implementation requires:
+        // - UDP socket receiving datagrams from clients
+        // - Parsing SOCKS5 UDP header (RSV, FRAG, ATYP, DST.ADDR, DST.PORT)
+        // - Forwarding to target destinations
+        // - Returning responses back to client
+        // This is a stub that keeps the TCP connection open to maintain the association
+        // The actual UDP datagram forwarding should be handled by a separate relay service
+        let mut tcp_buf = [0u8; 1];
+        let _ = client.read_exact(&mut tcp_buf).await;
 
         info!("SOCKS5 UDP ASSOCIATE: connection closed");
         Ok(())
