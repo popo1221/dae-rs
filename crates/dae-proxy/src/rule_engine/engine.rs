@@ -51,6 +51,10 @@ impl RuleEngine {
     }
 
     /// Initialize GeoIP database
+    ///
+    /// Expects a GeoLite2 Country or GeoIP2 Country database file.
+    /// Other database types (City, ASN) are not supported and may cause
+    /// `lookup_geoip` to return `None` for all IPs.
     async fn init_geoip(&self) -> Result<(), String> {
         let db_path = self
             .config
@@ -180,9 +184,19 @@ impl RuleEngine {
 
     /// Lookup GeoIP country for an IP address
     ///
-    /// Note: GeoIP lookup requires a properly formatted GeoLite2 or GeoIP2 database.
-    /// This implementation uses the maxminddb 0.27 API which provides lookup returning
-    /// a LookupResult. The actual field access depends on the database type.
+    /// **Supported Database Types:**
+    /// - Currently only supports **GeoLite2 Country** or **GeoIP2 Country** databases
+    /// - Returns uppercase ISO 3166-1 alpha-2 country codes (e.g., "US", "CN", "JP")
+    ///
+    /// **Unsupported Database Types (TODO for future):**
+    /// - GeoLite2 City / GeoIP2 City databases (would need `geoip2::City` struct, provides city-level info)
+    /// - GeoLite2 ASN / GeoIP2 ISP databases (would need `geoip2::Isp` struct, provides ISP/org info)
+    /// - Using a City database with this function will silently return `None` since the
+    ///   `geoip2::Country` struct does not contain city-level fields
+    ///
+    /// **Technical Details:**
+    /// - Uses `maxminddb::Reader::lookup()` with `maxminddb::geoip2::Country` struct
+    /// - The ISO country code is extracted from `country.country.iso_code`
     pub async fn lookup_geoip(&self, ip: &std::net::IpAddr) -> Option<String> {
         let reader = self.geoip_reader.read().await;
         let reader = match reader.as_ref() {
