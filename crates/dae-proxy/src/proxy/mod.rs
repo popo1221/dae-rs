@@ -3,15 +3,18 @@
 //! Main entry point for the proxy subsystem that coordinates TCP/UDP relays
 //! and integrates with eBPF maps.
 
+pub mod coordinator;
+pub mod dispatcher;
+pub mod lifecycle;
+
 use crate::connection_pool::{new_connection_pool, SharedConnectionPool};
 use crate::ebpf_integration::{EbpfMaps, EbpfRoutingHandle, EbpfSessionHandle, EbpfStatsHandle};
-use crate::protocol_dispatcher::{CombinedProxyServer, ProtocolDispatcherConfig};
 use crate::shadowsocks::ShadowsocksServer;
 use crate::tcp::{TcpProxy, TcpProxyConfig};
 use crate::tracking::store::TrackingStore;
-use crate::trojan_protocol::{TrojanClientConfig, TrojanServer, TrojanServerConfig};
+use crate::trojan_protocol::{TrojanServer, TrojanServerConfig};
 use crate::udp::{UdpProxy, UdpProxyConfig};
-use crate::vless::{VlessClientConfig, VlessServer, VlessServerConfig};
+use crate::vless::{VlessServer, VlessServerConfig};
 use crate::vmess::{VmessServer, VmessServerConfig};
 use dae_config::TrackingConfig;
 use std::net::SocketAddr;
@@ -20,8 +23,12 @@ use std::sync::Arc;
 use std::time::Duration;
 use thiserror::Error;
 use tokio::signal;
-use tokio::sync::{broadcast, RwLock};
+use tokio::sync::RwLock;
 use tracing::{error, info, warn};
+
+use coordinator::Coordinator;
+use dispatcher::Dispatcher;
+use lifecycle::Lifecycle;
 
 /// Proxy error types
 #[derive(Error, Debug)]
@@ -169,14 +176,15 @@ pub struct Proxy {
     session_handle: Arc<RwLock<EbpfSessionHandle>>,
     routing_handle: Arc<EbpfRoutingHandle>,
     stats_handle: Arc<RwLock<EbpfStatsHandle>>,
-    shutdown_tx: broadcast::Sender<()>,
     running: RwLock<bool>,
-    combined_server: Option<Arc<CombinedProxyServer>>,
+    combined_server: Option<Arc<crate::protocol_dispatcher::CombinedProxyServer>>,
     shadowsocks_server: Option<Arc<ShadowsocksServer>>,
     vless_server: Option<Arc<VlessServer>>,
     vmess_server: Option<Arc<VmessServer>>,
     trojan_server: Option<Arc<TrojanServer>>,
     tracking_store: Option<Arc<TrackingStore>>,
+    coordinator: Coordinator,
+    lifecycle: Arc<Lifecycle>,
 }
 
 impl Proxy {
@@ -203,23 +211,26 @@ impl Proxy {
         // Create UDP proxy
         let udp_proxy = Arc::new(UdpProxy::new(config.udp.clone(), connection_pool.clone()));
 
-        // Create shutdown channel
-        let (shutdown_tx, _) = broadcast::channel(1);
+        // Create coordinator for shutdown signals
+        let coordinator = Coordinator::new().0;
+
+        // Create lifecycle manager
+        let lifecycle = Arc::new(Lifecycle);
 
         // Create combined proxy server if any protocol is enabled
-        let combined_server = Self::create_combined_server(&config).await?;
+        let combined_server = Dispatcher::create_combined_server(&config).await?;
 
         // Create Shadowsocks server if configured
-        let shadowsocks_server = Self::create_shadowsocks_server(&config).await?;
+        let shadowsocks_server = Dispatcher::create_shadowsocks_server(&config).await?;
 
         // Create VLESS server if configured
-        let vless_server = Self::create_vless_server(&config).await?;
+        let vless_server = Dispatcher::create_vless_server(&config).await?;
 
         // Create VMess server if configured
-        let vmess_server = Self::create_vmess_server(&config).await?;
+        let vmess_server = Dispatcher::create_vmess_server(&config).await?;
 
         // Create Trojan server if configured
-        let trojan_server = Self::create_trojan_server(&config).await?;
+        let trojan_server = Dispatcher::create_trojan_server(&config).await?;
 
         // Initialize tracking store if enabled
         let tracking_store = if config.tracking.enabled {
@@ -237,7 +248,6 @@ impl Proxy {
             session_handle,
             routing_handle,
             stats_handle,
-            shutdown_tx,
             running: RwLock::new(false),
             combined_server,
             shadowsocks_server,
@@ -245,123 +255,9 @@ impl Proxy {
             vmess_server,
             trojan_server,
             tracking_store,
+            coordinator,
+            lifecycle,
         })
-    }
-
-    /// Create combined SOCKS5/HTTP proxy server
-    async fn create_combined_server(
-        config: &ProxyConfig,
-    ) -> std::io::Result<Option<Arc<CombinedProxyServer>>> {
-        let dispatcher_config = ProtocolDispatcherConfig {
-            socks5_addr: config.socks5_listen,
-            http_addr: config.http_listen,
-        };
-
-        // Check if any protocol is configured
-        if dispatcher_config.socks5_addr.is_none() && dispatcher_config.http_addr.is_none() {
-            return Ok(None);
-        }
-
-        let server = CombinedProxyServer::new(dispatcher_config).await?;
-        Ok(Some(Arc::new(server)))
-    }
-
-    /// Create Shadowsocks server if configured
-    async fn create_shadowsocks_server(
-        config: &ProxyConfig,
-    ) -> std::io::Result<Option<Arc<ShadowsocksServer>>> {
-        if config.ss_listen.is_none() || config.ss_server.is_none() {
-            return Ok(None);
-        }
-
-        let ss_config = config.ss_server.as_ref().unwrap();
-        let ss_listen = config.ss_listen.unwrap();
-
-        let ss_client_config = super::shadowsocks::SsClientConfig {
-            listen_addr: ss_listen,
-            server: ss_config.clone(),
-            tcp_timeout: config.pool.tcp_timeout,
-            udp_timeout: config.pool.udp_timeout,
-        };
-
-        let server = ShadowsocksServer::with_config(ss_client_config).await?;
-        Ok(Some(Arc::new(server)))
-    }
-
-    /// Create VLESS server if configured
-    async fn create_vless_server(
-        config: &ProxyConfig,
-    ) -> std::io::Result<Option<Arc<VlessServer>>> {
-        if config.vless_listen.is_none() || config.vless_server.is_none() {
-            return Ok(None);
-        }
-
-        let vless_config = config.vless_server.as_ref().unwrap();
-        let vless_listen = config.vless_listen.unwrap();
-
-        let vless_client_config = VlessClientConfig {
-            listen_addr: vless_listen,
-            server: vless_config.clone(),
-            tcp_timeout: config.pool.tcp_timeout,
-            udp_timeout: config.pool.udp_timeout,
-        };
-
-        let server = VlessServer::with_config(vless_client_config).await?;
-        Ok(Some(Arc::new(server)))
-    }
-
-    /// Create VMess server if configured
-    async fn create_vmess_server(
-        config: &ProxyConfig,
-    ) -> std::io::Result<Option<Arc<VmessServer>>> {
-        if config.vmess_listen.is_none() || config.vmess_server.is_none() {
-            return Ok(None);
-        }
-
-        let vmess_config = config.vmess_server.as_ref().unwrap();
-        let vmess_listen = config.vmess_listen.unwrap();
-
-        let vmess_client_config = crate::vmess::VmessClientConfig {
-            listen_addr: vmess_listen,
-            server: vmess_config.clone(),
-            tcp_timeout: config.pool.tcp_timeout,
-            udp_timeout: config.pool.udp_timeout,
-        };
-
-        let server = VmessServer::with_config(vmess_client_config).await?;
-        Ok(Some(Arc::new(server)))
-    }
-
-    /// Create Trojan server if configured
-    async fn create_trojan_server(
-        config: &ProxyConfig,
-    ) -> std::io::Result<Option<Arc<TrojanServer>>> {
-        if config.trojan_listen.is_none() || config.trojan_server.is_none() {
-            return Ok(None);
-        }
-
-        let trojan_config = config.trojan_server.as_ref().unwrap();
-        let trojan_listen = config.trojan_listen.unwrap();
-
-        let trojan_client_config = TrojanClientConfig {
-            listen_addr: trojan_listen,
-            server: trojan_config.clone(),
-            tcp_timeout: config.pool.tcp_timeout,
-            udp_timeout: config.pool.udp_timeout,
-        };
-
-        // Use multiple backends if available
-        let server = if !config.trojan_backends.is_empty() {
-            info!(
-                "Creating Trojan server with {} backends",
-                config.trojan_backends.len()
-            );
-            TrojanServer::with_backends(trojan_client_config, config.trojan_backends.clone())
-                .await?
-        } else {
-            TrojanServer::with_config(trojan_client_config).await?
-        };
-        Ok(Some(Arc::new(server)))
     }
 
     /// Start the proxy
@@ -375,208 +271,31 @@ impl Proxy {
             *running = true;
         }
 
-        info!("Starting proxy services...");
-
-        // Start TCP proxy
-        let tcp = self.tcp_proxy.clone();
-        let tcp_handle = tokio::spawn(async move {
-            if let Err(e) = tcp.start().await {
-                error!("TCP proxy error: {}", e);
-            }
-        });
-
-        // Start UDP proxy
-        let udp = self.udp_proxy.clone();
-        let udp_handle = tokio::spawn(async move {
-            if let Err(e) = udp.start().await {
-                error!("UDP proxy error: {}", e);
-            }
-        });
-
-        // Start connection pool cleanup task
-        let pool = self.connection_pool.clone();
-        let pool_handle = tokio::spawn(async move {
-            let mut interval = tokio::time::interval(Duration::from_secs(10));
-            loop {
-                interval.tick().await;
-                pool.cleanup_expired().await;
-            }
-        });
-
-        // Start combined SOCKS5/HTTP proxy server
-        let mut handles = vec![tcp_handle, udp_handle, pool_handle];
-        if let Some(ref server) = self.combined_server {
-            if let Some(socks5) = self.config.socks5_listen {
-                info!("Starting SOCKS5 server on {}", socks5);
-            }
-            if let Some(http) = self.config.http_listen {
-                info!("Starting HTTP proxy server on {}", http);
-            }
-            let srv = server.clone();
-            let combined_handle = tokio::spawn(async move {
-                let _ = srv.start().await;
-            });
-            handles.push(combined_handle);
-        }
-
-        // Start Shadowsocks server if configured
-        if let Some(ref ss_server) = self.shadowsocks_server {
-            if let Some(ss_listen) = self.config.ss_listen {
-                info!("Starting Shadowsocks server on {}", ss_listen);
-                if let Some(ref ss_config) = self.config.ss_server {
-                    info!(
-                        "  -> {}:{} (method: {}, ota: {})",
-                        ss_config.addr, ss_config.port, ss_config.method, ss_config.ota
-                    );
-                }
-            }
-            let srv = ss_server.clone();
-            let ss_handle = tokio::spawn(async move {
-                let _ = srv.start().await;
-            });
-            handles.push(ss_handle);
-        }
-
-        // Start VLESS server if configured
-        if let Some(ref vless_server) = self.vless_server {
-            if let Some(vless_listen) = self.config.vless_listen {
-                info!("Starting VLESS server on {}", vless_listen);
-                if let Some(ref vless_config) = self.config.vless_server {
-                    info!(
-                        "  -> {}:{} (uuid: {})",
-                        vless_config.addr, vless_config.port, vless_config.uuid
-                    );
-                }
-            }
-            let srv = vless_server.clone();
-            let vless_handle = tokio::spawn(async move {
-                let _ = srv.start().await;
-            });
-            handles.push(vless_handle);
-        }
-
-        // Start VMess server if configured
-        if let Some(ref vmess_server) = self.vmess_server {
-            if let Some(vmess_listen) = self.config.vmess_listen {
-                info!("Starting VMess server on {}", vmess_listen);
-                if let Some(ref vmess_config) = self.config.vmess_server {
-                    info!(
-                        "  -> {}:{} (user_id: {}, security: {})",
-                        vmess_config.addr,
-                        vmess_config.port,
-                        vmess_config.user_id,
-                        vmess_config.security
-                    );
-                }
-            }
-            let srv = vmess_server.clone();
-            let vmess_handle = tokio::spawn(async move {
-                let _ = srv.start().await;
-            });
-            handles.push(vmess_handle);
-        }
-
-        // Start Trojan server if configured
-        if let Some(ref trojan_server) = self.trojan_server {
-            if let Some(trojan_listen) = self.config.trojan_listen {
-                info!("Starting Trojan server on {}", trojan_listen);
-                if let Some(ref trojan_config) = self.config.trojan_server {
-                    info!(
-                        "  -> {}:{} (password: [hidden])",
-                        trojan_config.addr, trojan_config.port
-                    );
-                }
-            }
-            let srv = trojan_server.clone();
-            let trojan_handle = tokio::spawn(async move {
-                let _ = srv.start().await;
-            });
-            handles.push(trojan_handle);
-        }
-
-        // Start tracking HTTP server if enabled
-        if let Some(ref store) = self.tracking_store {
-            let export_cfg = &self.config.tracking.export;
-            if export_cfg.prometheus || export_cfg.json_api || export_cfg.websocket {
-                let prom_port = export_cfg.prometheus_port;
-                let json_port = export_cfg.json_api_port;
-                let prom_path = export_cfg.prometheus_path.clone();
-                let json_path = export_cfg.json_api_path.clone();
-                let store_clone = store.clone();
-                let enable_ws = export_cfg.websocket;
-                let track_store = store_clone.clone();
-
-                if export_cfg.prometheus {
-                    info!(
-                        "Starting tracking Prometheus metrics server on :{}/{}",
-                        prom_port, prom_path
-                    );
-                    let prom_store = store_clone.clone();
-                    tokio::spawn(async move {
-                        if let Err(e) = TrackingStore::start_http_server(
-                            prom_port, &prom_path, true, false, prom_store,
-                        )
-                        .await
-                        {
-                            error!("Tracking Prometheus server error: {}", e);
-                        }
-                    });
-                }
-
-                if export_cfg.json_api {
-                    info!(
-                        "Starting tracking JSON API server on :{}/{}",
-                        json_port, json_path
-                    );
-                    let json_store = store_clone.clone();
-                    tokio::spawn(async move {
-                        if let Err(e) = TrackingStore::start_http_server(
-                            json_port, &json_path, false, enable_ws, json_store,
-                        )
-                        .await
-                        {
-                            error!("Tracking JSON API server error: {}", e);
-                        }
-                    });
-                }
-
-                // Record initial stats if we have the store
-                track_store.record_routed(0);
-            } else if self.config.tracking.enabled {
-                // Tracking is enabled but no export configured - just log it
-                info!("Tracking enabled (no HTTP export configured), metrics available via store");
-            }
-        }
-
-        info!("Proxy services started");
+        // Start all services and get handles
+        let handles = self.lifecycle.start(&self).await?;
 
         // Wait for shutdown signal
-        let _ = self.shutdown_tx.subscribe().recv().await;
+        let mut shutdown_rx = self.coordinator.shutdown_tx.subscribe();
+        let _ = shutdown_rx.recv().await;
 
-        info!("Proxy shutdown initiated");
+        // Perform shutdown
+        self.lifecycle
+            .shutdown(&self, &self.coordinator, handles)
+            .await;
 
-        // Signal tasks to stop
+        // Mark as not running
         {
             let mut running = self.running.write().await;
             *running = false;
         }
 
-        // Close all connections
-        self.connection_pool.close_all().await;
-
-        // Abort running tasks
-        for handle in handles {
-            handle.abort();
-        }
-
-        info!("Proxy shutdown complete");
         Ok(())
     }
 
     /// Stop the proxy gracefully
     pub async fn stop(&self) {
         info!("Stopping proxy...");
-        let _ = self.shutdown_tx.send(());
+        self.coordinator.send_shutdown();
     }
 
     /// Check if proxy is running
