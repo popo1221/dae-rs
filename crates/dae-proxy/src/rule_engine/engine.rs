@@ -274,8 +274,7 @@ impl RuleEngine {
                     // Try Country struct first (works for Country databases)
                     match result.decode::<maxminddb::geoip2::Country>() {
                         Ok(Some(country)) => {
-                            country.country.iso_code
-                                .map(|code| code.to_uppercase())
+                            country.country.iso_code.map(|code| code.to_uppercase())
                         }
                         Ok(None) => {
                             debug!("IP not found in GeoIP database");
@@ -286,8 +285,7 @@ impl RuleEngine {
                             // Try City struct
                             match result.decode::<maxminddb::geoip2::City>() {
                                 Ok(Some(city)) => {
-                                    city.country.iso_code
-                                        .map(|code| code.to_uppercase())
+                                    city.country.iso_code.map(|code| code.to_uppercase())
                                 }
                                 Ok(None) => {
                                     debug!("IP not found in GeoIP database");
@@ -304,10 +302,7 @@ impl RuleEngine {
                 GeoIpDatabaseKind::City => {
                     // Use City struct directly
                     match result.decode::<maxminddb::geoip2::City>() {
-                        Ok(Some(city)) => {
-                            city.country.iso_code
-                                .map(|code| code.to_uppercase())
-                        }
+                        Ok(Some(city)) => city.country.iso_code.map(|code| code.to_uppercase()),
                         Ok(None) => {
                             debug!("IP not found in GeoIP City database");
                             None

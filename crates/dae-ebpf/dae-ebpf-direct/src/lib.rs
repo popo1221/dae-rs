@@ -22,15 +22,13 @@
 #![allow(dead_code)]
 
 use aya_ebpf::bindings::{
-    BPF_SOCK_OPS_ACTIVE_ESTABLISHED_CB,
-    BPF_SOCK_OPS_NEEDS_ECN, BPF_SOCK_OPS_PARSE_HDR_OPT_CB, BPF_SOCK_OPS_PASSIVE_ESTABLISHED_CB,
-    BPF_SOCK_OPS_RTT_CB, BPF_SOCK_OPS_RTO_CB, BPF_SOCK_OPS_RWND_INIT,
-    BPF_SOCK_OPS_STATE_CB, BPF_SOCK_OPS_TCP_CONNECT_CB, BPF_SOCK_OPS_TCP_LISTEN_CB,
-    BPF_SOCK_OPS_TIMEOUT_INIT, BPF_SOCK_OPS_VOID, BPF_SOCK_OPS_WRITE_HDR_OPT_CB,
-    BPF_TCP_BOUND_INACTIVE, BPF_TCP_CLOSE, BPF_TCP_CLOSE_WAIT, BPF_TCP_CLOSING,
-    BPF_TCP_ESTABLISHED, BPF_TCP_FIN_WAIT1, BPF_TCP_FIN_WAIT2, BPF_TCP_LAST_ACK,
-    BPF_TCP_LISTEN, BPF_TCP_NEW_SYN_RECV, BPF_TCP_SYN_RECV, BPF_TCP_SYN_SENT,
-    BPF_TCP_TIME_WAIT,
+    BPF_SOCK_OPS_ACTIVE_ESTABLISHED_CB, BPF_SOCK_OPS_NEEDS_ECN, BPF_SOCK_OPS_PARSE_HDR_OPT_CB,
+    BPF_SOCK_OPS_PASSIVE_ESTABLISHED_CB, BPF_SOCK_OPS_RTO_CB, BPF_SOCK_OPS_RTT_CB,
+    BPF_SOCK_OPS_RWND_INIT, BPF_SOCK_OPS_STATE_CB, BPF_SOCK_OPS_TCP_CONNECT_CB,
+    BPF_SOCK_OPS_TCP_LISTEN_CB, BPF_SOCK_OPS_TIMEOUT_INIT, BPF_SOCK_OPS_VOID,
+    BPF_SOCK_OPS_WRITE_HDR_OPT_CB, BPF_TCP_BOUND_INACTIVE, BPF_TCP_CLOSE, BPF_TCP_CLOSE_WAIT,
+    BPF_TCP_CLOSING, BPF_TCP_ESTABLISHED, BPF_TCP_FIN_WAIT1, BPF_TCP_FIN_WAIT2, BPF_TCP_LAST_ACK,
+    BPF_TCP_LISTEN, BPF_TCP_NEW_SYN_RECV, BPF_TCP_SYN_RECV, BPF_TCP_SYN_SENT, BPF_TCP_TIME_WAIT,
 };
 use aya_ebpf::helpers::bpf_get_current_pid_tgid;
 use aya_ebpf::macros::{map, sk_msg, sock_ops};
@@ -320,11 +318,10 @@ fn handle_active_established(ctx: &SockOpsContext) -> Result<u32, ()> {
     // SAFETY: ctx.ops is valid; map operations require unsafe blocks.
     unsafe {
         if let Some(route) = DIRECT_ROUTES.get(&dst_ip) {
-            if route.rule_type == rule_type::DIRECT_RULE_IPV4_CIDR
-                && (*route).matches_ipv4(dst_ip)
+            if route.rule_type == rule_type::DIRECT_RULE_IPV4_CIDR && (*route).matches_ipv4(dst_ip)
             {
                 value.mark = 1; // Direct
-                // Add to sockmap for redirect
+                                // Add to sockmap for redirect
                 let _ = SOCKMAP_OUT.update(0, ctx.ops, 0);
             } else if route.rule_type == rule_type::DIRECT_RULE_PORT
                 && (*route).matches_port(key.dst_port, key.protocol)

@@ -61,8 +61,8 @@
 
 use aya_ebpf::bindings::{__sk_buff, TC_ACT_OK, TC_ACT_SHOT};
 use aya_ebpf::helpers::bpf_ktime_get_ns;
-use aya_ebpf::maps::lpm_trie::Key;
 use aya_ebpf::macros::map;
+use aya_ebpf::maps::lpm_trie::Key;
 use aya_ebpf::maps::{Array, HashMap, LpmTrie, PerCpuArray};
 use aya_ebpf::programs::TcContext;
 

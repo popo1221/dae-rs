@@ -325,11 +325,7 @@ impl EbpfContext {
     /// - File not found or invalid
     /// - Failed to load eBPF program
     /// - Failed to attach to interface
-    pub fn load_xdp<P: AsRef<Path>>(
-        &mut self,
-        path: P,
-        iface: &str,
-    ) -> Result<(), EbpfError> {
+    pub fn load_xdp<P: AsRef<Path>>(&mut self, path: P, iface: &str) -> Result<(), EbpfError> {
         if !self.supported_programs.contains(&ProgramType::Xdp) {
             return Err(EbpfError::InvalidArgument(
                 "XDP not supported on this system".to_string(),
@@ -372,11 +368,7 @@ impl EbpfContext {
     /// # Errors
     ///
     /// Returns an error if loading or attachment fails.
-    pub fn load_tc<P: AsRef<Path>>(
-        &mut self,
-        path: P,
-        iface: &str,
-    ) -> Result<(), EbpfError> {
+    pub fn load_tc<P: AsRef<Path>>(&mut self, path: P, iface: &str) -> Result<(), EbpfError> {
         if !self.supported_programs.contains(&ProgramType::Tc) {
             return Err(EbpfError::InvalidArgument(
                 "TC not supported on this system".to_string(),
@@ -450,7 +442,8 @@ impl EbpfContext {
             stats: ProgramStats::default(),
         };
 
-        self.programs.insert(_program_name.to_string(), loaded_program);
+        self.programs
+            .insert(_program_name.to_string(), loaded_program);
         self.ebpf = Some(ebpf);
 
         Ok(())
@@ -573,9 +566,7 @@ impl EbpfContext {
     /// This begins processing packets with the loaded programs.
     pub fn run(&mut self) -> Result<(), EbpfError> {
         if self.programs.is_empty() {
-            return Err(EbpfError::InvalidArgument(
-                "No programs loaded".to_string(),
-            ));
+            return Err(EbpfError::InvalidArgument("No programs loaded".to_string()));
         }
 
         self.running = true;
@@ -633,8 +624,8 @@ impl Default for EbpfContext {
 pub fn init_logging() {
     use tracing_subscriber::{fmt, prelude::*, EnvFilter};
 
-    let filter = EnvFilter::try_from_default_env()
-        .unwrap_or_else(|_| EnvFilter::new("info,dae_ebpf=debug"));
+    let filter =
+        EnvFilter::try_from_default_env().unwrap_or_else(|_| EnvFilter::new("info,dae_ebpf=debug"));
 
     tracing_subscriber::registry()
         .with(fmt::layer())
@@ -752,9 +743,7 @@ pub fn remove_tc_clsact(iface: &str) -> Result<(), EbpfError> {
     if !output.status.success() {
         // It's okay if it doesn't exist
         let stderr = String::from_utf8_lossy(&output.stderr);
-        if !stderr.contains("No such file or directory")
-            && !stderr.contains("Cannot find")
-        {
+        if !stderr.contains("No such file or directory") && !stderr.contains("Cannot find") {
             return Err(EbpfError::AttachError(format!(
                 "Failed to remove clsact qdisc: {}",
                 stderr
