@@ -119,7 +119,6 @@ pub use crate::protocol::unified_handler::{
 #[deprecated(since = "0.1.0", note = "Use UnifiedHandler instead")]
 pub use crate::protocol::ProtocolHandler;
 
-pub mod anytls;
 pub mod connection;
 pub mod connection_pool;
 pub mod control;
@@ -132,13 +131,11 @@ pub mod hysteria2;
 pub mod juicity;
 pub mod logging;
 pub mod mac;
-pub mod naiveproxy;
 pub mod nat;
 pub mod node;
 pub mod process;
 pub mod protocol;
 pub mod protocol_dispatcher;
-pub mod protocol_legacy;
 pub mod proxy;
 pub mod proxy_chain;
 pub mod rule_engine;
