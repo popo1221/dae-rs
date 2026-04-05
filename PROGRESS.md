@@ -42,6 +42,12 @@ Fix all issues from review-protocols and review-cicd:
 - ✅ `cargo check --workspace` passes
 - ✅ `cargo test --workspace` passes
 
+### 2026-04-05 19:20 GMT+8 - Security audit CI step
+- ✅ Added `rustsec/audit-check@v2` to CI workflow (`.github/workflows/ci.yml`)
+  - Added Security audit step after tests
+  - Uses GITHUB_TOKEN for API access
+  - Runs on every push/PR to main/master
+
 ### 2026-04-05 19:25 GMT+8 - Integration test import + pre-existing relay bugs
 - ✅ Integration test `use dae_proxy::socks5::Socks5HandlerConfig` was already fixed
   - Correct import is `use dae_proxy::Socks5HandlerConfig` (direct re-export, not via socks5 module)
