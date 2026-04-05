@@ -1,7 +1,43 @@
-//! eBPF Map Handles
+//! eBPF Map Handles — In-Memory HashMap Stubs
 //!
-//! Provides in-memory HashMap implementations for session, routing, and stats maps
-//! as a fallback when aya BPF maps are not available.
+//! This module provides **in-memory HashMap implementations** as a fallback when
+//! real eBPF maps (via the `aya` crate) are not available or not needed.
+//!
+//! # When to Use Each Backend
+//!
+//! | Scenario | Recommended Backend | Implementation |
+//! |----------|---------------------|------------------|
+//! | Development / Testing | `EbpfMaps::new_in_memory()` | In-memory HashMap (this module) |
+//! | User-space proxy (no kernel BPF) | `EbpfMaps::new_in_memory()` | In-memory HashMap (this module) |
+//! | Production with kernel BPF | `EbpfContext` | Real aya eBPF maps |
+//!
+//! # Limitations of In-Memory HashMap Stubs
+//!
+//! These in-memory implementations are **not** suitable for production with
+//! kernel eBPF because they:
+//!
+//! 1. **Do not share state with the kernel** — kernel BPF programs cannot read
+//!   /write these maps; data stays entirely in user space.
+//!
+//! 2. **RoutingMapHandle uses exact-match** — The in-memory routing map performs
+//!    exact IP matching (`HashMap<u32, RoutingEntry>`), not LPM (Longest Prefix
+//!    Match). Proper CIDR routing (e.g., `10.0.0.0/8 → PASS`) requires a real
+//!    aya [`LpmTrie`] map in `EbpfContext`.
+//!
+//! 3. **StatsMapHandle uses write locks** — Stats counters are updated under a
+//!    [`StdRwLock`], which causes lock contention under high concurrency.
+//!    Production should use aya [`PerCpuArray`] for per-CPU atomic counters.
+//!
+//! 4. **SessionMapHandle is process-local** — Sessions are not shared across
+//!    processes or with kernel BPF programs.
+//!
+//! # Feature Flags
+//!
+//! - `ebpf` feature: Enables `EbpfContext` and real aya eBPF integration.
+//!   When disabled (default), only in-memory stubs are available.
+//!
+//! [`LpmTrie`]: <https://docs.rs/aya/latest/aya/maps/lpm_trie/struct.LpmTrie.html>
+//! [`PerCpuArray`]: <https://docs.rs/aya/latest/aya/maps/per_cpu_array/struct.PerCpuArray.html>
 
 use crate::connection_pool::ConnectionKey;
 use crate::ebpf_integration::config::EbpfMapConfig;
@@ -16,10 +52,34 @@ use tracing::debug;
 
 // Note: Result is used via crate::ebpf_integration::Result full path in methods
 
-/// eBPF map handles wrapper
+/// eBPF map handles wrapper — in-memory HashMap stubs.
 ///
-/// Provides in-memory map implementations as a fallback when aya BPF maps
-/// are not available. For production with kernel BPF, use `EbpfContext`.
+/// This struct holds handles to session, routing, and stats maps. The
+/// constructors on this struct (`new_in_memory`, `new_in_memory_with_config`)
+/// create **in-memory HashMap** backends, not real kernel eBPF maps.
+///
+/// ## In-Memory Mode (this struct)
+///
+/// Use `EbpfMaps::new_in_memory()` or `EbpfMaps::new_in_memory_with_config(config)`
+/// when:
+/// - Running in development or testing mode.
+/// - The user-space proxy is used without kernel eBPF programs.
+///
+/// In this mode, all map operations (`insert`, `lookup`, `remove`) go through
+/// `Arc<StdRwLock<HashMap>>` — entirely in user space.
+///
+/// ## Real eBPF Mode (`EbpfContext`)
+///
+/// For production with kernel BPF programs (tc clsact or XDP), use
+/// [`EbpfContext`](super::EbpfContext) instead. `EbpfContext` manages real aya
+/// `HashMap`, `LpmTrie`, and `PerCpuArray` maps that are shared between kernel
+/// and user space.
+///
+/// ## Detecting the Mode
+///
+/// Call [`is_real_ebpf()`](EbpfMaps::is_real_ebpf) at runtime to check which
+/// backend is active. When `is_real_ebpf()` returns `false`, you are using
+/// these in-memory stubs.
 #[derive(Clone)]
 pub struct EbpfMaps {
     /// Session map handle
@@ -108,11 +168,23 @@ impl Default for EbpfMaps {
     }
 }
 
-/// Session map handle wrapper — in-memory HashMap implementation
+/// Session map handle wrapper — in-memory HashMap stub.
 ///
-/// Uses `Arc<StdRwLock<HashMap>>` for concurrent access and cloneability.
-/// Suitable for user-space proxying. For kernel BPF integration,
-/// replace with aya `HashMap`.
+/// Uses `Arc<StdRwLock<HashMap<ConnectionKey, SessionEntry>>>` for concurrent
+/// access and cheap cloneability (all handles share the same underlying map).
+///
+/// ## Limitation: Process-Local Only
+///
+/// **This map is entirely in user space and is not shared with kernel BPF
+/// programs.** Session state created here is invisible to any tc clsact or XDP
+/// programs running in the kernel. For kernel-level session tracking, use
+/// `EbpfContext` with aya `HashMap`.
+///
+/// ## Performance
+///
+/// Read operations (`lookup`) acquire a read lock; write operations (`insert`,
+/// `remove`) acquire the write lock. Under heavy concurrency, consider
+/// partitioning or using `dashmap` for reduced lock contention.
 #[derive(Clone)]
 pub struct SessionMapHandle {
     inner: Arc<StdRwLock<HashMap<ConnectionKey, SessionEntry>>>,
@@ -181,11 +253,26 @@ impl Default for SessionMapHandle {
     }
 }
 
-/// Routing map handle wrapper — in-memory HashMap implementation
+/// Routing map handle wrapper — in-memory HashMap stub with **exact-match only**.
 ///
-/// Uses `Arc<StdRwLock<HashMap>>` for concurrent access and cloneability.
-/// Note: this is a simple exact-match map, not an LPM (Longest Prefix Match)
-/// Trie. For proper CIDR routing rules, use `EbpfContext` with real eBPF.
+/// ## ⚠️ Critical Limitation: No CIDR / LPM Support
+///
+/// **This map performs exact IP matching (`HashMap<u32, RoutingEntry>`), NOT
+/// Longest Prefix Match (LPM).** It cannot evaluate CIDR rules like
+/// `10.0.0.0/8 → PASS` or `192.168.0.0/16 → DROP`.
+///
+/// For proper CIDR routing, you **must** use `EbpfContext` with a real aya
+/// [`LpmTrie`] map, which supports longest-prefix matching in the kernel.
+///
+/// ## What This Map Does
+///
+/// - `insert(ip, entry)` — stores a routing entry keyed by a full 32-bit IP.
+/// - `lookup(ip)` — finds the entry for exactly that IP, with no prefix matching.
+///
+/// This is only useful when routing decisions are made on specific IPs, not
+/// CIDR ranges.
+///
+/// [`LpmTrie`]: <https://docs.rs/aya/latest/aya/maps/lpm_trie/struct.LpmTrie.html>
 #[derive(Clone)]
 pub struct RoutingMapHandle {
     inner: Arc<StdRwLock<HashMap<u32, RoutingEntry>>>,
@@ -247,12 +334,26 @@ impl Default for RoutingMapHandle {
     }
 }
 
-/// Stats map handle wrapper — in-memory HashMap implementation
+/// Stats map handle wrapper — in-memory HashMap stub.
 ///
-/// Uses `Arc<StdRwLock<HashMap>>` for concurrent access and cloneability.
-/// Note: stats counters are updated under write lock, which may cause
-/// contention under very high concurrency. For production, consider atomic
-/// counters or PerCPU maps (as in real aya BPF maps).
+/// ## ⚠️ Performance Warning: Write Lock Contention
+///
+/// Stats are updated under a **single write lock** (`StdRwLock`). Under high
+/// concurrency (many threads updating stats simultaneously), this causes lock
+/// contention and degrades performance.
+///
+/// For production with real traffic, use `EbpfContext` with aya [`PerCpuArray`],
+/// which provides per-CPU counters that are updated lock-free in the kernel.
+///
+/// ## In-Memory Stub Behavior
+///
+/// - `increment(idx, bytes)` — acquires write lock, increments bytes/packets.
+/// - `get(idx)` / `get_all()` — acquires read lock.
+///
+/// The `bytes` and `packets` fields are plain `u64` (not atomic), so concurrent
+/// increments are not strictly safe without the lock.
+///
+/// [`PerCpuArray`]: <https://docs.rs/aya/latest/aya/maps/per_cpu_array/struct.PerCpuArray.html>
 #[derive(Clone)]
 pub struct StatsMapHandle {
     inner: Arc<StdRwLock<HashMap<u32, StatsEntry>>>,
