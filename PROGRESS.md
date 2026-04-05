@@ -1,30 +1,35 @@
-# dae-rs 重构进度 - Ralph Mode + Swarm
+# Ralph Mode: dae-rs Review Fixes
 
-## 状态: 🟡 进行中
+## Status: IN PROGRESS 🚀
 
-## 启动时间
-2026-04-05 13:12 GMT+8
+**Started:** 2026-04-05 19:08 GMT+8
 
-## GitHub Issues
-| Issue | Phase | 描述 | 状态 |
-|-------|-------|------|------|
-| #83 | Phase 1 | 清理废弃代码 (naiveproxy/protocol_legacy/anytls) | 🔴 In Progress |
-| #84 | Phase 2 | 拆分 proxy.rs 为 proxy/ 目录 | 🟡 Pending |
-| #85 | Phase 3 | Handler trait 真正统一实现 | 🟡 Pending |
-| #86 | Phase 4 | 统一错误类型层次 | 🟡 Pending |
-| #87 | Phase 5 | 提取 BidirectionalRelay trait | 🟡 Pending |
+## Mission
+Fix all issues from review-protocols and review-cicd:
+- relay_bidirectional duplication (7 crates)
+- Handler trait inconsistency
+- Error handling inconsistency
+- tokio "full" overuse
+- CI improvements (Rust matrix, tarpaulin, cargo-audit)
+- Fix integration test import error
 
-## Swarm 团队
-| Worker | 任务 | Issue | 状态 |
-|--------|------|-------|------|
-| Queen | 主协调器 | - | 🟢 运行中 |
-| Phase1-Worker | 清理废弃代码 | #83 | 🔴 In Progress |
+---
 
-## Backpressure Gates
-- [ ] `cargo fmt --all`
-- [ ] `cargo clippy --all` (0 warnings)
-- [ ] `cargo build --all`
-- [ ] `cargo test --all`
+## Iteration Log
 
-## 迭代记录
+### 2026-04-05 19:10 GMT+8 - Rust Version Matrix
+- ✅ Added Rust version matrix to CI workflow (`.github/workflows/ci.yml`)
+  - Matrix: `[1.75, stable]`
+  - MSRV: 1.75, Latest: stable
+  - Updated `dtolnay/rust-toolchain` to use `${{ matrix.rust }}`
 
+---
+
+## Completion Criteria
+
+- [ ] `cargo test --workspace` passes
+- [ ] `cargo clippy --workspace` passes (errors, not warnings)
+- [ ] Integration test import fixed
+- [ ] Rust version matrix added to CI
+- [ ] `panic!` → `unreachable!()` done
+- [ ] relay_bidirectional extracted to shared crate

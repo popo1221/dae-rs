@@ -1,78 +1,65 @@
-# dae-rs 目录结构重构计划 - Ralph Mode + Swarm
+# dae-rs Review Fixes - Implementation Plan
 
-> 基于 Zed 多 crate 单职责架构模式
-> 启动时间: 2026-04-05 11:31 GMT+8
+## Priority Order (High to Low)
 
-## 项目概述
+### Phase 1: Critical Fixes (Must Do)
 
-参考 Zed 仓库架构模式，重构 dae-rs 目录结构，解决当前双 workspace 结构（packages/ vs crates/）混乱的问题。
+- [ ] **1.1** Fix integration test `dae_proxy::socks5` import error
+  - Check integration_tests source for correct import path
+  - Validate: `cargo test --workspace` passes
 
-## Zed 架构核心原则
+- [ ] **1.2** Add Rust version matrix to CI
+  - Edit `.github/workflows/ci.yml`
+  - Add `1.75` (MSRV) and `stable` to matrix
+  - Validate: CI workflow updated
 
-1. **Single Responsibility**: 每个 crate 只有一个职责
-2. **Naming Conventions**: `*Store` 抽象接口, `*Handle` 实体引用, `*Manager` 生命周期管理
-3. **分层架构**: gpui → editor → project → workspace → language → collab → lsp
-4. **Entity/Context/Task**: 状态管理模式
+- [ ] **1.3** Replace `panic!` with `unreachable!()` in protocol handlers
+  - Files: juicity, shadowsocks, trojan, vmess handlers
+  - Validate: `cargo clippy --workspace` shows fewer warnings
 
-## 当前问题
+### Phase 2: Architecture Improvements
 
-| 问题 | 影响 |
-|------|------|
-| `packages/` 和 `crates/` 双 workspace | 结构混乱，职责不清 |
-| `socks5.rs` 27KB 单文件 | 违反 single responsibility |
-| Handler trait 未统一 | 各协议各自实现 |
-| `dae-proxy` ~77 文件, ~50K LOC | 过于庞大 |
+- [ ] **2.1** Extract `relay_bidirectional` to shared crate `crates/dae-relay/`
+  - Create new crate with relay function
+  - Update all 7 protocol crates to use shared version
+  - Validate: `cargo check --workspace` passes
 
-## 重构任务
+- [ ] **2.2** Standardize Handler trait pattern
+  - Adopt vless/vmess Handler pattern across all crates
+  - Create shared Handler trait in `crates/dae-protocol-core/` (optional)
 
-### Phase 1: Workspace 统一
+- [ ] **2.3** Unify error handling with thiserror
+  - Add thiserror to: http_proxy, socks4, socks5
+  - Consider shared error types
 
-- [ ] 清理 `crates/` 目录，统一到 `packages/`
-- [ ] 统一 workspace members 配置
-- [ ] 更新所有 Cargo.toml 路径引用
+### Phase 3: CI/CD Enhancements
 
-### Phase 2: 协议模块拆分 (参考 trojan_protocol/)
+- [ ] **3.1** Add cargo-audit security scanning
+  - Add `rustsec/audit-check` or similar to CI
 
-- [ ] `socks5.rs` → `socks5/`: mod.rs / handshake.rs / commands.rs / auth.rs
-- [ ] `http_proxy.rs` → `http_proxy/`: mod.rs / handler.rs / connect.rs
-- [ ] `shadowsocks.rs` → `shadowsocks/`: mod.rs / protocol.rs / aead.rs
+- [ ] **3.2** Add test coverage with tarpaulin
+  - Add tarpaulin step to CI
+  - (Optional) Upload to codecov
 
-### Phase 3: Handler 统一 (P1)
+- [ ] **3.3** Add benchmark job
+  - Add `cargo bench` to CI workflow
 
-- [ ] 统一 Handler trait 定义
-- [ ] 所有协议实现统一 Handler 接口
-- [ ] 移除冗余 ProtocolHandler trait
+### Phase 4: Dependency Cleanup
 
-### Phase 4: 节点管理 Zed 化
+- [ ] **4.1** Change `tokio = "full"` to minimal features
+  - Analyze each crate's tokio usage
+  - Use minimal feature sets
 
-- [ ] `node/` 目录完善 `*Store` 命名
-- [ ] `NodeStore` trait 统一抽象
-- [ ] `NodeManager` 生命周期管理
+## Validation Commands
 
-### Phase 5: 错误层次统一
+```bash
+cargo check --workspace      # Typecheck
+cargo clippy --workspace     # Lint
+cargo test --workspace       # Tests
+cargo build --workspace      # Build
+```
 
-- [ ] `ProxyError` - 代理错误
-- [ ] `NodeError` - 节点错误
-- [ ] `EbpfError` - eBPF 错误
-- [ ] `ConfigError` - 配置错误
+## Backlog (Future)
 
-## Swarm 团队
-
-| Worker | 任务 | 阶段 |
-|--------|------|------|
-| Workspace-Worker | 清理 crates/，统一 workspace | Phase 1 |
-| Socks5-Worker | 拆分 socks5.rs | Phase 2 |
-| Http-Worker | 拆分 http_proxy.rs | Phase 2 |
-| Shadowsocks-Worker | 拆分 shadowsocks.rs | Phase 2 |
-| Handler-Worker | Handler 统一 | Phase 3 |
-
-## Backpressure Gates
-
-- [ ] `cargo fmt --all`
-- [ ] `cargo clippy --all` (0 warnings)
-- [ ] `cargo build --all`
-- [ ] `cargo test --all`
-
-## 进度
-
-更新于: 2026-04-05 11:31 GMT+8
+- [ ] GeoIP extraction bug fix (separate issue)
+- [ ] Add tests to protocol crates (currently only socks5 has tests)

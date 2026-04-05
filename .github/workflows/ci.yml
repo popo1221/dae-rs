@@ -10,11 +10,14 @@ jobs:
   test:
     name: Rust Test
     runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        rust: ["1.75", stable]
     steps:
       - uses: actions/checkout@v4
 
       - name: Install Rust
-        uses: dtolnay/rust-toolchain@stable
+        uses: dtolnay/rust-toolchain@${{ matrix.rust }}
 
       - name: Cache cargo
         uses: Swatinem/rust-cache@v2
