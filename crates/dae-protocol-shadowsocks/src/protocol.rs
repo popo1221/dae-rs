@@ -1,10 +1,40 @@
-//! Shadowsocks protocol types
+//! Shadowsocks 协议类型模块
 //!
-//! Contains AEAD cipher types and target address parsing.
+//! 包含 AEAD 加密算法类型和目标地址解析功能。
+//!
+//! # 地址类型（ATYP）
+//!
+//! Shadowsocks 协议使用 ATYP（Address Type）字段标识目标地址类型：
+//! - `0x01`: IPv4 地址（4字节）
+//! - `0x03`: 域名（1字节长度 + 域名字节序列）
+//! - `0x04`: IPv6 地址（16字节）
+//!
+//! # AEAD 加密
+//!
+//! AEAD（Authenticated Encryption with Associated Data）模式提供加密和认证：
+//! - 加密 payload
+//! - 生成认证标签防止篡改
+//! 支持的算法：chacha20-ietf-poly1305, aes-256-gcm, aes-128-gcm
 
 use std::net::{IpAddr, Ipv4Addr, Ipv6Addr};
 
-/// Shadowsocks AEAD cipher type
+/// Shadowsocks AEAD 加密算法类型
+///
+/// AEAD（带关联数据的认证加密）模式是当前推荐的加密方式，
+/// 同时提供数据机密性和完整性保护。
+///
+/// # 支持的算法
+///
+/// | 算法 | 密钥长度 | 推荐程度 |
+/// |------|----------|----------|
+/// | `Chacha20IetfPoly1305` | 256 bits | ⭐⭐⭐ 推荐 |
+/// | `Aes256Gcm` | 256 bits | ⭐⭐ |
+/// | `Aes128Gcm` | 128 bits | ⭐ |
+///
+/// # 不支持的算法
+///
+/// 流式加密算法（如 rc4-md5、aes-ctr、aes-cfb）暂不支持，
+/// 因为存在已知的安全问题。
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub enum SsCipherType {
     /// chacha20-ietf-poly1305
@@ -41,12 +71,32 @@ impl SsCipherType {
     }
 }
 
-/// Shadowsocks target address
+/// Shadowsocks 目标地址
+///
+/// 表示 Shadowsocks 协议中的目标地址，可以是 IPv4、IPv6 或域名。
+///
+/// # ATYP 映射
+///
+/// - `Ip(IpAddr::V4(...))` → ATYP = 0x01
+/// - `Ip(IpAddr::V6(...))` → ATYP = 0x04
+/// - `Domain(name, port)` → ATYP = 0x03
+///
+/// # 使用场景
+///
+/// - 解析 AEAD payload 中的目标地址
+/// - 序列化地址用于协议传输
+/// - 构建调试和日志信息
 #[derive(Debug, Clone)]
 pub enum TargetAddress {
-    /// IPv4 address
+    /// IPv4 或 IPv6 地址
+    ///
+    /// 使用 `std::net::IpAddr` 类型，可同时表示 IPv4 和 IPv6。
     Ip(IpAddr),
-    /// Domain name with port
+
+    /// 域名和端口
+    ///
+    /// 用于 SOCKS 风格的目标指定，域名需要 DNS 解析。
+    /// 元组包含：(域名, 端口)
     Domain(String, u16),
 }
 
@@ -60,8 +110,32 @@ impl std::fmt::Display for TargetAddress {
 }
 
 impl TargetAddress {
-    /// Parse target address from Shadowsocks AEAD header
-    /// Returns (address, port, bytes_consumed)
+    /// 从 Shadowsocks AEAD payload 中解析目标地址
+    ///
+    /// # 参数
+    ///
+    /// - `payload`: AEAD 解密后的 payload 字节数组
+    ///
+    /// # 返回值
+    ///
+    /// - `Some((TargetAddress, port))`: 成功解析返回地址和端口
+    /// - `None`: payload 格式无效或长度不足
+    ///
+    /// # Payload 格式
+    ///
+    /// AEAD 解密后的 payload 格式：
+    /// - ATYP (1 byte): 地址类型
+    /// - ADDRESS (变长): 目标地址
+    /// - PORT (2 bytes): 目标端口
+    ///
+    /// # 示例
+    ///
+    /// ```ignore
+    /// let payload = [0x01, 192, 168, 1, 1, 0x1F, 0x90]; // 192.168.1.1:8080
+    /// if let Some((addr, port)) = TargetAddress::parse_from_aead(&payload) {
+    ///     println!("Target: {}:{}", addr, port);
+    /// }
+    /// ```
     pub fn parse_from_aead(payload: &[u8]) -> Option<(Self, u16)> {
         if payload.is_empty() {
             return None;
@@ -115,7 +189,17 @@ impl TargetAddress {
         }
     }
 
-    /// Get the address portion (without port) as bytes for Shadowsocks protocol
+    /// 将地址序列化为 Shadowsocks 协议格式的字节
+    ///
+    /// # 返回值
+    ///
+    /// 返回包含 ATYP 和地址字节的向量，不包含端口。
+    ///
+    /// # 序列化格式
+    ///
+    /// - IPv4: `[0x01][4字节IP]`
+    /// - IPv6: `[0x04][16字节IP]`
+    /// - Domain: `[0x03][长度:u8][域名字节]`
     pub fn to_bytes(&self) -> Vec<u8> {
         match self {
             TargetAddress::Ip(IpAddr::V4(ip)) => {
@@ -138,7 +222,12 @@ impl TargetAddress {
         }
     }
 
-    /// Format address for display
+    /// 获取地址的可读字符串表示
+    ///
+    /// # 返回值
+    ///
+    /// - IPv4/IPv6: 返回 IP 地址字符串
+    /// - Domain: 返回域名（不包含端口）
     pub fn address_string(&self) -> String {
         match self {
             TargetAddress::Ip(ip) => ip.to_string(),

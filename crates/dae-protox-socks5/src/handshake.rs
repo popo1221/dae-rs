@@ -41,14 +41,20 @@ impl Handshake {
     ///
     /// 客户端请求：
     /// ```
+    /// +----+----------+----------+
     /// |VER | NMETHODS | METHODS  |
+    /// +----+----------+----------+
     /// | 1  |    1     |  1-255   |
+    /// +----+----------+----------+
     /// ```
     ///
     /// 服务器响应：
     /// ```
+    /// +----+--------+
     /// |VER | METHOD |
+    /// +----+--------+
     /// | 1  |   1    |
+    /// +----+--------+
     /// ```
     pub async fn handle_greeting(&self, client: &mut TcpStream) -> std::io::Result<u8> {
         // Read greeting: VER (1) + NMETHODS (1) + METHODS (1-255)
@@ -126,14 +132,20 @@ impl Handshake {
     ///
     /// 客户端请求：
     /// ```
+    /// +----+------+----------+------+----------+
     /// |VER | ULEN |  UNAME   | PLEN |  PASSWD |
+    /// +----+------+----------+------+----------+
     /// | 1  |  1   | 1-255   |  1   | 1-255   |
+    /// +----+------+----------+------+----------+
     /// ```
     ///
     /// 服务器响应：
     /// ```
+    /// +----+--------+
     /// |VER | STATUS |
+    /// +----+--------+
     /// | 1  |   1    |
+    /// +----+--------+
     /// ```
     pub async fn handle_authentication(&self, client: &mut TcpStream) -> std::io::Result<()> {
         // Read: VER (1) + USERNAME_LEN (1) + USERNAME + PASSWORD_LEN (1) + PASSWORD

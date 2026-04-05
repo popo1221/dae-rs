@@ -1,6 +1,6 @@
-//! SOCKS4 server handler implementation
+//! SOCKS4 服务器处理器实现模块
 //!
-//! Contains the SOCKS4 server configuration and connection handling logic.
+//! 包含 SOCKS4 服务器配置和连接处理逻辑。
 
 use std::net::SocketAddrV4;
 use tokio::io::AsyncWriteExt;
@@ -10,14 +10,23 @@ use tracing::{debug, error, info};
 use super::protocol::{Socks4Command, Socks4Reply, REP_REQUEST_GRANTED, REP_REQUEST_REJECTED};
 use super::request::Socks4Request;
 
-/// SOCKS4 handler configuration
+/// SOCKS4 处理器配置
+///
+/// 包含 SOCKS4 代理服务器的配置参数。
 #[derive(Debug, Clone)]
 pub struct Socks4Config {
-    /// Bind address for the SOCKS4 server
+    /// SOCKS4 服务器绑定地址
+    ///
+    /// 用于 BIND 命令，当服务器需要主动连接客户端时使用。
     pub bind_addr: String,
-    /// Port to listen on
+
+    /// SOCKS4 服务器监听端口
     pub port: u16,
-    /// Enable SOCKS4a extension (default: true)
+
+    /// 是否启用 SOCKS4a 扩展（支持域名）
+    ///
+    /// SOCKS4a 是 SOCKS4 的扩展，通过特殊标记支持域名解析。
+    /// 默认启用。
     pub enable_socks4a: bool,
 }
 
@@ -31,21 +40,40 @@ impl Default for Socks4Config {
     }
 }
 
-/// SOCKS4 server
+/// SOCKS4 服务器
+///
+/// 负责监听并处理 SOCKS4 客户端连接请求。
 pub struct Socks4Server {
     config: Socks4Config,
 }
 
 impl Socks4Server {
+    /// 创建新的 SOCKS4 服务器
+    ///
+    /// # 参数
+    /// - `config`: 服务器配置
     pub fn new(config: Socks4Config) -> Self {
         Self { config }
     }
 
+    /// 使用默认配置创建服务器
+    ///
+    /// 默认配置：绑定地址 127.0.0.1，端口 1080，启用 SOCKS4a。
     pub fn with_default_config() -> Self {
         Self::new(Socks4Config::default())
     }
 
-    /// Handle an incoming SOCKS4 connection
+    /// 处理 SOCKS4 连接
+    ///
+    /// 处理一个完整的 SOCKS4 客户端连接请求。
+    ///
+    /// # 参数
+    /// - `stream`: 客户端 TCP 连接流
+    ///
+    /// # 处理流程
+    /// 1. 解析 SOCKS4 请求
+    /// 2. 根据命令类型处理（CONNECT 或 BIND）
+    /// 3. 返回响应并建立连接桥接
     pub async fn handle_connection(&self, mut stream: TcpStream) -> std::io::Result<()> {
         // Parse request
         let request = match Socks4Request::parse(&mut stream).await {
@@ -79,7 +107,15 @@ impl Socks4Server {
         }
     }
 
-    /// Handle CONNECT command
+    /// 处理 CONNECT 命令
+    ///
+    /// CONNECT 命令请求代理服务器连接到指定的目标地址。
+    ///
+    /// # 处理流程
+    /// 1. 如果是 SOCKS4a 请求，解析域名并 DNS 解析
+    /// 2. 建立到目标服务器的 TCP 连接
+    /// 3. 发送成功响应
+    /// 4. 桥接客户端和目标服务器的连接
     async fn handle_connect(
         &self,
         mut stream: TcpStream,
@@ -150,7 +186,16 @@ impl Socks4Server {
         self.bridge_connections(stream, target_stream).await
     }
 
-    /// Handle BIND command
+    /// 处理 BIND 命令
+    ///
+    /// BIND 命令用于支持需要服务器主动连接客户端的协议（如 FTP）。
+    ///
+    /// # 处理流程
+    /// 1. 在服务器上创建监听套接字
+    /// 2. 发送第一次响应（包含绑定地址）
+    /// 3. 等待远程服务器连接
+    /// 4. 发送第二次响应（连接建立）
+    /// 5. 桥接连接
     async fn handle_bind(
         &self,
         mut stream: TcpStream,
@@ -228,7 +273,13 @@ impl Socks4Server {
         }
     }
 
-    /// Bridge two connections bidirectionally
+    /// 桥接两个连接（双向数据转发）
+    ///
+    /// 同时在两个 TCP 连接之间双向转发数据。
+    ///
+    /// # 参数
+    /// - `client`: 客户端连接
+    /// - `target`: 目标服务器连接
     async fn bridge_connections(
         &self,
         client: TcpStream,
@@ -244,7 +295,11 @@ impl Socks4Server {
         Ok(())
     }
 
-    /// Send rejection response
+    /// 发送拒绝响应
+    ///
+    /// # 参数
+    /// - `stream`: 客户端连接
+    /// - `reply`: 拒绝原因
     async fn send_rejection(
         &self,
         stream: &mut TcpStream,

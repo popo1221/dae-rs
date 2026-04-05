@@ -1,51 +1,26 @@
-//! Simple Handler trait - a cleaner alternative to ProtocolHandler
+//! 简单 Handler trait - ProtocolHandler 的更简洁替代方案
 //!
-//! This module provides the [`Handler`] trait - a simpler, more ergonomic
-//! alternative to [`ProtocolHandler`]. Unlike ProtocolHandler which uses
-//! [`Context`] for state management, Handler works directly with [`Connection`].
+//! 本模块提供 [`Handler`] trait - 比 [`ProtocolHandler`] 更简单、更符合人体工程学的替代方案。
+//! 与使用 [`Context`] 进行状态管理的 ProtocolHandler 不同，Handler 直接使用 [`Connection`]。
 //!
-//! # Design Philosophy (Inspired by Zed)
+//! # 设计理念 (Zed 风格)
 //!
-//! - **Simple over flexible**: Handler prioritizes ease of use over generality
-//! - **Connection-centric**: Works directly with Connections, not internal Context
-//! - **Built-in stats**: Every handler automatically tracks basic statistics
-//! - **Hot reload support**: Optional reload method for config updates
+//! - **简洁优先**: Handler 优先考虑易用性而非通用性
+//! - **连接中心**: 直接处理 Connection，而非内部 Context
+//! - **内置统计**: 每个处理器自动追踪基本统计信息
+//! - **热重载支持**: 可选的重载方法用于配置更新
 //!
-//! # When to Use Handler vs ProtocolHandler
+//! # 何时使用 Handler vs ProtocolHandler
 //!
-//! Use `Handler` when:
-//! - Building a new protocol handler
-//! - The handler doesn't need complex state management
-//! - You want automatic statistics tracking
+//! 使用 `Handler` 当：
+//! - 构建新的协议处理器
+//! - 处理器不需要复杂的状态管理
+//! - 想要自动统计追踪
 //!
-//! Use `ProtocolHandler` when:
-//! - You need fine-grained control over connection lifecycle
-//! - You're working with existing Context-based code
-//! - You need custom inbound/outbound handling
-//!
-//! # Example
-//!
-//! ```ignore
-//! use async_trait::async_trait;
-//! use dae_proxy::{Handler, Connection, ProxyError, ProtocolType};
-//!
-//! struct MyHandler {
-//!     target: String,
-//! }
-//!
-//! #[async_trait]
-//! impl Handler for MyHandler {
-//!     type Config = MyConfig;
-//!
-//!     fn name(&self) -> &'static str { "my-handler" }
-//!     fn protocol(&self) -> ProtocolType { ProtocolType::Custom("my") }
-//!
-//!     async fn handle(&self, conn: Connection) -> Result<(), ProxyError> {
-//!         // Simple: just handle the connection
-//!         Ok(())
-//!     }
-//! }
-//! ```
+//! 使用 `ProtocolHandler` 当：
+//! - 需要精细控制连接生命周期
+//! - 使用现有的基于 Context 的代码
+//! - 需要自定义入站/出站处理
 
 use async_trait::async_trait;
 use std::sync::atomic::{AtomicU64, Ordering};

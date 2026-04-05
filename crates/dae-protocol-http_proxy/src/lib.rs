@@ -31,7 +31,29 @@ mod consts {
     pub const HTTP_AUTH_PREFIX: &str = "Proxy-Authorization:";
 }
 
-/// HTTP proxy configuration
+/// HTTP 代理服务器配置
+///
+/// 包含代理服务器运行时所需的所有配置参数，包括认证信息、超时设置等。
+///
+/// # 字段说明
+///
+/// - `auth`: 认证凭证元组 `(用户名, 密码)`。若为 `None`，则不启用认证。
+/// - `tcp_timeout_secs`: TCP 连接超时时间（秒），默认 60 秒。
+/// - `allow_all`: 是否允许 CONNECT 到任意地址。若为 `false`，则只允许特定域名。
+///
+/// # 示例
+///
+/// ```rust
+/// // 无认证配置
+/// let config = HttpProxyHandlerConfig::default();
+///
+/// // 带认证配置
+/// let config = HttpProxyHandlerConfig {
+///     auth: Some(("admin".to_string(), "secret".to_string())),
+///     tcp_timeout_secs: 30,
+///     allow_all: true,
+/// };
+/// ```
 #[derive(Debug, Clone)]
 pub struct HttpProxyHandlerConfig {
     /// Authentication credentials (if None, auth is disabled)
@@ -52,25 +74,63 @@ impl Default for HttpProxyHandlerConfig {
     }
 }
 
-/// HTTP proxy handler
+/// HTTP 代理处理器
+///
+/// 负责处理 HTTP CONNECT 代理连接，实现 HTTP 隧道功能。
+/// 该处理器支持 Basic 认证，并能在客户端和远程服务器之间转发数据。
+///
+/// # 工作流程
+///
+/// 1. 读取客户端的 HTTP CONNECT 请求头
+/// 2. 验证 Proxy-Authorization 认证头（如果配置了认证）
+/// 3. 解析 CONNECT 请求中的目标主机和端口
+/// 4. 建立到目标服务器的 TCP 连接
+/// 5. 发送 HTTP 200 响应表示连接建立
+/// 6. 在客户端和远程服务器之间双向转发数据
+///
+/// # 安全说明
+///
+/// - 认证使用 constant-time 比较防止时序攻击
+/// - 建议配合 TLS 使用，因为明文传输的认证信息存在风险
 pub struct HttpProxyHandler {
     config: HttpProxyHandlerConfig,
 }
 
 impl HttpProxyHandler {
-    /// Create a new HTTP proxy handler
+    /// 创建新的 HTTP 代理处理器
+    ///
+    /// # 参数
+    ///
+    /// - `config`: HTTP 代理处理器配置
+    ///
+    /// # 返回值
+    ///
+    /// 返回配置好的 `HttpProxyHandler` 实例
     pub fn new(config: HttpProxyHandlerConfig) -> Self {
         Self { config }
     }
 
-    /// Create with no authentication
+    /// 创建不带认证的 HTTP 代理处理器
+    ///
+    /// # 返回值
+    ///
+    /// 返回使用默认配置（无认证）的 `HttpProxyHandler` 实例
     pub fn new_no_auth() -> Self {
         Self {
             config: HttpProxyHandlerConfig::default(),
         }
     }
 
-    /// Create with Basic authentication
+    /// 创建带 Basic 认证的 HTTP 代理处理器
+    ///
+    /// # 参数
+    ///
+    /// - `username`: Basic 认证用户名
+    /// - `password`: Basic 认证密码
+    ///
+    /// # 返回值
+    ///
+    /// 返回配置了 Basic 认证的 `HttpProxyHandler` 实例
     pub fn new_with_auth(username: &str, password: &str) -> Self {
         Self {
             config: HttpProxyHandlerConfig {
@@ -81,7 +141,31 @@ impl HttpProxyHandler {
         }
     }
 
-    /// Handle an HTTP proxy connection
+    /// 处理 HTTP 代理连接
+    ///
+    /// 这是 HTTP 代理处理器的核心方法，处理一个完整的 HTTP CONNECT 会话。
+    ///
+    /// # 参数
+    ///
+    /// - `self`: 处理器实例的 Arc 引用
+    /// - `client`: 客户端 TCP 流
+    ///
+    /// # 返回值
+    ///
+    /// - `Ok(())`: 连接正常关闭
+    /// - `Err(std::io::Error)`: 处理过程中发生错误
+    ///
+    /// # 错误类型
+    ///
+    /// - `PermissionDenied`: 认证失败
+    /// - `InvalidInput`: 无效的 CONNECT 请求
+    /// - `HostUnreachable`: 无法连接到目标主机
+    /// - `TimedOut`: 连接超时
+    ///
+    /// # 注意
+    ///
+    /// 此方法会消耗 `self`（通过 Arc），处理完成后会通过 `dae_relay::relay_bidirectional`
+    /// 在客户端和远程之间转发数据。
     #[allow(clippy::incompatible_msrv)]
     pub async fn handle(self: Arc<Self>, mut client: TcpStream) -> std::io::Result<()> {
         // Read the request line
@@ -206,14 +290,37 @@ impl HttpProxyHandler {
     }
 }
 
-/// HTTP proxy server
+/// HTTP 代理服务器
+///
+/// 封装了监听端口和处理器，用于接收和管理 HTTP 代理客户端连接。
+/// 服务器在接收到新连接后会 spawn 一个异步任务来处理每个客户端。
+///
+/// # 使用示例
+///
+/// ```rust,ignore
+/// let server = HttpProxyServer::new(addr).await?;
+/// server.start().await?;
+/// ```
 pub struct HttpProxyServer {
     handler: Arc<HttpProxyHandler>,
     listen_addr: SocketAddr,
 }
 
 impl HttpProxyServer {
-    /// Create a new HTTP proxy server
+    /// 创建新的 HTTP 代理服务器（无认证）
+    ///
+    /// # 参数
+    ///
+    /// - `addr`: 服务器监听地址
+    ///
+    /// # 返回值
+    ///
+    /// - `Ok(HttpProxyServer)`: 服务器创建成功
+    /// - `Err(std::io::Error)`: 绑定端口失败
+    ///
+    /// # 注意
+    ///
+    /// 此方法创建的服务器不启用认证，任何客户端都可以连接。
     pub async fn new(addr: SocketAddr) -> std::io::Result<Self> {
         Ok(Self {
             handler: Arc::new(HttpProxyHandler::new_no_auth()),
@@ -221,7 +328,24 @@ impl HttpProxyServer {
         })
     }
 
-    /// Create with custom handler
+    /// 使用自定义处理器创建 HTTP 代理服务器
+    ///
+    /// # 参数
+    ///
+    /// - `addr`: 服务器监听地址
+    /// - `handler`: 自定义的 HTTP 代理处理器
+    ///
+    /// # 返回值
+    ///
+    /// - `Ok(HttpProxyServer)`: 服务器创建成功
+    /// - `Err(std::io::Error)`: 绑定端口失败
+    ///
+    /// # 示例
+    ///
+    /// ```rust,ignore
+    /// let handler = HttpProxyHandler::new_with_auth("admin", "secret");
+    /// let server = HttpProxyServer::with_handler(addr, handler).await?;
+    /// ```
     pub async fn with_handler(
         addr: SocketAddr,
         handler: HttpProxyHandler,
@@ -232,7 +356,24 @@ impl HttpProxyServer {
         })
     }
 
-    /// Start the HTTP proxy server
+    /// 启动 HTTP 代理服务器
+    ///
+    /// 开始监听并接受客户端连接。每个新连接都会由独立的异步任务处理。
+    /// 此方法会一直运行直到发生致命错误或被取消。
+    ///
+    /// # 参数
+    ///
+    /// - `self`: 服务器实例的 Arc 引用
+    ///
+    /// # 返回值
+    ///
+    /// - `Ok(())`: 服务器正常关闭（通常不会发生）
+    /// - `Err(std::io::Error)`: 接受连接时发生错误
+    ///
+    /// # 注意
+    ///
+    /// - 服务器绑定的是 `self.listen_addr`
+    /// - 每个连接的错误只记录日志，不会导致服务器停止
     pub async fn start(self: Arc<Self>) -> std::io::Result<()> {
         let listener = tokio::net::TcpListener::bind(self.listen_addr).await?;
         info!("HTTP proxy server listening on {}", self.listen_addr);

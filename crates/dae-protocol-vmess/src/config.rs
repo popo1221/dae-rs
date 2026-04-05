@@ -1,26 +1,35 @@
-//! VMess configuration types
+//! VMess 配置类型模块
 //!
-//! Server and client configuration structs and target address types.
+//! 本模块包含 VMess 协议所需的配置类型。
 
 use std::net::{IpAddr, Ipv4Addr, Ipv6Addr, SocketAddr};
 use std::time::Duration;
 
 use super::protocol::VmessServerConfig;
 
-/// VMess client configuration
+/// VMess 客户端配置
+///
+/// 定义本地 VMess 客户端的配置信息。
+///
+/// # 字段说明
+/// - `listen_addr`: 本地监听地址（默认: 127.0.0.1:1080）
+/// - `server`: 远程服务器配置
+/// - `tcp_timeout`: TCP 连接超时（默认: 60 秒）
+/// - `udp_timeout`: UDP 会话超时（默认: 30 秒）
 #[derive(Debug, Clone)]
 pub struct VmessClientConfig {
-    /// Local listen address
+    /// 本地监听地址（默认: 127.0.0.1:1080）
     pub listen_addr: SocketAddr,
-    /// Remote server configuration
+    /// 远程服务器配置
     pub server: VmessServerConfig,
-    /// TCP connection timeout
+    /// TCP 连接超时（默认: 60 秒）
     pub tcp_timeout: Duration,
-    /// UDP session timeout
+    /// UDP 会话超时（默认: 30 秒）
     pub udp_timeout: Duration,
 }
 
 impl Default for VmessClientConfig {
+    /// 创建默认配置
     fn default() -> Self {
         Self {
             listen_addr: SocketAddr::from(([127, 0, 0, 1], 1080)),
@@ -31,18 +40,27 @@ impl Default for VmessClientConfig {
     }
 }
 
-/// VMess target address
+/// VMess 目标地址
+///
+/// 表示 VMess 请求的目标地址。
+///
+/// # 变体说明
+/// - `Ipv4(IpAddr)`: IPv4 地址
+/// - `Domain(String, u16)`: 域名和端口
+/// - `Ipv6(IpAddr)`: IPv6 地址
 #[derive(Debug, Clone)]
 pub enum VmessTargetAddress {
-    /// IPv4 address
+    /// IPv4 目标地址
     Ipv4(IpAddr),
-    /// Domain name with port
+    /// 域名目标地址
+    /// 元组: (域名, 端口)
     Domain(String, u16),
-    /// IPv6 address
+    /// IPv6 目标地址
     Ipv6(IpAddr),
 }
 
 impl std::fmt::Display for VmessTargetAddress {
+    /// 格式化地址为字符串
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             VmessTargetAddress::Ipv4(ip) => write!(f, "{ip}"),
@@ -53,7 +71,19 @@ impl std::fmt::Display for VmessTargetAddress {
 }
 
 impl VmessTargetAddress {
-    /// Parse target address from VMess header bytes
+    /// 从字节流解析目标地址
+    ///
+    /// # 参数
+    /// - `payload`: 包含地址类型和数据的字节数组
+    ///
+    /// # 返回
+    /// - `Some((Self, u16))`: 解析成功，返回 (地址, 端口)
+    /// - `None`: 解析失败
+    ///
+    /// # 支持的格式
+    /// - **IPv4** (atyp=0x01): [类型(1)][IP(4)][端口(2)]
+    /// - **域名** (atyp=0x02): [类型(1)][长度(1)][域名(N)][端口(2)]
+    /// - **IPv6** (atyp=0x03): [类型(1)][IP(16)][端口(2)]
     pub fn parse_from_bytes(payload: &[u8]) -> Option<(Self, u16)> {
         if payload.is_empty() {
             return None;
@@ -87,7 +117,7 @@ impl VmessTargetAddress {
             }
             0x03 => {
                 // IPv6: 1 byte type + 16 bytes IP + 2 bytes port
-                if payload.len() < 18 {
+                if payload.len() < 19 {
                     return None;
                 }
                 let ip = IpAddr::V6(Ipv6Addr::new(
@@ -107,7 +137,10 @@ impl VmessTargetAddress {
         }
     }
 
-    /// Convert address to bytes for VMess protocol
+    /// 将目标地址序列化为字节
+    ///
+    /// # 返回
+    /// 包含地址类型前缀和地址的字节向量（不含端口）
     pub fn to_bytes(&self) -> Vec<u8> {
         match self {
             VmessTargetAddress::Ipv4(ip) => {

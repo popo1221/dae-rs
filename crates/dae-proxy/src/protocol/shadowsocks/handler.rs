@@ -1,16 +1,16 @@
-//! Shadowsocks protocol placeholder handler
+//! Shadowsocks 协议占位处理器
 //!
-//! This file provides a placeholder for future Shadowsocks-specific handler implementations.
-//! The main Shadowsocks logic is in `../../shadowsocks.rs`.
+//! 本文件为未来的 Shadowsocks 特定处理器实现提供占位符。
+//! 主要的 Shadowsocks 逻辑在 `../../shadowsocks.rs` 中。
 
 use crate::core::{Context, Result as ProxyResult};
 use crate::protocol::ProtocolHandler;
 use async_trait::async_trait;
 
-/// Shadowsocks protocol handler
+/// Shadowsocks 协议处理器
 ///
-/// This is a placeholder struct that wraps the main Shadowsocks handler
-/// for integration with the protocol registry.
+/// 这是一个占位结构体，用于与协议注册表集成。
+/// 主要的 Shadowsocks 逻辑在 `../../shadowsocks.rs` 中。
 #[derive(Debug)]
 pub struct ShadowsocksProtocolHandler {
     // Future: Shadowsocks-specific configuration

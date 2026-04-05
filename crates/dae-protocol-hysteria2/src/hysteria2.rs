@@ -1,19 +1,25 @@
+//! Hysteria2 协议处理器模块
 //!
-//! Hysteria2 protocol handler
+//! 实现了 Hysteria2 代理协议的核心功能，包括：
+//! - Hysteria2 配置管理
+//! - 客户端 Hello 消息解析
+//! - 服务器 Hello 消息生成
+//! - 密码认证验证
+//! - UDP 数据报中继
 //!
-//! This module implements the Hysteria2 proxy protocol.
+//! # Hysteria2 协议文档
 //!
-//! Hysteria2 Protocol Documentation:
-//! - Uses QUIC (RFC 9000) as the underlying transport
-//! - Authentication via password (simple shared secret)
-//! - Supports obfuscation to bypass deep packet inspection
-//! - Bandwidth-aware congestion control
+//! - 使用 QUIC (RFC 9000) 作为底层传输协议
+//! - 通过密码（共享密钥）进行认证
+//! - 支持混淆以绕过深度包检测
+//! - 基于带宽的拥塞控制
 //!
-//! Protocol flow:
-//! 1. Client sends Hello message with auth frame
-//! 2. Server validates password
-//! 3. Client and server exchange UDP datagrams
-//! 4. Each datagram contains multiplexed stream data
+//! # 协议流程
+//!
+//! 1. 客户端发送 Hello 消息，包含认证帧
+//! 2. 服务器验证密码
+//! 3. 客户端和服务器交换 UDP 数据报
+//! 4. 每个数据报包含多路复用的流数据
 
 use std::net::{IpAddr, Ipv4Addr, Ipv6Addr, SocketAddr};
 use std::sync::Arc;
@@ -23,22 +29,52 @@ use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use tokio::net::{TcpListener, TcpStream};
 use tracing::{error, info, warn};
 
-/// Hysteria2 configuration for server mode
+/// Hysteria2 服务器配置
+///
+/// 配置 Hysteria2 代理服务器的运行参数。
+///
+/// # 字段说明
+///
+/// - `password`: 认证密码，用于验证客户端身份
+/// - `server_name`: TLS SNI 服务器名称
+/// - `obfuscate_password`: 混淆密码（可选），用于绕过 DPI
+/// - `listen_addr`: 监听地址
+/// - `bandwidth_limit`: 带宽限制（bps），0 表示无限制
+/// - `idle_timeout`: QUIC 最大空闲超时时间
+/// - `udp_enabled`: 是否启用 UDP 中继
+///
+/// # 示例
+///
+/// ```rust,ignore
+/// use hysteria2::{Hysteria2Config, Hysteria2Server};
+/// use std::net::SocketAddr;
+/// use std::time::Duration;
+///
+/// let config = Hysteria2Config {
+///     password: "your_password".to_string(),
+///     server_name: "example.com".to_string(),
+///     obfuscate_password: Some("obfs_password".to_string()),
+///     listen_addr: "0.0.0.0:8123".parse().unwrap(),
+///     bandwidth_limit: 0,
+///     idle_timeout: Duration::from_secs(30),
+///     udp_enabled: true,
+/// };
+/// ```
 #[derive(Debug, Clone)]
 pub struct Hysteria2Config {
-    /// Authentication password
+    /// 认证密码，用于验证客户端身份
     pub password: String,
-    /// Server name for TLS (SNI)
+    /// TLS SNI 服务器名称
     pub server_name: String,
-    /// Obfuscation password (optional, for bypassing DPI)
+    /// 混淆密码（可选），用于绕过 DPI 检测
     pub obfuscate_password: Option<String>,
-    /// Listen address
+    /// 监听地址
     pub listen_addr: SocketAddr,
-    /// Bandwidth limit (bps), 0 = unlimited
+    /// 带宽限制（bps），0 表示无限制
     pub bandwidth_limit: u64,
-    /// QUIC max idle timeout
+    /// QUIC 最大空闲超时时间
     pub idle_timeout: Duration,
-    /// Enable UDP
+    /// 是否启用 UDP 中继
     pub udp_enabled: bool,
 }
 
@@ -56,7 +92,17 @@ impl Default for Hysteria2Config {
     }
 }
 
-/// Hysteria2 error types
+/// Hysteria2 错误类型
+///
+/// 定义了 Hysteria2 协议处理过程中可能发生的各种错误。
+///
+/// # 错误类型说明
+///
+/// - `AuthFailed`: 认证失败（密码错误）
+/// - `Protocol`: 协议错误（格式错误、版本不支持等）
+/// - `Quic`: QUIC 相关错误
+/// - `Io`: IO 错误
+/// - `InvalidAddress`: 无效的地址格式
 #[derive(Debug, thiserror::Error)]
 pub enum Hysteria2Error {
     #[error("Authentication failed: {0}")]
@@ -75,35 +121,77 @@ pub enum Hysteria2Error {
     InvalidAddress(String),
 }
 
-/// Hysteria2 frame types
+/// Hysteria2 帧类型
+///
+/// 定义了 Hysteria2 协议中使用的各种帧类型。
+/// 每个帧类型对应一个字节值，用于协议通信。
+///
+/// # 帧类型说明
+///
+/// - `ClientHello`: 客户端你好消息（0x01）
+/// - `ServerHello`: 服务器你好消息（0x02）
+/// - `UdpPacket`: UDP 数据包（0x03）
+/// - `Heartbeat`: 心跳消息（0x04）
+/// - `Disconnect`: 断开连接消息（0x05）
 #[allow(dead_code)]
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 #[repr(u8)]
 pub enum Hysteria2FrameType {
-    /// Client Hello
+    /// 客户端 Hello 消息
     ClientHello = 0x01,
-    /// Server Hello
+    /// 服务器 Hello 消息
     ServerHello = 0x02,
-    /// UDP packet
+    /// UDP 数据包
     UdpPacket = 0x03,
-    /// Heartbeat
+    /// 心跳消息
     Heartbeat = 0x04,
-    /// Disconnect
+    /// 断开连接消息
     Disconnect = 0x05,
 }
 
-/// Hysteria2 address types
+/// Hysteria2 地址类型
+///
+/// 表示 Hysteria2 协议中支持的地址类型。
+/// 可以是 IPv4、IPv6 或域名地址。
+///
+/// # 地址类型
+///
+/// - `Ip(IpAddr)`: IP 地址（IPv4 或 IPv6）
+/// - `Domain(String, u16)`: 域名地址和端口
+///
+/// # 字节编码格式
+///
+/// - `0x01`: IPv4，后跟 4 字节 IP + 2 字节端口
+/// - `0x02`: 域名，后跟 1 字节长度 + 域名字节 + 2 字节端口
+/// - `0x03`: IPv6，后跟 16 字节 IP + 2 字节端口
 #[allow(dead_code)]
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Hysteria2Address {
-    /// IPv4 address
+    /// IPv4 地址
     Ip(IpAddr),
-    /// Domain name with port
+    /// 域名和端口
     Domain(String, u16),
 }
 
 impl Hysteria2Address {
-    /// Parse address from bytes
+    /// 从字节数组解析地址
+    ///
+    /// 根据地址类型字节解析完整的地址信息。
+    ///
+    /// # 参数
+    ///
+    /// - `data`: 包含地址数据的字节数组
+    ///
+    /// # 返回值
+    ///
+    /// - `Ok((Hysteria2Address, usize))`: 解析成功，返回地址和消耗的字节数
+    /// - `Err(Hysteria2Error)`: 解析失败
+    ///
+    /// # 支持的地址类型
+    ///
+    /// - `0x01`: IPv4（需要 7 字节）
+    /// - `0x02`: 域名（长度可变）
+    /// - `0x03`: IPv6（需要 19 字节）
     pub fn parse(data: &[u8]) -> Result<(Self, usize), Hysteria2Error> {
         if data.is_empty() {
             return Err(Hysteria2Error::InvalidAddress("Empty data".to_string()));
@@ -165,7 +253,12 @@ impl Hysteria2Address {
         }
     }
 
-    /// Encode address to bytes
+    /// 将地址编码为字节数组
+    ///
+    /// # 返回值
+    ///
+    /// 返回编码后的字节数组。
+    /// 编码格式与 `parse` 方法兼容。
     pub fn encode(&self) -> Vec<u8> {
         let mut buf = Vec::new();
         match self {
@@ -192,41 +285,87 @@ impl Hysteria2Address {
     }
 }
 
-/// Hysteria2 client hello message
+/// Hysteria2 客户端 Hello 消息
+///
+/// 客户端在建立连接时发送的第一个消息，包含认证信息。
+///
+/// # 字段说明
+///
+/// - `version`: 协议版本（Hysteria2 应为 2）
+/// - `password`: 认证密码（UTF-8 编码）
+/// - `local_addr`: 请求的本地地址（可选）
 #[allow(dead_code)]
 #[derive(Debug, Clone)]
 pub struct Hysteria2ClientHello {
-    /// Protocol version (2 for Hysteria2)
+    /// 协议版本（Hysteria2 应为 2）
     pub version: u8,
-    /// Auth password (UTF-8)
+    /// 认证密码（UTF-8 编码）
     pub password: String,
-    /// Requested local address (optional)
+    /// 请求的本地地址（可选）
     pub local_addr: Option<Hysteria2Address>,
 }
 
-/// Hysteria2 server hello message
+/// Hysteria2 服务器 Hello 消息
+///
+/// 服务器响应客户端 Hello 的消息，表示认证结果和会话信息。
+///
+/// # 字段说明
+///
+/// - `version`: 协议版本（应为 2）
+/// - `auth_ok`: 认证是否成功
+/// - `session_id`: 服务器分配的会话 ID
 #[derive(Debug, Clone)]
 pub struct Hysteria2ServerHello {
-    /// Protocol version (2 for Hysteria2)
+    /// 协议版本（应为 2）
     pub version: u8,
-    /// Whether auth was successful
+    /// 认证是否成功
     pub auth_ok: bool,
-    /// Server assigned session ID
+    /// 服务器分配的会话 ID
     pub session_id: u64,
 }
 
-/// Hysteria2 handler for managing client connections
+/// Hysteria2 处理器
+///
+/// 负责处理 Hysteria2 客户端连接的核心处理器。
+/// 管理认证、协议解析和数据转发。
+///
+/// # 工作流程
+///
+/// 1. 读取并解析客户端 Hello 消息
+/// 2. 验证密码认证
+/// 3. 发送服务器 Hello 响应
+/// 4. 处理 UDP 数据报中继
 pub struct Hysteria2Handler {
     config: Hysteria2Config,
 }
 
 impl Hysteria2Handler {
-    /// Create a new Hysteria2 handler
+    /// 创建新的 Hysteria2 处理器
+    ///
+    /// # 参数
+    ///
+    /// - `config`: Hysteria2 配置
+    ///
+    /// # 返回值
+    ///
+    /// 返回配置好的 `Hysteria2Handler` 实例
     pub fn new(config: Hysteria2Config) -> Self {
         Self { config }
     }
 
-    /// Handle an incoming Hysteria2 client connection
+    /// 处理到来的 Hysteria2 客户端连接
+    ///
+    /// 处理一个完整的 Hysteria2 客户端会话。
+    ///
+    /// # 参数
+    ///
+    /// - `self`: 处理器引用
+    /// - `stream`: 客户端 TCP 流
+    ///
+    /// # 返回值
+    ///
+    /// - `Ok(())`: 处理成功完成
+    /// - `Err(Hysteria2Error)`: 处理过程中发生错误
     pub async fn handle(&self, mut stream: TcpStream) -> Result<(), Hysteria2Error> {
         // Read client hello
         let mut hello_buf = [0u8; 1024];
@@ -338,14 +477,33 @@ impl Hysteria2Handler {
     }
 }
 
-/// Hysteria2 server for accepting client connections
+/// Hysteria2 服务器
+///
+/// 用于接收和管理 Hysteria2 客户端连接的服务器。
+/// 在接收到新连接后会 spawn 异步任务处理每个客户端。
+///
+/// # 使用示例
+///
+/// ```rust,ignore
+/// let server = Hysteria2Server::new(config).await?;
+/// server.serve().await?;
+/// ```
 pub struct Hysteria2Server {
     config: Hysteria2Config,
     listener: Option<TcpListener>,
 }
 
 impl Hysteria2Server {
-    /// Create a new Hysteria2 server
+    /// 创建新的 Hysteria2 服务器
+    ///
+    /// # 参数
+    ///
+    /// - `config`: Hysteria2 配置
+    ///
+    /// # 返回值
+    ///
+    /// - `Ok(Hysteria2Server)`: 服务器创建成功
+    /// - `Err(Hysteria2Error)`: 绑定端口失败
     pub async fn new(config: Hysteria2Config) -> Result<Self, Hysteria2Error> {
         let listener = TcpListener::bind(config.listen_addr).await?;
         info!("Hysteria2 server listening on {}", config.listen_addr);
@@ -356,7 +514,15 @@ impl Hysteria2Server {
         })
     }
 
-    /// Start the server
+    /// 启动服务器
+    ///
+    /// 开始监听并接受客户端连接。
+    /// 此方法会一直运行直到发生致命错误或被取消。
+    ///
+    /// # 返回值
+    ///
+    /// - `Ok(())`: 服务器正常关闭
+    /// - `Err(Hysteria2Error)`: 发生错误
     pub async fn serve(self) -> Result<(), Hysteria2Error> {
         let listener = self
             .listener

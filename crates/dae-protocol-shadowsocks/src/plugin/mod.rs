@@ -1,11 +1,11 @@
-//! Shadowsocks plugin modules
+//! Shadowsocks 插件模块
 //!
-//! This module provides obfuscation plugins for Shadowsocks traffic.
+//! 本模块提供 Shadowsocks 流量的混淆插件：
 //!
-//! # Available Plugins
+//! # 可用插件
 //!
-//! - [`obfs`] - simple-obfs plugin (HTTP and TLS obfuscation)
-//! - [`v2ray`] - v2ray-plugin for WebSocket-based obfuscation
+//! - [`obfs`] - simple-obfs 插件（HTTP 和 TLS 混淆）
+//! - [`v2ray`] - v2ray-plugin 用于 WebSocket 混淆传输
 
 pub mod obfs;
 pub mod v2ray;

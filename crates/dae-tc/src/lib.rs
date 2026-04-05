@@ -76,44 +76,164 @@ mod packet;
 use maps::idx;
 use packet::*;
 
-/// Global configuration map
+/// 全局配置 Map
+///
+/// 类型：[`Array<ConfigEntry>`]
+/// 容量：1 个元素
+///
+/// # 用途
+///
+/// 存储全局配置，目前只有一个条目：
+/// - `enabled = 1`：代理启用
+/// - `enabled = 0`：代理禁用（所有包透传 TC_ACT_OK）
+///
+/// # 注意
+///
+/// 与 dae-xdp 的 CONFIG 是同一个概念，但 dae-xdp 和 dae-tc 运行在不同层级，
+/// 两者可以通过各自的 CONFIG Map 独立控制。
 #[map]
 static CONFIG: Array<ConfigEntry> = Array::with_max_entries(1, 0);
 
-/// Session tracking map (5-tuple to session state)
+/// 连接会话跟踪 Map
+///
+/// 类型：[`HashMap<SessionKey, SessionEntry>`]
+/// 最大容量：65536 个连接
+///
+/// # 用途
+///
+/// 跟踪 TCP/UDP 连接状态，比 dae-xdp 更详细：
+/// - 支持 TCP/UDP 端口解析
+/// - 记录每个连接的包计数、字节计数
+/// - 记录连接建立时间和最后活动时间（纳秒级精度）
+///
+/// # 5 元组 SessionKey
+///
+/// `(src_ip, dst_ip, src_port, dst_port, proto)`
+/// - `src_ip`, `dst_ip`：源/目标 IP（网络字节序）
+/// - `src_port`, `dst_port`：源/目标端口（网络字节序）
+/// - `proto`：协议号（6=TCP, 17=UDP）
+///
+/// # 与 dae-xdp SESSIONS 的区别
+///
+/// - dae-xdp：仅记录 IPv4 头部信息（无端口），用于粗筛
+/// - dae-tc：完整 5 元组，更精细化的连接跟踪
 #[map]
 static SESSIONS: HashMap<SessionKey, SessionEntry> = HashMap::with_max_entries(65536, 0);
 
-/// Routing rules map (LPM trie for CIDR matching)
+/// 路由规则 Map（LPM Trie for CIDR 匹配）
+///
+/// 类型：[`LpmTrie<u32, RoutingEntry>`]
+/// 最大容量：65536 条规则
+///
+/// # 用途
+///
+/// 存储 CIDR 路由规则，决定每个数据包的处理动作：
+/// - `action::PASS`：透传，不经过代理
+/// - `action::REDIRECT`：重定向（设置 skb mark 为 route_id，用户态读取后处理）
+/// - `action::DROP`：丢弃（返回 TC_ACT_SHOT）
+///
+/// # LPM 查询特性
+///
+/// 内核 LpmTrie 自动做最长前缀匹配，例如：
+/// - 规则 `192.168.1.0/24` → 匹配 `192.168.1.x` 所有地址
+/// - 规则 `192.168.0.0/16` → 匹配 `192.168.x.y` 所有地址
+/// - 查询 `192.168.1.100` → 精确匹配 /24（优于 /16）
+///
+/// # 与 dae-xdp ROUTING 的区别
+///
+/// - dae-xdp：简化版，仅做 IP 层分类
+/// - dae-tc：可结合端口信息做更细粒度的规则匹配（通过 DNS_MAP 等辅助判断）
 #[map]
 static ROUTING: LpmTrie<u32, RoutingEntry> = LpmTrie::with_max_entries(65536, 0);
 
-/// DNS mapping map (domain name hash to DNS mapping entry)
+/// DNS 映射 Map
+///
+/// 类型：[`HashMap<u64, DnsMapEntry>`]
+/// 最大容量：65536 条
+///
+/// # 用途
+///
+/// 存储域名到 IP 地址的映射关系，用于基于域名的路由决策：
+/// - 键：域名 DJB2 哈希（64位）
+/// - 值：`DnsMapEntry { ip, expire_time, domain_len, domain }`
+///
+/// # 超时机制
+///
+/// `expire_time` 字段存储过期时间戳（jiffies），
+/// 用户态程序应定期清理过期条目或检查 `is_expired()`。
+///
+/// # 使用场景
+///
+/// 1. 用户态拦截 DNS 请求，记录 `domain → resolved_ip` 映射
+/// 2. eBPF 在数据包处理时查询 `DNS_MAP`，根据目标 IP 查对应域名
+/// 3. 若命中 BLOCK 规则对应的域名，则 DROP 相关流量
 #[map]
 static DNS_MAP: HashMap<u64, DnsMapEntry> = HashMap::with_max_entries(65536, 0);
 
-/// IP to domain mapping (reverse lookup for blocked domains)
+/// IP → 域名反向映射 Map
+///
+/// 类型：[`HashMap<u32, u64>`]
+/// 最大容量：65536 条
+///
+/// # 用途
+///
+/// 提供从 IP 地址到域名的反向查询能力：
+/// - 键：IP 地址（网络字节序，u32）
+/// - 值：域名哈希（与 DNS_MAP 相同算法）
+///
+/// # 使用场景
+///
+/// 当只知道目标 IP（而非域名）时，通过本 Map 查找对应域名：
+/// 1. 查 `IP_DOMAIN_MAP[ip]`，得到域名哈希
+/// 2. 查 `DNS_MAP[hash]`，得到 `DnsMapEntry`
+/// 3. 结合域名信息做路由决策
 #[map]
 static IP_DOMAIN_MAP: HashMap<u32, u64> = HashMap::with_max_entries(65536, 0);
 
-/// Statistics map (per-CPU counters)
+/// 统计计数 Map
+///
+/// 类型：[`PerCpuArray<StatsEntry>`]
+/// 容量：16 个统计槽
+///
+/// # 用途
+///
+/// 按协议类型统计流量：
+/// - `idx::TCP`：TCP 包统计
+/// - `idx::UDP`：UDP 包统计
+/// - `idx::OTHER`：其他协议统计
+///
+/// # PerCpuArray 优势
+///
+/// 每个 CPU 核心独立计数，无锁原子更新，极适合高频流量处理。
+/// TC 程序在每个包处理路径上执行统计更新，开销极小。
 #[map]
 static STATS: PerCpuArray<StatsEntry> = PerCpuArray::with_max_entries(16, 0);
 
-/// TC program entry point
+/// TC 程序入口点
 ///
-/// This function is called for each packet entering the interface via the
-/// clsact qdisc. The kernel passes a raw sk_buff pointer, which we wrap
-/// in a TcContext for easier access.
+/// 挂载在 `clsact` qdisc 上的 eBPF 分类器，每个经过网卡的包都会触发本函数。
+/// 内核传递原始 `__sk_buff` 指针，aya_ebpf 将其包装为 `TcContext`。
 ///
-/// # Arguments
+/// # 参数
 ///
-/// * `ctx` - Raw pointer to __sk_buff from the kernel
+/// * `ctx` - 内核传递的 `__sk_buff` 原始指针的包装
 ///
-/// # Returns
+/// # 返回值
 ///
-/// * `TC_ACT_OK` (1) - Continue processing the packet normally
-/// * `TC_ACT_SHOT` (2) - Drop the packet
+/// * `TC_ACT_OK (1)`：继续正常处理数据包（透传）
+/// * `TC_ACT_SHOT (2)`：丢弃数据包
+///
+/// # eBPF 程序签名要求
+///
+/// TC eBPF 程序的函数签名必须为 `extern "C" fn(*mut __sk_buff) -> i32`。
+/// `#[link_section = "classifier"]` 将本函数放到 eBPF 对象的 `.classifier` 段，
+/// 供 TC 基础设施加载和绑定。
+///
+/// # Safety
+///
+/// - 本函数由内核调用，上下文指针由内核保证有效
+/// - 内部 `TcContext::new()` 包装 raw pointer，不执行额外内存分配
+/// - 若 `tc_prog` 返回 `Err`，默认返回 `TC_ACT_OK`（保守策略，不丢弃）
 #[no_mangle]
 #[link_section = "classifier"]
 pub extern "C" fn tc_prog_main(ctx: *mut __sk_buff) -> i32 {
@@ -124,7 +244,46 @@ pub extern "C" fn tc_prog_main(ctx: *mut __sk_buff) -> i32 {
     }
 }
 
-/// Main TC program logic
+/// TC 程序主逻辑
+///
+/// 完整数据包处理流程：解析 Ethernet → 解析 IP → 解析 TCP/UDP → 会话跟踪 → 路由查询 → 统计 → 执行动作。
+///
+/// # 参数
+///
+/// * `ctx` - TC 上下文，包含 `sk_buff` 数据包指针和边界信息
+///
+/// # 返回值
+///
+/// - `Ok(i32)`：返回 TC action（`TC_ACT_OK` 或 `TC_ACT_SHOT`）
+/// - `Err(())`：解析失败或异常，返回 `TC_ACT_OK`（保守策略）
+///
+/// # 数据包处理步骤
+///
+/// 1. **解析 Ethernet 头**：获取 EtherType，判断 IPv4 或 VLAN
+/// 2. **VLAN 处理**：若存在 802.1Q VLAN 标签，提取实际 EtherType
+/// 3. **解析 IPv4 头**：提取 src_ip、dst_ip、protocol、header_len
+/// 4. **提取端口**（TCP/UDP）：
+///    - TCP：解析 TcpHdr，获取 src_port、dst_port
+///    - UDP：解析 UdpHdr，获取 src_port、dst_port
+///    - 其他协议：端口设为 0
+/// 5. **会话管理**：
+///    - 查询 SESSIONS，存在则更新（包计数+1、最后时间）
+///    - 不存在则创建新会话（state=NEW，MAC 地址，时间戳）
+/// 6. **路由查询**：调用 `lookup_routing(dst_ip)` 查找 LPM 规则
+/// 7. **更新会话路由 ID**：将匹配规则的 route_id 写入会话
+/// 8. **统计计数**：
+///    - 按协议类型（TCP/UDP/OTHER）更新对应槽的 STATS
+///    - 原子递增 packets 和 bytes
+/// 9. **执行动作**：
+///    - PASS → TC_ACT_OK（包正常通过）
+///    - REDIRECT → 设置 skb mark = route_id → TC_ACT_OK（用户态读取 mark 处理）
+///    - DROP → TC_ACT_SHOT（丢弃）
+///
+/// # Safety
+///
+/// - `unsafe { *hdr }` 解引用前，解析函数已通过边界检查验证
+/// - `bpf_ktime_get_ns()` 是内核 BPF helper，始终返回有效时间戳
+/// - `STATS.get_ptr_mut()` 在有效 Map 索引范围内使用是安全的
 fn tc_prog(ctx: &mut TcContext) -> Result<i32, ()> {
     // Parse Ethernet header
     let eth = match EthHdr::from_ctx(ctx) {

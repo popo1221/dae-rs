@@ -1,9 +1,8 @@
-//! SOCKS5 command processing (RFC 1928)
+//! SOCKS5 命令处理模块（RFC 1928）
 //!
-//! Handles CONNECT (0x01), BIND (0x02), and UDP ASSOCIATE (0x03) commands.
+//! 处理 CONNECT（0x01）、BIND（0x02）和 UDP ASSOCIATE（0x03）命令。
 
 use std::net::{Ipv4Addr, SocketAddr};
-use std::sync::Arc;
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use tokio::net::TcpStream;
 use tracing::info;
@@ -12,15 +11,28 @@ use super::address::Socks5Address;
 use super::consts;
 use super::reply::Socks5Reply;
 
-/// SOCKS5 command
+/// SOCKS5 命令类型
+///
+/// 定义 SOCKS5 协议支持的命令。
 #[derive(Debug, Clone, Copy)]
 pub enum Socks5Command {
+    /// CONNECT 命令：请求连接到目标服务器
     Connect,
+    /// BIND 命令：请求服务器绑定地址并等待连接
     Bind,
+    /// UDP ASSOCIATE 命令：请求建立 UDP 代理
     UdpAssociate,
 }
 
 impl Socks5Command {
+    /// 从字节值解析命令
+    ///
+    /// # 参数
+    /// - `v`: 原始字节值
+    ///
+    /// # 返回值
+    /// - `Some(Socks5Command)`: 有效的命令
+    /// - `None`: 无效的命令码
     pub fn from_u8(v: u8) -> Option<Self> {
         match v {
             consts::CMD_CONNECT => Some(Socks5Command::Connect),
@@ -31,14 +43,23 @@ impl Socks5Command {
     }
 }
 
-/// Command handler for SOCKS5 commands
+/// SOCKS5 命令处理器
+///
+/// 负责处理 SOCKS5 协议的请求阶段。
 pub struct CommandHandler {
+    /// TCP 超时时间（秒）
     tcp_timeout_secs: u64,
+    /// UDP 接收缓冲区大小（可选）
     udp_rcvbuf: Option<usize>,
+    /// UDP 超时时间（秒）
     udp_timeout_secs: u64,
 }
 
 impl CommandHandler {
+    /// 创建新的命令处理器
+    ///
+    /// # 参数
+    /// - `tcp_timeout_secs`: TCP 连接超时时间
     pub fn new(tcp_timeout_secs: u64) -> Self {
         Self {
             tcp_timeout_secs,
@@ -47,19 +68,37 @@ impl CommandHandler {
         }
     }
 
-    /// Set UDP receive buffer size
+    /// 设置 UDP 接收缓冲区大小
+    ///
+    /// # 参数
+    /// - `size`: 缓冲区大小（字节）
     pub fn with_udp_rcvbuf(mut self, size: usize) -> Self {
         self.udp_rcvbuf = Some(size);
         self
     }
 
-    /// Set UDP timeout in seconds
+    /// 设置 UDP 超时时间
+    ///
+    /// # 参数
+    /// - `secs`: 超时时间（秒）
     pub fn with_udp_timeout(mut self, secs: u64) -> Self {
         self.udp_timeout_secs = secs;
         self
     }
 
-    /// Handle SOCKS5 request (phase 3)
+    /// 处理 SOCKS5 请求（阶段3）
+    ///
+    /// 解析客户端请求并执行对应的命令。
+    ///
+    /// # 参数
+    /// - `client`: 客户端 TCP 流
+    ///
+    /// # SOCKS5 请求格式
+    ///
+    /// ```
+    /// |VER |CMD |RSV |ATYP|  DST.ADDR   |  DST.PORT   |
+    /// | 1  | 1  | 1  | 1  | Variable   |      2      |
+    /// ```
     pub async fn handle_request(&self, mut client: TcpStream) -> std::io::Result<()> {
         // Read request: VER (1) + CMD (1) + RSV (1) + ATYP (1) + DST.ADDR + DST.PORT (2)
         let mut header = [0u8; 4];
@@ -113,7 +152,16 @@ impl CommandHandler {
         }
     }
 
-    /// Handle CONNECT command
+    /// 处理 CONNECT 命令
+    ///
+    /// CONNECT 命令请求代理服务器连接到指定的目标地址。
+    ///
+    /// # 处理流程
+    /// 1. 解析目标地址（IPv4/IPv6/域名）
+    /// 2. 如果是域名，进行 DNS 解析
+    /// 3. 建立到目标服务器的 TCP 连接
+    /// 4. 发送成功响应
+    /// 5. 桥接客户端和目标服务器的连接
     #[allow(clippy::incompatible_msrv)]
     pub async fn handle_connect(
         &self,
@@ -206,12 +254,27 @@ impl CommandHandler {
         relay(client, remote).await
     }
 
-    /// Handle UDP ASSOCIATE command
+    /// 处理 UDP ASSOCIATE 命令
     ///
-    /// RFC 1928: The UDP ASSOCIATE command requests the server to set up a UDP relay
-    /// to handle UDP datagrams. The client sends the initial request, and the server
-    /// responds with a UDP relay address. The TCP connection remains open to manage
-    /// the UDP relay lifecycle.
+    /// UDP ASSOCIATE 命令请求服务器设置 UDP 转发以处理 UDP 数据报。
+    ///
+    /// # RFC 1928 说明
+    ///
+    /// UDP ASSOCIATE 命令请求服务器设置 UDP 转发来处理 UDP 数据报。
+    /// 客户端发送初始请求，服务器返回 UDP 转发地址。
+    /// TCP 连接保持打开状态以管理 UDP 转发生命周期。
+    ///
+    /// # 参数
+    /// - `client`: 客户端 TCP 连接
+    /// - `dst_addr`: 客户端期望的 UDP 转发地址（通常被忽略）
+    ///
+    /// # 注意
+    ///
+    /// 这是简化实现，实际的 UDP 转发需要：
+    /// - UDP 套接字接收来自客户端的数据报
+    /// - 解析 SOCKS5 UDP 头（RSV, FRAG, ATYP, DST.ADDR, DST.PORT）
+    /// - 转发到目标地址
+    /// - 返回响应到客户端
     pub async fn handle_udp_associate(
         &self,
         mut client: TcpStream,
@@ -253,7 +316,19 @@ impl CommandHandler {
         Ok(())
     }
 
-    /// Send SOCKS5 reply
+    /// 发送 SOCKS5 回复
+    ///
+    /// # 参数
+    /// - `client`: 客户端连接
+    /// - `reply`: 回复状态
+    /// - `bind_addr`: 绑定地址（服务器分配的地址）
+    ///
+    /// # 回复格式
+    ///
+    /// ```
+    /// |VER |REP |RSV |ATYP|  BND.ADDR   |  BND.PORT   |
+    /// | 1  | 1  | 1  | 1  | Variable   |      2      |
+    /// ```
     pub async fn send_reply(
         &self,
         client: &mut TcpStream,

@@ -1,24 +1,24 @@
-//! Shadowsocks simple-obfs plugin
+//! Shadowsocks simple-obfs 插件
 //!
-//! Implements simple-obfs protocol for Shadowsocks traffic obfuscation.
-//! simple-obfs makes Shadowsocks traffic look like regular HTTP or TLS.
+//! 实现 simple-obfs 协议，用于 Shadowsocks 流量的混淆。
+//! simple-obfs 使 Shadowsocks 流量看起来像普通的 HTTP 或 TLS 流量。
 //!
-//! Protocol spec: https://github.com/shadowsocks/simple-obfs
+//! 协议规范：https://github.com/shadowsocks/simple-obfs
 //!
-//! # Obfuscation Types
+//! # 混淆类型
 //!
-//! 1. **http**: Wraps traffic in HTTP requests
-//! 2. **tls**: Wraps traffic in TLS ClientHello
+//! 1. **http**: 将流量包装在 HTTP 请求中
+//! 2. **tls**: 将流量包装在 TLS ClientHello 中
 //!
-//! # Protocol Flow (HTTP mode)
+//! # HTTP 模式协议流程
 //!
-//! Client -> [obfs HTTP] -> [Shadowsocks AEAD] -> Server
-//! Client -> [HTTP GET/POST] -> Server -> [strip HTTP] -> [Shadowsocks AEAD]
+//! 客户端 -> [obfs HTTP 包装] -> [Shadowsocks AEAD 加密] -> 服务器
+//! 客户端 -> [HTTP GET/POST 请求] -> 服务器 -> [剥离 HTTP] -> [Shadowsocks AEAD 解密]
 //!
-//! # Protocol Flow (TLS mode)
+//! # TLS 模式协议流程
 //!
-//! Client -> [obfs TLS] -> [Shadowsocks AEAD] -> Server
-//! Client -> [TLS ClientHello] -> Server -> [strip TLS] -> [Shadowsocks AEAD]
+//! 客户端 -> [obfs TLS 包装] -> [Shadowsocks AEAD 加密] -> 服务器
+//! 客户端 -> [TLS ClientHello] -> 服务器 -> [剥离 TLS] -> [Shadowsocks AEAD 解密]
 
 use std::io::ErrorKind;
 use std::time::Duration;
@@ -27,17 +27,26 @@ use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use tokio::net::TcpStream;
 use tracing::{debug, warn};
 
-/// simple-obfs plugin mode
+/// simple-obfs 插件模式
+///
+/// 定义 simple-obfs 支持的两种混淆模式：
+/// - Http：伪装为 HTTP 流量
+/// - Tls：伪装为 TLS 流量
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ObfsMode {
-    /// HTTP mode - traffic looks like HTTP GET/POST
+    /// HTTP 模式 - 流量看起来像 HTTP GET/POST 请求
     Http,
-    /// TLS mode - traffic looks like TLS ClientHello
+    /// TLS 模式 - 流量看起来像 TLS ClientHello
     Tls,
 }
 
 #[allow(clippy::should_implement_trait)]
 impl ObfsMode {
+    /// 从字符串解析混淆模式
+    ///
+    /// 支持的格式：
+    /// - "http", "obfs_http" -> Http
+    /// - "tls", "obfs_tls" -> Tls
     pub fn from_str(s: &str) -> Option<Self> {
         match s.to_lowercase().as_str() {
             "http" | "obfs_http" => Some(ObfsMode::Http),
@@ -47,20 +56,27 @@ impl ObfsMode {
     }
 }
 
-/// simple-obfs configuration
+/// simple-obfs 配置
+///
+/// 包含 simple-obfs 插件的所有配置参数。
 #[derive(Debug, Clone)]
 pub struct ObfsConfig {
-    /// Obfuscation mode
+    /// 混淆模式
     pub mode: ObfsMode,
-    /// Host to connect to (for HTTP Host header or TLS SNI)
+    /// 连接目标主机（用于 HTTP Host 头或 TLS SNI）
     pub host: String,
-    /// Path for HTTP mode
+    /// HTTP 模式下的路径
     pub path: String,
-    /// Connection timeout
+    /// 连接超时时间
     pub timeout: Duration,
 }
 
 impl ObfsConfig {
+    /// 创建新的配置
+    ///
+    /// # 参数
+    /// - `mode`: 混淆模式
+    /// - `host`: 目标主机
     pub fn new(mode: ObfsMode, host: &str) -> Self {
         Self {
             mode,
@@ -70,6 +86,11 @@ impl ObfsConfig {
         }
     }
 
+    /// 创建 HTTP 混淆配置
+    ///
+    /// # 参数
+    /// - `host`: 伪装的目标主机域名
+    /// - `path`: HTTP 请求路径
     pub fn http(host: &str, path: &str) -> Self {
         Self {
             mode: ObfsMode::Http,
@@ -79,6 +100,10 @@ impl ObfsConfig {
         }
     }
 
+    /// 创建 TLS 混淆配置
+    ///
+    /// # 参数
+    /// - `host`: 伪装的目标主机域名（用于 TLS SNI）
     pub fn tls(host: &str) -> Self {
         Self {
             mode: ObfsMode::Tls,
@@ -89,17 +114,33 @@ impl ObfsConfig {
     }
 }
 
-/// simple-obfs HTTP obfuscator
+/// simple-obfs HTTP 混淆器
+///
+/// 将 Shadowsocks 流量包装在 HTTP GET 请求中，使其看起来像普通的 Web 浏览流量。
 pub struct ObfsHttp {
     config: ObfsConfig,
 }
 
 impl ObfsHttp {
+    /// 创建 HTTP 混淆器
     pub fn new(config: ObfsConfig) -> Self {
         Self { config }
     }
 
-    /// Connect to server with HTTP obfuscation
+    /// 使用 HTTP 混淆连接到服务器
+    ///
+    /// # 参数
+    /// - `server_addr`: 服务器地址
+    ///
+    /// # 返回值
+    /// - `Ok(ObfsStream)`: 混淆后的连接流
+    /// - `Err`: 连接或握手失败
+    ///
+    /// # 握手过程
+    /// 1. 建立 TCP 连接到服务器
+    /// 2. 发送混淆后的 HTTP GET 请求
+    /// 3. 读取服务器响应
+    /// 4. 验证响应并返回混淆流
     pub async fn connect(&self, server_addr: &str) -> std::io::Result<ObfsStream> {
         let mut stream = TcpStream::connect(server_addr).await?;
 
@@ -130,6 +171,9 @@ impl ObfsHttp {
         Ok(ObfsStream::new(stream))
     }
 
+    /// 构建 HTTP 混淆请求
+    ///
+    /// 构造一个看起来像正常浏览器发送的 HTTP GET 请求。
     fn build_http_request(&self) -> String {
         // Simple HTTP GET request that looks like browsing
         format!(
@@ -145,17 +189,33 @@ impl ObfsHttp {
     }
 }
 
-/// simple-obfs TLS obfuscator
+/// simple-obfs TLS 混淆器
+///
+/// 将 Shadowsocks 流量包装在 TLS ClientHello 中，使其看起来像 TLS 握手流量。
 pub struct ObfsTls {
     config: ObfsConfig,
 }
 
 impl ObfsTls {
+    /// 创建 TLS 混淆器
     pub fn new(config: ObfsConfig) -> Self {
         Self { config }
     }
 
-    /// Connect to server with TLS obfuscation
+    /// 使用 TLS 混淆连接到服务器
+    ///
+    /// # 参数
+    /// - `server_addr`: 服务器地址
+    ///
+    /// # 返回值
+    /// - `Ok(ObfsStream)`: 混淆后的连接流
+    /// - `Err`: 连接或握手失败
+    ///
+    /// # 握手过程
+    /// 1. 建立 TCP 连接到服务器
+    /// 2. 发送混淆后的 TLS ClientHello
+    /// 3. 读取服务器响应（或超时）
+    /// 4. 返回混淆流
     pub async fn connect(&self, server_addr: &str) -> std::io::Result<ObfsStream> {
         let mut stream = TcpStream::connect(server_addr).await?;
 
@@ -193,6 +253,14 @@ impl ObfsTls {
         Ok(ObfsStream::new(stream))
     }
 
+    /// 构建 TLS ClientHello 混淆数据
+    ///
+    /// 构造一个简化的 TLS ClientHello 消息，包含：
+    /// - TLS 记录层
+    /// - 握手类型和版本
+    /// - 随机数
+    /// - 密码套件
+    /// - SNI 扩展（使用配置的 host 参数）
     fn build_tls_client_hello(&self) -> std::io::Result<Vec<u8>> {
         use rand::Rng;
 
@@ -275,6 +343,9 @@ impl ObfsTls {
         Ok(client_hello)
     }
 
+    /// 添加 SNI 扩展到 ClientHello
+    ///
+    /// SNI（Server Name Indication）扩展用于指定目标服务器域名。
     fn add_sni_extension(&self, buffer: &mut Vec<u8>) -> std::io::Result<()> {
         // Extension type: server_name (0x0000)
         buffer.push(0x00);
@@ -308,29 +379,36 @@ impl ObfsTls {
     }
 }
 
-/// Obfuscated stream wrapper
+/// 混淆后的流封装
+///
+/// 封装 TCP 流，提供简化的读写接口。
 #[derive(Debug)]
 pub struct ObfsStream {
     stream: TcpStream,
 }
 
 impl ObfsStream {
+    /// 创建混淆流封装
     pub fn new(stream: TcpStream) -> Self {
         Self { stream }
     }
 
+    /// 获取内部的 TCP 流
     pub fn into_inner(self) -> TcpStream {
         self.stream
     }
 
+    /// 获取内部 TCP 流的引用
     pub fn inner(&self) -> &TcpStream {
         &self.stream
     }
 
+    /// 异步读取数据
     pub async fn read(&mut self, buf: &mut [u8]) -> std::io::Result<usize> {
         self.stream.read(buf).await
     }
 
+    /// 异步写入所有数据
     pub async fn write_all(&mut self, buf: &[u8]) -> std::io::Result<()> {
         self.stream.write_all(buf).await
     }

@@ -1,6 +1,15 @@
-//! TUIC protocol types
+//! TUIC 协议类型定义
 //!
-//! All TUIC protocol types are defined here to avoid circular dependencies.
+//! 所有 TUIC 协议相关的类型都在这里定义，以避免循环依赖。
+//!
+//! # 主要类型
+//!
+//! - 命令类型 (`TuicCommandType`)
+//! - 命令消息 (`TuicCommand`)
+//! - 配置 (`TuicConfig`)
+//! - 错误 (`TuicError`)
+//! - 会话 (`TuicSession`)
+//! - 服务器/客户端 (`TuicServer`, `TuicClient`)
 
 use std::collections::HashMap;
 use std::net::SocketAddr;
@@ -10,7 +19,13 @@ use tokio::net::{TcpListener, TcpStream};
 use tokio::sync::RwLock;
 use tracing::{debug, error, info, warn};
 
-/// Context type (stub - not used in actual implementation)
+/// 上下文类型（占位符）
+///
+/// 当前实现中未使用，保留作为未来扩展。
+///
+/// # 注意
+///
+/// 此类型是一个存根，未来可能会用于传递连接上下文信息。
 #[derive(Debug, Clone)]
 pub struct Context {
     _private: (),
@@ -19,10 +34,26 @@ pub struct Context {
 /// Proxy result type
 pub type ProxyResult = std::result::Result<(), TuicError>;
 
-/// TUIC protocol version
+/// TUIC 协议版本常量
+///
+/// 当前支持的 TUIC 协议版本为 0x05。
+///
+/// # 版本历史
+///
+/// - 0x05: 当前版本
 pub const TUIC_VERSION: u8 = 0x05;
 
-/// TUIC command types
+/// TUIC 命令类型
+///
+/// 定义了 TUIC 协议中使用的各种命令类型。
+///
+/// # 命令类型说明
+///
+/// - `Auth`: 认证（0x01）
+/// - `Connect`: 连接（0x02）
+/// - `Disconnect`: 断开连接（0x03）
+/// - `Heartbeat`: 心跳（0x04）
+/// - `UdpPacket`: UDP 数据包（0x05）
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 #[repr(u8)]
 pub enum TuicCommandType {
@@ -50,7 +81,19 @@ impl TuicCommandType {
     }
 }
 
-/// TUIC authentication request
+/// TUIC 认证请求
+///
+/// 客户端在建立连接时发送的认证信息。
+///
+/// # 字段说明
+///
+/// - `version`: 协议版本
+/// - `uuid`: 用户 UUID
+/// - `token`: 认证令牌
+///
+/// # 消息格式
+///
+/// [1 字节版本][36 字节 UUID][2 字节令牌长度][令牌]
 #[derive(Debug, Clone)]
 pub struct TuicAuthRequest {
     pub version: u8,
@@ -58,7 +101,16 @@ pub struct TuicAuthRequest {
     pub token: String,
 }
 
-/// TUIC connect request
+/// TUIC 连接请求
+///
+/// 客户端请求建立到目标地址的连接。
+///
+/// # 字段说明
+///
+/// - `addr_type`: 地址类型（0x01=IPv4, 0x02=域名, 0x03=IPv6）
+/// - `host`: 目标主机
+/// - `port`: 目标端口
+/// - `session_id`: 会话 ID
 #[derive(Debug, Clone)]
 pub struct TuicConnectRequest {
     pub addr_type: u8,
@@ -67,13 +119,31 @@ pub struct TuicConnectRequest {
     pub session_id: u64,
 }
 
-/// TUIC heartbeat request
+/// TUIC 心跳请求
+///
+/// 用于保持连接活跃的心跳消息。
+///
+/// # 字段说明
+///
+/// - `timestamp`: 客户端发送的时间戳
 #[derive(Debug, Clone)]
 pub struct TuicHeartbeatRequest {
     pub timestamp: i64,
 }
 
-/// TUIC protocol commands
+/// TUIC 协议命令
+///
+/// 表示 TUIC 协议中的各种命令消息。
+///
+/// # 变体说明
+///
+/// - `Auth`: 认证请求
+/// - `Connect`: 连接请求
+/// - `ConnectResponse`: 连接响应（会话ID, 是否成功）
+/// - `Disconnect`: 断开连接（会话ID）
+/// - `Heartbeat`: 心跳请求
+/// - `HeartbeatResponse`: 心跳响应（时间戳）
+/// - `UdpPacket`: UDP 数据包（会话ID, 数据）
 #[derive(Debug, Clone)]
 pub enum TuicCommand {
     Auth(TuicAuthRequest),
@@ -85,7 +155,30 @@ pub enum TuicCommand {
     UdpPacket(u64, Vec<u8>),
 }
 
-/// TUIC configuration
+/// TUIC 配置
+///
+/// 配置 TUIC 代理客户端或服务器的运行参数。
+///
+/// # 字段说明
+///
+/// - `token`: 认证令牌
+/// - `uuid`: 用户 UUID
+/// - `server_name`: TLS SNI 服务器名称
+/// - `congestion_control`: 拥塞控制算法（默认 "bbr"）
+/// - `max_idle_timeout`: 最大空闲超时时间（秒）
+/// - `max_udp_packet_size`: 最大 UDP 数据包大小
+/// - `flow_control_window`: 流控制窗口大小
+///
+/// # 示例
+///
+/// ```rust
+/// use tuic::TuicConfig;
+///
+/// let config = TuicConfig::new(
+///     "your_token".to_string(),
+///     "your_uuid".to_string(),
+/// );
+/// ```
 #[derive(Debug, Clone)]
 pub struct TuicConfig {
     pub token: String,
@@ -112,10 +205,26 @@ impl Default for TuicConfig {
 }
 
 impl TuicConfig {
+    /// 创建新的 TUIC 配置
+    ///
+    /// # 参数
+    ///
+    /// - `token`: 认证令牌
+    /// - `uuid`: 用户 UUID
+    ///
+    /// # 返回值
+    ///
+    /// 返回配置好的 `TuicConfig` 实例
     pub fn new(token: String, uuid: String) -> Self {
         Self { token, uuid, ..Default::default() }
     }
 
+    /// 验证配置是否有效
+    ///
+    /// # 返回值
+    ///
+    /// - `Ok(())`: 配置有效
+    /// - `Err(TuicError)`: 配置无效（token 或 uuid 为空）
     pub fn validate(&self) -> Result<(), TuicError> {
         if self.token.is_empty() {
             return Err(TuicError::InvalidConfig("token cannot be empty".to_string()));
@@ -127,7 +236,19 @@ impl TuicConfig {
     }
 }
 
-/// TUIC error
+/// TUIC 错误类型
+///
+/// 定义了 TUIC 协议处理过程中可能发生的各种错误。
+///
+/// # 错误类型说明
+///
+/// - `Io`: IO 错误
+/// - `InvalidProtocol`: 无效的协议数据
+/// - `InvalidCommand`: 无效的命令
+/// - `AuthFailed`: 认证失败
+/// - `InvalidConfig`: 无效的配置
+/// - `Timeout`: 超时
+/// - `NotConnected`: 未连接
 #[derive(Debug, thiserror::Error)]
 pub enum TuicError {
     #[error("IO error: {0}")]
@@ -146,7 +267,17 @@ pub enum TuicError {
     NotConnected,
 }
 
-/// TUIC session
+/// TUIC 会话
+///
+/// 表示一个活跃的 TUIC 连接会话。
+///
+/// # 字段说明
+///
+/// - `session_id`: 会话唯一标识
+/// - `remote`: 客户端远程地址
+/// - `target_addr`: 目标地址（可选）
+/// - `connected`: 是否已连接
+/// - `last_heartbeat`: 最后心跳时间
 #[derive(Debug, Clone)]
 pub struct TuicSession {
     pub session_id: u64,
@@ -157,6 +288,16 @@ pub struct TuicSession {
 }
 
 impl TuicSession {
+    /// 创建新的 TUIC 会话
+    ///
+    /// # 参数
+    ///
+    /// - `session_id`: 会话 ID
+    /// - `remote`: 客户端远程地址
+    ///
+    /// # 返回值
+    ///
+    /// 返回新的 `TuicSession` 实例
     pub fn new(session_id: u64, remote: SocketAddr) -> Self {
         Self {
             session_id,
@@ -171,7 +312,23 @@ impl TuicSession {
     }
 }
 
-/// TUIC server
+/// TUIC 服务器
+///
+/// 用于接收和管理 TUIC 客户端连接的服务器。
+///
+/// # 功能
+///
+/// - 管理多个活跃会话
+/// - 处理客户端认证
+/// - 处理连接和断开请求
+/// - 心跳保活
+///
+/// # 使用示例
+///
+/// ```rust,ignore
+/// let server = TuicServer::new(config)?;
+/// server.listen(addr).await?;
+/// ```
 #[derive(Debug, Clone)]
 pub struct TuicServer {
     config: TuicConfig,
@@ -179,6 +336,20 @@ pub struct TuicServer {
 }
 
 impl TuicServer {
+    /// 创建新的 TUIC 服务器
+    ///
+    /// # 参数
+    ///
+    /// - `config`: TUIC 配置
+    ///
+    /// # 返回值
+    ///
+    /// - `Ok(TuicServer)`: 服务器创建成功
+    /// - `Err(TuicError)`: 配置无效或创建失败
+    ///
+    /// # 注意
+    ///
+    /// 此方法会自动验证配置
     pub fn new(config: TuicConfig) -> Result<Self, TuicError> {
         config.validate()?;
         Ok(Self {
@@ -187,10 +358,32 @@ impl TuicServer {
         })
     }
 
+    /// 获取服务器配置
+    ///
+    /// # 返回值
+    ///
+    /// 返回对服务器配置的引用
     pub fn config(&self) -> &TuicConfig {
         &self.config
     }
 
+    /// 启动服务器监听
+    ///
+    /// 开始监听指定地址并接受客户端连接。
+    /// 每个新连接都会由独立的异步任务处理。
+    ///
+    /// # 参数
+    ///
+    /// - `addr`: 要监听的地址
+    ///
+    /// # 返回值
+    ///
+    /// - `Ok(())`: 服务器正常关闭（通常不会发生）
+    /// - `Err(TuicError)`: 发生错误
+    ///
+    /// # 注意
+    ///
+    /// 此方法会一直运行直到发生致命错误
     pub async fn listen(&self, addr: SocketAddr) -> Result<(), TuicError> {
         info!("TUIC server listening on {}", addr);
         let listener = TcpListener::bind(addr).await?;
@@ -293,18 +486,50 @@ async fn handle_tcp_relay(mut client_stream: TcpStream, session: TuicSession) ->
     Ok(())
 }
 
-/// TUIC client
-#[derive(Debug, Clone)]
+/// TUIC 客户端
+///
+/// 用于连接到远程 TUIC 服务器的客户端。
+///
+/// # 功能
+///
+/// - 连接到服务器并认证
+/// - 发起到目标地址的连接
+/// - 管理客户端会话
 pub struct TuicClient {
     config: TuicConfig,
     server_addr: SocketAddr,
 }
 
 impl TuicClient {
+    /// 创建新的 TUIC 客户端
+    ///
+    /// # 参数
+    ///
+    /// - `config`: TUIC 配置
+    /// - `server_addr`: 服务器地址
+    ///
+    /// # 返回值
+    ///
+    /// 返回新的 `TuicClient` 实例
     pub fn new(config: TuicConfig, server_addr: SocketAddr) -> Self {
         Self { config, server_addr }
     }
 
+    /// 连接到 TUIC 服务器
+    ///
+    /// 建立到服务器的 TCP 连接并完成认证。
+    ///
+    /// # 返回值
+    ///
+    /// - `Ok(TuicClientSession)`: 连接成功
+    /// - `Err(TuicError)`: 连接或认证失败
+    ///
+    /// # 协议流程
+    ///
+    /// 1. 建立 TCP 连接到服务器
+    /// 2. 发送认证请求
+    /// 3. 读取认证响应
+    /// 4. 如果认证失败，返回错误
     pub async fn connect(&self) -> Result<TuicClientSession, TuicError> {
         use super::codec::TuicCodec;
         use super::tuic_impl::TuicAuthRequest;
@@ -323,6 +548,24 @@ impl TuicClient {
         Ok(TuicClientSession { stream, server_addr: self.server_addr, session_id: 0 })
     }
 
+    /// 连接到目标地址
+    ///
+    /// 通过已建立的服务器连接，发起到目标地址的连接请求。
+    ///
+    /// # 参数
+    ///
+    /// - `session`: 客户端会话
+    /// - `host`: 目标主机
+    /// - `port`: 目标端口
+    ///
+    /// # 返回值
+    ///
+    /// - `Ok(())`: 连接成功
+    /// - `Err(TuicError)`: 连接失败
+    ///
+    /// # 注意
+    ///
+    /// 必须先调用 `connect()` 建立服务器连接
     pub async fn connect_target(&self, session: &mut TuicClientSession, host: String, port: u16) -> Result<(), TuicError> {
         use super::codec::TuicCodec;
         use super::tuic_impl::TuicConnectRequest;
@@ -343,7 +586,15 @@ impl TuicClient {
     }
 }
 
-/// TUIC client session
+/// TUIC 客户端会话
+///
+/// 表示客户端到服务器的活动连接。
+///
+/// # 字段说明
+///
+/// - `stream`: TCP 流
+/// - `server_addr`: 服务器地址
+/// - `session_id`: 会话 ID
 #[derive(Debug)]
 pub struct TuicClientSession {
     pub stream: TcpStream,
@@ -351,7 +602,13 @@ pub struct TuicClientSession {
     pub session_id: u64,
 }
 
-/// TUIC handler
+/// TUIC 处理器
+///
+/// 提供 TUIC 协议入站/出站处理能力。
+///
+/// # 注意
+///
+/// 当前实现是占位符，完整处理逻辑待实现。
 #[derive(Debug, Clone)]
 pub struct TuicHandler {
     #[allow(dead_code)]
@@ -359,15 +616,58 @@ pub struct TuicHandler {
 }
 
 impl TuicHandler {
+    /// 创建新的 TUIC 处理器
+    ///
+    /// # 参数
+    ///
+    /// - `config`: TUIC 配置
+    ///
+    /// # 返回值
+    ///
+    /// 返回新的 `TuicHandler` 实例
     pub fn new(config: TuicConfig) -> Self {
         Self { config }
     }
 
+    /// 处理入站连接
+    ///
+    /// 处理来自客户端的入站连接请求。
+    ///
+    /// # 参数
+    ///
+    /// - `self`: 处理器引用
+    /// - `_ctx`: 上下文（当前未使用）
+    ///
+    /// # 返回值
+    ///
+    /// - `Ok(())`: 处理成功
+    /// - `Err(TuicError)`: 处理失败
+    ///
+    /// # 注意
+    ///
+    /// 当前实现是占位符
     pub async fn handle_inbound(&self, _ctx: &mut Context) -> ProxyResult {
         debug!("TUIC handler processing inbound connection");
         Ok(())
     }
 
+    /// 处理出站连接
+    ///
+    /// 处理出站（到远程服务器）的连接请求。
+    ///
+    /// # 参数
+    ///
+    /// - `self`: 处理器引用
+    /// - `_ctx`: 上下文（当前未使用）
+    ///
+    /// # 返回值
+    ///
+    /// - `Ok(())`: 处理成功
+    /// - `Err(TuicError)`: 处理失败
+    ///
+    /// # 注意
+    ///
+    /// 当前实现是占位符
     pub async fn handle_outbound(&self, _ctx: &mut Context) -> ProxyResult {
         debug!("TUIC handler processing outbound connection");
         Ok(())

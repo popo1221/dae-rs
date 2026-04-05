@@ -1,8 +1,26 @@
-//! HTTP CONNECT request parser
+//! HTTP CONNECT 请求解析器模块
 //!
-//! Parses HTTP CONNECT requests and host:port strings.
+//! 负责解析 HTTP CONNECT 方法的请求行，提取目标主机和端口。
+//! HTTP CONNECT 方法用于建立 HTTP 隧道（tunnel），是 HTTPS 代理的基础。
 
-/// HTTP CONNECT proxy request
+/// HTTP CONNECT 代理请求
+///
+/// 表示一个解析后的 HTTP CONNECT 请求，包含目标主机和端口。
+///
+/// # 字段说明
+///
+/// - `host`: 目标主机名或 IP 地址
+/// - `port`: 目标端口号
+///
+/// # 示例
+///
+/// ```rust
+/// use dae_protocol_http_proxy::HttpConnectRequest;
+///
+/// let req = HttpConnectRequest::parse("CONNECT example.com:443 HTTP/1.1").unwrap();
+/// assert_eq!(req.host, "example.com");
+/// assert_eq!(req.port, 443);
+/// ```
 #[derive(Debug)]
 pub struct HttpConnectRequest {
     pub host: String,
@@ -10,7 +28,30 @@ pub struct HttpConnectRequest {
 }
 
 impl HttpConnectRequest {
-    /// Parse from CONNECT request line
+    /// 从 CONNECT 请求行解析请求
+    ///
+    /// 解析 `CONNECT host:port HTTP/1.x` 格式的请求行。
+    /// 这是 HTTP CONNECT 方法的标准格式。
+    ///
+    /// # 参数
+    ///
+    /// - `request_line`: 完整的请求行，例如 `"CONNECT example.com:443 HTTP/1.1"`
+    ///
+    /// # 返回值
+    ///
+    /// - `Some(HttpConnectRequest)`: 解析成功
+    /// - `None`: 解析失败（格式不正确）
+    ///
+    /// # 支持的格式
+    ///
+    /// - `"CONNECT example.com:443 HTTP/1.1"`
+    /// - `"CONNECT 192.168.1.1:8080 HTTP/1.0"`
+    /// - `"CONNECT example.com HTTP/1.1"` (默认端口 443)
+    ///
+    /// # 不支持的格式
+    ///
+    /// - 空字符串
+    /// - 只有 "CONNECT" 没有主机信息
     pub fn parse(request_line: &str) -> Option<Self> {
         let parts: Vec<&str> = request_line.split_whitespace().collect();
         if parts.len() < 2 {
@@ -23,7 +64,24 @@ impl HttpConnectRequest {
         Some(Self { host, port })
     }
 
-    /// Parse host:port string
+    /// 解析 host:port 字符串
+    ///
+    /// 从 `host:port` 格式中分离主机名和端口号。
+    /// 如果没有端口号，默认使用 443（HTTPS 标准端口）。
+    ///
+    /// # 参数
+    ///
+    /// - `s`: 主机:端口字符串
+    ///
+    /// # 返回值
+    ///
+    /// - `Some((host, port))`: 解析成功
+    /// - `None`: 端口号格式无效（非数字）
+    ///
+    /// # 注意
+    ///
+    /// - 使用 `rfind(':')` 从右向左查找冒号，避免 IPv6 地址中的冒号干扰
+    /// - 但目前的实现对 IPv6 格式 `[::1]:8080` 支持不完整
     fn parse_host_port(s: &str) -> Option<(String, u16)> {
         if let Some(idx) = s.rfind(':') {
             let host = s[..idx].to_string();

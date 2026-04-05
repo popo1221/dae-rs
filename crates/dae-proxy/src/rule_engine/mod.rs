@@ -1,12 +1,11 @@
-//! Rule engine module
+//! 规则引擎模块
 //!
-//! This module provides the rule matching engine that runs in user-space
-//! and makes final routing decisions based on domain/IP/GeoIP rules.
+//! 本模块提供运行在用户空间的规则匹配引擎，基于域名/IP/GeoIP 规则做出最终路由决策。
 //!
-//! # Structure
+//! # 模块结构
 //!
-//! - `engine`: RuleEngine implementation
-//! - PacketInfo, RuleAction, RuleEngineConfig, RuleEngineStats types
+//! - `engine`: RuleEngine 实现
+//! - PacketInfo、RuleAction、RuleEngineConfig、RuleEngineStats 类型
 
 mod engine;
 
@@ -15,7 +14,9 @@ pub use engine::RuleEngine;
 use std::net::IpAddr;
 use std::sync::Arc;
 
-/// Packet information for rule matching
+/// 数据包信息 - 用于规则匹配
+///
+/// 包含数据包的完整信息，用于规则引擎判断如何路由该数据包。
 #[derive(Debug, Clone)]
 pub struct PacketInfo {
     /// Source IP address
@@ -158,20 +159,22 @@ impl PacketInfo {
     }
 }
 
-/// Rule action for routing decisions
+/// 路由决策的规则动作
+///
+/// 定义规则匹配后对数据包采取的动作。
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum RuleAction {
-    /// Pass the packet (direct)
+    /// 放行数据包（直连）
     Pass,
-    /// Proxy the packet
+    /// 代理数据包
     Proxy,
-    /// Drop the packet
+    /// 丢弃数据包
     Drop,
-    /// No matching rule, use default
+    /// 无匹配规则，使用默认动作
     Default,
-    /// Direct connection (explicit direct, not via routing rules)
+    /// 直连（显式直连，不经过路由规则）
     Direct,
-    /// Must direct (force bypass proxy, highest priority direct)
+    /// 强制直连（绕过代理，最高优先级直连）
     MustDirect,
 }
 
@@ -186,7 +189,9 @@ impl RuleAction {
     }
 }
 
-/// Rule engine configuration
+/// 规则引擎配置
+///
+/// 配置规则引擎的各项参数。
 #[derive(Debug, Clone)]
 pub struct RuleEngineConfig {
     /// Enable GeoIP lookup
@@ -216,7 +221,9 @@ impl Default for RuleEngineConfig {
     }
 }
 
-/// Rule engine statistics
+/// 规则引擎统计信息
+///
+/// 记录规则引擎的运行时统计。
 #[derive(Debug, Clone)]
 pub struct RuleEngineStats {
     /// Whether rules have been loaded

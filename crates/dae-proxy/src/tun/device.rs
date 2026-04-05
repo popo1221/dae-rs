@@ -1,4 +1,4 @@
-//! TUN device management and main proxy handler
+//! TUN 设备管理和主代理处理器
 
 use crate::connection_pool::{ConnectionKey, SharedConnectionPool};
 use crate::rule_engine::{RuleAction, SharedRuleEngine};
@@ -16,7 +16,9 @@ use tokio::sync::RwLock;
 use tokio_tun::TunBuilder;
 use tracing::{debug, error, info};
 
-/// TUN device configuration
+/// TUN 设备配置
+///
+/// 配置 TUN 透明代理的各项参数。
 #[derive(Debug, Clone)]
 pub struct TunConfig {
     /// Enable TUN transparent proxy
@@ -55,7 +57,9 @@ impl Default for TunConfig {
     }
 }
 
-/// TUN proxy main handler
+/// TUN 代理主处理器
+///
+/// TUN 透明代理的核心处理单元，负责数据包的路由和转发。
 #[allow(dead_code)]
 pub struct TunProxy {
     /// Configuration
@@ -284,7 +288,9 @@ impl TunProxy {
     }
 }
 
-/// TUN proxy statistics
+/// TUN 代理统计数据
+///
+/// 记录 TUN 代理的运行统计信息。
 #[derive(Debug, Clone)]
 pub struct TunStats {
     /// Number of active TCP sessions

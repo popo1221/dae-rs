@@ -1,6 +1,15 @@
-//! VLESS handler implementation
+//! VLESS 处理器实现模块
 //!
-//! Implements the VLESS protocol handler.
+//! 本模块实现 VLESS 协议处理器，支持：
+//! - TCP 代理连接
+//! - UDP 数据包处理
+//! - XTLS Reality Vision 混淆
+//!
+//! # 协议处理流程
+//! 1. 读取 VLESS 头部（38 字节）
+//! 2. 验证版本号和 UUID
+//! 3. 解析命令类型
+//! 4. 根据命令执行相应的处理逻辑
 
 use std::io::ErrorKind;
 use std::net::{IpAddr, Ipv4Addr, Ipv6Addr, SocketAddr};
@@ -19,13 +28,16 @@ use crate::protocol::{
 };
 use crate::relay_data;
 
-/// Protocol type enum for handler trait
+/// 协议类型枚举
+///
+/// 标识处理器实现的协议类型。
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ProtocolType {
     Vless,
 }
 
 impl ProtocolType {
+    /// 获取协议的字符串表示
     pub fn as_str(&self) -> &'static str {
         match self {
             ProtocolType::Vless => "vless",
@@ -33,10 +45,24 @@ impl ProtocolType {
     }
 }
 
-/// Handler configuration trait
+/// 处理器配置 trait
+///
+/// 所有协议处理器的配置类型必须实现此 trait。
+/// 要求: Send + Sync + Debug（确保线程安全和可调试）。
 pub trait HandlerConfig: Send + Sync + std::fmt::Debug {}
 
-/// Unified Handler trait - single interface for all protocol handlers
+/// 统一处理器 trait
+///
+/// 为所有协议处理器定义的统一接口。
+///
+/// # 类型参数
+/// - `Config`: 处理器配置类型，必须实现 `HandlerConfig`
+///
+/// # 方法
+/// - `name()`: 返回处理器名称
+/// - `protocol()`: 返回协议类型
+/// - `config()`: 返回配置引用
+/// - `handle()`: 处理 TCP 连接
 #[async_trait]
 pub trait Handler: Send + Sync {
     type Config: HandlerConfig;
@@ -45,23 +71,38 @@ pub trait Handler: Send + Sync {
     fn protocol(&self) -> ProtocolType;
     fn config(&self) -> &Self::Config;
 
+    /// 处理 TCP 连接
+    ///
+    /// # 参数
+    /// - `self: Arc<Self>`: 处理器实例的原子引用计数指针
+    /// - `stream`: 客户端 TCP 连接
     async fn handle(self: Arc<Self>, stream: TcpStream) -> std::io::Result<()>;
 }
 
+/// 为 VlessClientConfig 实现 HandlerConfig trait
 impl HandlerConfig for VlessClientConfig {}
 
-/// VLESS handler that implements the Handler trait
+/// VLESS 协议处理器
+///
+/// 负责处理 VLESS 协议的客户端连接。
+///
+/// # 字段说明
+/// - `config`: VLESS 客户端配置
 pub struct VlessHandler {
+    /// VLESS 客户端配置
     config: VlessClientConfig,
 }
 
 impl VlessHandler {
-    /// Create a new VLESS handler
+    /// 创建新的 VLESS 处理器
+    ///
+    /// # 参数
+    /// - `config`: VLESS 客户端配置
     pub fn new(config: VlessClientConfig) -> Self {
         Self { config }
     }
 
-    /// Create with default configuration
+    /// 使用默认配置创建处理器
     #[allow(dead_code)]
     pub fn new_default() -> Self {
         Self {
@@ -69,27 +110,45 @@ impl VlessHandler {
         }
     }
 
-    /// Get the listen address
+    /// 获取监听地址
     #[allow(dead_code)]
     pub fn listen_addr(&self) -> SocketAddr {
         self.config.listen_addr
     }
 
-    /// Validate UUID
+    /// 验证 UUID 格式
+    ///
+    /// # 参数
+    /// - `uuid`: UUID 字节数组
+    ///
+    /// # 返回
+    /// - `true`: UUID 长度为 16 字节（有效）
+    /// - `false`: UUID 长度不是 16 字节
+    ///
+    /// # 说明
+    /// VLESS 协议要求 UUID 为 128 位（16 字节）。
     pub fn validate_uuid(uuid: &[u8]) -> bool {
-        // UUID must be 16 bytes (128 bits)
         uuid.len() == 16
     }
 
-    /// Handle a VLESS connection (implements Handler trait)
+    /// 处理 VLESS 连接（实现 Handler trait）
+    ///
+    /// # 参数
+    /// - `client`: 客户端 TCP 连接
+    ///
+    /// # 协议处理
+    /// 1. 读取 38 字节请求头
+    /// 2. 验证版本号（必须为 0x01）
+    /// 3. 验证 UUID（16 字节）
+    /// 4. 解析命令并分发处理
     pub async fn handle_vless(self: Arc<Self>, mut client: TcpStream) -> std::io::Result<()> {
         let client_addr = client.peer_addr()?;
 
-        // Read VLESS header
+        // 读取 VLESS 头部
         let mut header_buf = vec![0u8; VLESS_HEADER_MIN_SIZE];
         client.read_exact(&mut header_buf).await?;
 
-        // Validate version
+        // 验证版本号
         if header_buf[0] != VLESS_VERSION {
             error!("Invalid VLESS version: {}", header_buf[0]);
             return Err(std::io::Error::new(
@@ -98,7 +157,7 @@ impl VlessHandler {
             ));
         }
 
-        // Extract UUID (bytes 1-16)
+        // 提取 UUID（字节 1-16）
         let uuid = &header_buf[1..17];
         if !Self::validate_uuid(uuid) {
             error!("Invalid UUID length");
@@ -108,7 +167,7 @@ impl VlessHandler {
             ));
         }
 
-        // Verify UUID matches config
+        // 验证 UUID 是否匹配配置
         let expected_uuid = self.config.server.uuid.as_bytes();
         if expected_uuid.len() == 16 && uuid != expected_uuid {
             error!("UUID mismatch");
@@ -118,7 +177,7 @@ impl VlessHandler {
             ));
         }
 
-        // Extract command (byte 18)
+        // 提取命令（字节 18）
         let command = header_buf[18];
         let cmd = VlessCommand::from_u8(command).ok_or_else(|| {
             error!("Unknown VLESS command: {}", command);
@@ -142,17 +201,27 @@ impl VlessHandler {
         }
     }
 
-    /// Handle VLESS TCP connection
+    /// 处理 VLESS TCP 连接
+    ///
+    /// # 参数
+    /// - `client`: 客户端 TCP 连接
+    /// - `_header_buf`: 已读取的头部数据（未使用）
+    ///
+    /// # 处理流程
+    /// 1. 读取扩展头部（port + atyp + addr + iv）
+    /// 2. 解析目标地址
+    /// 3. 连接到 VLESS 服务器
+    /// 4. 在客户端和服务器之间转发数据
     async fn handle_tcp(
         self: &Arc<Self>,
         mut client: TcpStream,
         _header_buf: &[u8],
     ) -> std::io::Result<()> {
-        // Read additional header: port(4) + atyp(1) + addr + iv(16)
+        // 读取扩展头部: port(4) + atyp(1) + addr + iv(16)
         let mut addl_buf = vec![0u8; 64];
         client.read_exact(&mut addl_buf).await?;
 
-        // Parse address
+        // 解析目标地址
         let address = self.parse_target_address(&addl_buf)?;
         let _port = match &address {
             VlessTargetAddress::Domain(_, p) => *p,
@@ -164,7 +233,7 @@ impl VlessHandler {
             address, self.config.server.addr, self.config.server.port
         );
 
-        // Connect to VLESS server
+        // 连接到 VLESS 服务器
         let remote_addr = format!("{}:{}", self.config.server.addr, self.config.server.port);
         let timeout = self.config.tcp_timeout;
 
@@ -181,11 +250,26 @@ impl VlessHandler {
 
         debug!("Connected to VLESS server {}", remote_addr);
 
-        // Relay data between client and remote
+        // 在客户端和远程之间转发数据
         relay_data(client, remote).await
     }
 
-    /// Handle VLESS UDP packets directly
+    /// 处理 VLESS UDP 数据包
+    ///
+    /// # 参数
+    /// - `client`: 本地 UDP socket（Arc 包装以共享）
+    ///
+    /// # VLESS UDP 头部格式
+    /// ```
+    /// [v1(1)][uuid(16)][ver(1)][cmd(1)][port(2)][atyp(1)][addr][iv(16)][payload]
+    /// ```
+    ///
+    /// # 处理流程
+    /// 1. 接收 UDP 数据包
+    /// 2. 解析 VLESS 头部（验证 UUID、版本、命令）
+    /// 3. 提取目标地址和载荷
+    /// 4. 发送到上游 VLESS 服务器
+    /// 5. 接收响应并返回给客户端
     pub async fn handle_udp(self: Arc<Self>, client: Arc<UdpSocket>) -> std::io::Result<()> {
         const MAX_UDP_SIZE: usize = 65535;
         let mut buf = vec![0u8; MAX_UDP_SIZE];
@@ -325,6 +409,7 @@ impl VlessHandler {
                 }
             };
 
+            // 构造服务器数据包
             let mut server_packet = Vec::with_capacity(n);
             server_packet.push(VLESS_VERSION);
             server_packet.extend_from_slice(uuid);
@@ -385,7 +470,16 @@ impl VlessHandler {
         }
     }
 
-    /// Handle VLESS Reality Vision connection
+    /// 处理 VLESS Reality Vision 连接
+    ///
+    /// XTLS Reality Vision 是一种流量伪装技术：
+    /// 1. 使用 X25519 密钥交换
+    /// 2. 构造特殊的 TLS ClientHello 伪装成访问某个真实网站
+    /// 3. 服务器验证后直接在 TLS 层转发流量
+    ///
+    /// # 参数
+    /// - `client`: 客户端 TCP 连接
+    /// - `_header_buf`: 已读取的头部数据
     async fn handle_reality_vision(
         self: &Arc<Self>,
         client: TcpStream,
@@ -398,11 +492,13 @@ impl VlessHandler {
             )
         })?;
 
+        // 生成临时 X25519 密钥对
         let mut rng = rand::rngs::OsRng;
         let scalar = curve25519_dalek::Scalar::random(&mut rng);
         let point = curve25519_dalek::MontgomeryPoint::mul_base(&scalar);
         let client_public: [u8; 32] = point.to_bytes();
 
+        // 验证服务器公钥长度
         let server_public_key = &reality_config.public_key;
         if server_public_key.len() != 32 {
             return Err(std::io::Error::new(
@@ -411,6 +507,7 @@ impl VlessHandler {
             ));
         }
 
+        // 计算共享密钥
         let server_point_array: [u8; 32] = server_public_key
             .as_slice()
             .try_into()
@@ -419,6 +516,7 @@ impl VlessHandler {
         let shared_point = server_point * scalar;
         let shared_secret: [u8; 32] = shared_point.to_bytes();
 
+        // 构造 Reality 请求
         let mut request = [0u8; 48];
         let hmac_key = hmac_sha256(&shared_secret, b"Reality Souls");
         request[..32].copy_from_slice(&hmac_key);
@@ -429,10 +527,12 @@ impl VlessHandler {
         let random_bytes: [u8; 8] = rand::random();
         request[40..].copy_from_slice(&random_bytes);
 
+        // 构建伪装 TLS ClientHello
         let destination = &reality_config.destination;
         let client_hello =
             self.build_reality_client_hello(&client_public, &request, destination)?;
 
+        // 连接到 VLESS 服务器
         let remote_addr = format!("{}:{}", self.config.server.addr, self.config.server.port);
         let mut remote =
             tokio::time::timeout(self.config.tcp_timeout, TcpStream::connect(&remote_addr))
@@ -443,6 +543,7 @@ impl VlessHandler {
 
         debug!("Sent Reality ClientHello to {}", remote_addr);
 
+        // 读取服务器响应
         let mut server_response = vec![0u8; 8192];
         let n = tokio::time::timeout(self.config.tcp_timeout, remote.read(&mut server_response))
             .await??;
@@ -456,10 +557,26 @@ impl VlessHandler {
 
         debug!("Received {} bytes from server", n);
 
+        // 转发数据
         relay_data(client, remote).await
     }
 
-    /// Build a TLS ClientHello with Reality chrome extension
+    /// 构建 TLS ClientHello（带 Reality chrome 扩展）
+    ///
+    /// # 参数
+    /// - `client_public`: 客户端临时公钥（32 字节）
+    /// - `request`: Reality 请求数据（48 字节）
+    /// - `destination`: SNI 伪装目标
+    ///
+    /// # 返回
+    /// 完整的 TLS ClientHello 字节
+    ///
+    /// # 扩展列表
+    /// - SNI (server_name)
+    /// - ALPN
+    /// - supported_versions
+    /// - psk_modes
+    /// - key_share (Reality 密钥共享)
     fn build_reality_client_hello(
         &self,
         client_public: &[u8; 32],
@@ -468,44 +585,48 @@ impl VlessHandler {
     ) -> std::io::Result<Vec<u8>> {
         let mut client_hello = Vec::new();
 
-        client_hello.push(0x16); // TLS Record Layer: Handshake
+        // TLS Record Layer: Handshake
+        client_hello.push(0x16);
         client_hello.push(0x03);
-        client_hello.push(0x03); // TLS Version TLS 1.3
+        client_hello.push(0x03); // TLS 1.3
 
         let payload_start = client_hello.len();
         client_hello.push(0x00);
         client_hello.push(0x00);
         client_hello.push(0x00);
 
-        client_hello.push(0x01); // Handshake type: ClientHello
+        // Handshake type: ClientHello
+        client_hello.push(0x01);
 
         let handshake_len_pos = client_hello.len();
         client_hello.push(0x00);
         client_hello.push(0x00);
         client_hello.push(0x00);
 
+        // ClientVersion TLS 1.3
         client_hello.push(0x03);
-        client_hello.push(0x03); // ClientVersion TLS 1.3
+        client_hello.push(0x03);
 
+        // Random (32 bytes)
         let random: [u8; 32] = rand::random();
         client_hello.extend_from_slice(&random);
 
-        client_hello.push(0x00); // Session ID empty
+        // Session ID empty
+        client_hello.push(0x00);
 
-        let cipher_suites: Vec<u16> = vec![
-            0x1301,
-            0x1302,
-            0x1303,
-        ];
+        // Cipher suites
+        let cipher_suites: Vec<u16> = vec![0x1301, 0x1302, 0x1303];
         client_hello.push((cipher_suites.len() * 2) as u8);
         for cs in cipher_suites {
             client_hello.push((cs >> 8) as u8);
             client_hello.push((cs & 0xff) as u8);
         }
 
+        // Compression methods
         client_hello.push(0x01);
         client_hello.push(0x00);
 
+        // Extensions
         let extensions_start = client_hello.len();
         client_hello.push(0x00);
         client_hello.push(0x00);
@@ -516,15 +637,18 @@ impl VlessHandler {
         self.add_psk_modes_extension(&mut client_hello)?;
         self.add_reality_key_share(&mut client_hello, client_public, request)?;
 
+        // 填充扩展长度
         let ext_len = client_hello.len() - extensions_start - 2;
         client_hello[extensions_start] = (ext_len >> 8) as u8;
         client_hello[extensions_start + 1] = (ext_len & 0xff) as u8;
 
+        // 填充握手长度
         let handshake_len = client_hello.len() - handshake_len_pos - 3;
         client_hello[handshake_len_pos] = (handshake_len >> 16) as u8;
         client_hello[handshake_len_pos + 1] = (handshake_len >> 8) as u8;
         client_hello[handshake_len_pos + 2] = (handshake_len & 0xff) as u8;
 
+        // 填充记录层长度
         let record_len = client_hello.len() - payload_start - 3 + 4;
         client_hello[payload_start] = (record_len >> 8) as u8;
         client_hello[payload_start + 1] = (record_len & 0xff) as u8;
@@ -533,7 +657,9 @@ impl VlessHandler {
         Ok(client_hello)
     }
 
+    /// 添加 SNI 扩展
     fn add_sni_extension(&self, buffer: &mut Vec<u8>, destination: &str) -> std::io::Result<()> {
+        // Extension type: SNI (0x0000)
         buffer.push(0x00);
         buffer.push(0x00);
 
@@ -541,14 +667,17 @@ impl VlessHandler {
         buffer.push(0x00);
         buffer.push(0x00);
 
+        // SNI list
         buffer.push(0x00);
         buffer.push(0x00);
 
+        // Server name
         let name_bytes = destination.as_bytes();
         buffer.push((name_bytes.len() >> 8) as u8);
         buffer.push((name_bytes.len() & 0xff) as u8);
         buffer.extend_from_slice(name_bytes);
 
+        // Extension data length
         let ext_data_len = buffer.len() - len_pos - 2;
         buffer[len_pos] = (ext_data_len >> 8) as u8;
         buffer[len_pos + 1] = (ext_data_len & 0xff) as u8;
@@ -556,7 +685,9 @@ impl VlessHandler {
         Ok(())
     }
 
+    /// 添加 ALPN 扩展
     fn add_alpn_extension(&self, buffer: &mut Vec<u8>) -> std::io::Result<()> {
+        // Extension type: ALPN (0x0010)
         buffer.push(0x00);
         buffer.push(0x10);
 
@@ -564,6 +695,7 @@ impl VlessHandler {
         buffer.push(0x00);
         buffer.push(0x00);
 
+        // ALPN list
         let list_start = buffer.len();
         buffer.push(0x00);
         buffer.push(0x00);
@@ -585,6 +717,7 @@ impl VlessHandler {
         Ok(())
     }
 
+    /// 添加 supported_versions 扩展（TLS 1.3）
     fn add_supported_versions_extension(&self, buffer: &mut Vec<u8>) -> std::io::Result<()> {
         buffer.push(0x00);
         buffer.push(0x2b);
@@ -594,6 +727,7 @@ impl VlessHandler {
         Ok(())
     }
 
+    /// 添加 psk_modes 扩展
     fn add_psk_modes_extension(&self, buffer: &mut Vec<u8>) -> std::io::Result<()> {
         buffer.push(0x00);
         buffer.push(0x2d);
@@ -603,12 +737,14 @@ impl VlessHandler {
         Ok(())
     }
 
+    /// 添加 Reality key_share 扩展
     fn add_reality_key_share(
         &self,
         buffer: &mut Vec<u8>,
         client_public: &[u8; 32],
         _request: &[u8; 48],
     ) -> std::io::Result<()> {
+        // Extension type: key_share (0x0033)
         buffer.push(0x00);
         buffer.push(0x33);
 
@@ -620,8 +756,9 @@ impl VlessHandler {
         buffer.push(0x00);
         buffer.push(0x00);
 
+        // Key exchange entry: group(2) + length(1) + key(32)
         buffer.push(0x00);
-        buffer.push(0x1d);
+        buffer.push(0x1d); // X25519
         buffer.push(0x20);
         buffer.extend_from_slice(client_public);
 
@@ -636,7 +773,14 @@ impl VlessHandler {
         Ok(())
     }
 
-    /// Parse target address from VLESS header
+    /// 解析目标地址
+    ///
+    /// # 参数
+    /// - `buf`: 包含地址数据的缓冲区
+    ///
+    /// # 返回
+    /// - `Ok(VlessTargetAddress)`: 解析成功
+    /// - `Err(std::io::Error)`: 缓冲区太小或格式错误
     fn parse_target_address(&self, buf: &[u8]) -> std::io::Result<VlessTargetAddress> {
         if buf.len() < 5 {
             return Err(std::io::Error::new(
@@ -711,7 +855,7 @@ impl VlessHandler {
     }
 }
 
-/// Implement Handler trait for VlessHandler
+/// 为 VlessHandler 实现 Handler trait
 #[async_trait]
 impl Handler for VlessHandler {
     type Config = VlessClientConfig;

@@ -1,6 +1,6 @@
-//! Rule engine implementation
+//! 规则引擎实现
 //!
-//! Contains the core RuleEngine implementation for matching packets against rules.
+//! 包含核心 RuleEngine 实现，用于将数据包与规则进行匹配。
 
 use super::{RuleAction, RuleEngineConfig, RuleEngineStats};
 use crate::metrics::observe_rule_match_latency;

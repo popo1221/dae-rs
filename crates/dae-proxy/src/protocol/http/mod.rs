@@ -1,16 +1,16 @@
-//! HTTP proxy protocol module
+//! HTTP 代理协议模块
 //!
-//! This module provides HTTP proxy protocol support using the CONNECT method.
+//! 本模块提供使用 CONNECT 方法的 HTTP 代理协议支持。
 //!
-//! ## Protocol Overview
+//! ## 协议概述
 //!
-//! HTTP proxy uses the CONNECT method to establish a tunnel for encrypted traffic.
-//! It is commonly used for HTTPS traffic through proxies.
+//! HTTP 代理使用 CONNECT 方法为加密流量建立隧道。
+//! 常用于通过代理转发 HTTPS 流量。
 //!
-//! ## Implementation
+//! ## 实现说明
 //!
-//! The main HTTP proxy handler implementation is in the parent module's `http_proxy.rs` file.
-//! This module serves as a namespace and for future HTTP-specific extensions.
+//! 主要的 HTTP 代理处理器实现在父模块的 `http_proxy.rs` 文件中。
+//! 本模块作为命名空间，用于未来 HTTP 特定扩展。
 
 pub mod handler;
 

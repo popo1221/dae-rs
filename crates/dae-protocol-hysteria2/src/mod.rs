@@ -1,12 +1,10 @@
+//! Hysteria2 协议处理器模块
 //!
-//! Hysteria2 protocol implementation
-//!
-//! Hysteria2 is a powerful, lightning fast and reliable proxy built on top of QUIC.
-//! It provides aggressive acceleration for proxy connections with features like:
-//! - QUIC-based transport for better performance
-//! - Obfuscation support to bypass DPI
-//! - Bandwidth congestion control
-//! - Simple authentication via password
+//! 实现了 Hysteria2 协议的核心功能：
+//! - Hysteria2 配置管理
+//! - 客户端/服务器消息处理
+//! - 密码认证
+//! - UDP 数据报中继
 
 #[allow(clippy::module_inception)]
 pub mod hysteria2;

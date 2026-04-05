@@ -1,12 +1,12 @@
-//! Juicity protocol handler
+//! Juicity 协议处理器实现模块
 //!
-//! Implements Juicity protocol support for dae-rs.
-//! Juicity is a UDP-based proxy protocol designed for high performance.
+//! 实现了 Juicity 协议的核心功能：
+//! - Juicity 配置管理
+//! - TCP 握手处理
+//! - UDP 数据报处理
+//! - 连接和会话管理
 //!
-//! Protocol reference: https://github.com/juicity/juicity
-//!
-//! Protocol flow:
-//! Client -> dae-rs (Juicity client) -> remote Juicity server -> target
+//! Juicity 是一个 UDP 代理协议，设计用于高性能场景。
 
 use std::net::{IpAddr, Ipv4Addr, SocketAddr};
 use std::sync::Arc;
@@ -18,27 +18,46 @@ use tracing::{debug, info, warn};
 
 use super::codec::{JuicityAddress, JuicityCodec, JuicityCommand, JuicityFrame};
 
-/// Juicity protocol error types
+/// Juicity 错误类型
+///
+/// 定义了 Juicity 协议处理过程中可能发生的各种错误。
+///
+/// # 错误类型说明
+///
+/// - `Io`: IO 错误
+/// - `InvalidHeader`: 无效的协议头
+/// - `InvalidToken`: 无效的令牌
+/// - `ConnectionNotFound`: 连接不存在
+/// - `SessionExpired`: 会话过期
+/// - `Timeout`: 操作超时
+/// - `Protocol`: 协议错误
 #[derive(Debug, thiserror::Error)]
 pub enum JuicityError {
+    /// IO 错误
     #[error("IO error: {0}")]
     Io(#[from] std::io::Error),
 
+    /// 无效的协议头
     #[error("Invalid header")]
     InvalidHeader,
 
+    /// 无效的令牌
     #[error("Invalid token")]
     InvalidToken,
 
+    /// 连接不存在
     #[error("Connection not found: {0}")]
     ConnectionNotFound(u32),
 
+    /// 会话过期
     #[error("Session expired")]
     SessionExpired,
 
+    /// 操作超时
     #[error("Timeout")]
     Timeout,
 
+    /// 协议错误
     #[error("Protocol error: {0}")]
     Protocol(String),
 }
@@ -49,20 +68,47 @@ impl From<tokio::time::error::Elapsed> for JuicityError {
     }
 }
 
-/// Juicity configuration
+/// Juicity 配置
+///
+/// 配置 Juicity 代理客户端或服务器的运行参数。
+///
+/// # 字段说明
+///
+/// - `token`: 认证令牌
+/// - `server_name`: TLS SNI 服务器名称
+/// - `server_addr`: 服务器地址（IP 或域名）
+/// - `server_port`: 服务器端口
+/// - `congestion_control`: 拥塞控制算法
+/// - `timeout`: 连接超时时间
+///
+/// # 示例
+///
+/// ```rust
+/// use juicity::{JuicityConfig, CongestionControl};
+/// use std::time::Duration;
+///
+/// let config = JuicityConfig {
+///     token: "your_token".to_string(),
+///     server_name: "example.com".to_string(),
+///     server_addr: "127.0.0.1".to_string(),
+///     server_port: 443,
+///     congestion_control: CongestionControl::Bbr,
+///     timeout: Duration::from_secs(30),
+/// };
+/// ```
 #[derive(Debug, Clone)]
 pub struct JuicityConfig {
-    /// Authentication token
+    /// 认证令牌
     pub token: String,
-    /// Server name for TLS SNI
+    /// TLS SNI 服务器名称
     pub server_name: String,
-    /// Server address (IP or domain)
+    /// 服务器地址（IP 或域名）
     pub server_addr: String,
-    /// Server port
+    /// 服务器端口
     pub server_port: u16,
-    /// Congestion control algorithm
+    /// 拥塞控制算法
     pub congestion_control: CongestionControl,
-    /// Connection timeout
+    /// 连接超时时间
     pub timeout: Duration,
 }
 
@@ -79,14 +125,22 @@ impl Default for JuicityConfig {
     }
 }
 
-/// Congestion control algorithms supported by Juicity
+/// Juicity 拥塞控制算法
+///
+/// 定义了 Juicity 支持的拥塞控制算法。
+///
+/// # 算法说明
+///
+/// - `Bbr`: Google BBR 算法，适合高延迟高带宽网络
+/// - `Cubic`: 标准 CUBIC 算法，Linux 默认
+/// - `Reno`: 标准 Reno 算法
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum CongestionControl {
-    /// BBR congestion control
+    /// Google BBR 算法
     Bbr,
-    /// CUBIC congestion control
+    /// 标准 CUBIC 算法
     Cubic,
-    /// Reno congestion control
+    /// 标准 Reno 算法
     Reno,
 }
 
@@ -149,18 +203,40 @@ impl Connection {
     }
 }
 
-/// Juicity handler implementation
+/// Juicity 处理器
+///
+/// 负责处理 Juicity 客户端连接的核心处理器。
+/// 支持 TCP 握手和 UDP 数据报处理。
+///
+/// # 工作流程
+///
+/// 1. 读取初始握手（魔术头 + 版本 + 令牌 + 拥塞控制）
+/// 2. 验证令牌
+/// 3. 发送握手响应
+/// 4. 根据类型处理 TCP 或 UDP 数据
 pub struct JuicityHandler {
     config: JuicityConfig,
 }
 
 impl JuicityHandler {
-    /// Create a new Juicity handler
+    /// 创建新的 Juicity 处理器
+    ///
+    /// # 参数
+    ///
+    /// - `config`: Juicity 配置
+    ///
+    /// # 返回值
+    ///
+    /// 返回配置好的 `JuicityHandler` 实例
     pub fn new(config: JuicityConfig) -> Self {
         Self { config }
     }
 
-    /// Create with default configuration
+    /// 使用默认配置创建处理器
+    ///
+    /// # 返回值
+    ///
+    /// 返回使用默认配置的 `JuicityHandler` 实例
     #[allow(dead_code)]
     pub fn new_default() -> Self {
         Self {
@@ -168,7 +244,11 @@ impl JuicityHandler {
         }
     }
 
-    /// Get the protocol name
+    /// 获取协议名称
+    ///
+    /// # 返回值
+    ///
+    /// 返回协议名称字符串 `"juicity"`
     pub fn name(&self) -> &'static str {
         "juicity"
     }
@@ -191,7 +271,23 @@ impl JuicityHandler {
         rand::thread_rng().r#gen()
     }
 
-    /// Handle a Juicity TCP connection from client
+    /// 处理 Juicity TCP 客户端连接
+    ///
+    /// 处理 Juicity 协议的 TCP 握手和后续数据中继。
+    ///
+    /// # 参数
+    ///
+    /// - `self`: 处理器实例的 Arc 引用
+    /// - `client`: 客户端 TCP 流
+    ///
+    /// # 返回值
+    ///
+    /// - `Ok(())`: 处理成功
+    /// - `Err(JuicityError)`: 处理失败
+    ///
+    /// # 握手格式
+    ///
+    /// [2 字节魔术头 0xCAFE][1 字节版本][32 字节令牌][1 字节拥塞控制]
     pub async fn handle_tcp(self: Arc<Self>, mut client: TcpStream) -> Result<(), JuicityError> {
         let client_addr = client.peer_addr()?;
         debug!("Juicity TCP connection from {}", client_addr);
@@ -342,7 +438,13 @@ impl JuicityHandler {
     }
 }
 
-/// Juicity server for handling incoming connections
+/// Juicity 服务器
+///
+/// 用于接收和管理 Juicity 客户端连接的服务器。
+///
+/// # 注意
+///
+/// 当前实现是占位符，完整的服务器功能尚未实现。
 pub struct JuicityServer {
     #[allow(dead_code)]
     handler: Arc<JuicityHandler>,
@@ -384,7 +486,13 @@ impl JuicityServer {
     }
 }
 
-/// Juicity client for connecting to remote servers
+/// Juicity 客户端
+///
+/// 用于连接到远程 Juicity 服务器的客户端。
+///
+/// # 注意
+///
+/// 当前实现是占位符，完整的客户端功能尚未实现。
 pub struct JuicityClient {
     config: JuicityConfig,
 }
@@ -414,7 +522,15 @@ impl JuicityClient {
     }
 }
 
-/// Juicity connection handle
+/// Juicity 连接句柄
+///
+/// 表示一个活跃的 Juicity 连接。
+///
+/// # 字段说明
+///
+/// - `connection_id`: 连接 ID
+/// - `session_id`: 会话 ID
+/// - `socket`: UDP 套接字（可选）
 pub struct JuicityConnection {
     connection_id: u32,
     session_id: u32,

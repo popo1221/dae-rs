@@ -1,23 +1,54 @@
-//! SOCKS5 address parsing (RFC 1928)
+//! SOCKS5 地址解析模块（RFC 1928）
 //!
-//! Supports IPv4, IPv6, and domain name address types.
+//! 支持 IPv4、IPv6 和域名地址类型。
 
 use std::net::{Ipv4Addr, Ipv6Addr, SocketAddr, SocketAddrV4, SocketAddrV6};
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 
-/// SOCKS5 address type
+/// SOCKS5 地址类型
+///
+/// 支持三种地址类型：IPv4、IPv6 和域名。
+///
+/// # ATYP 映射
+///
+/// - `IPv4(Ipv4Addr, u16)` → ATYP = 0x01
+/// - `IPv6(Ipv6Addr, u16)` → ATYP = 0x04
+/// - `Domain(String, u16)` → ATYP = 0x03
 #[derive(Debug, Clone)]
 pub enum Socks5Address {
-    /// IPv4 address (4 bytes) + port
+    /// IPv4 地址
+    ///
+    /// 包含 IPv4 地址和端口号。
     IPv4(Ipv4Addr, u16),
-    /// IPv6 address (16 bytes) + port
+
+    /// IPv6 地址
+    ///
+    /// 包含 IPv6 地址和端口号。
     IPv6(Ipv6Addr, u16),
-    /// Domain name (1-byte length + bytes) + port
+
+    /// 域名地址
+    ///
+    /// 包含域名和端口号。域名需要 DNS 解析。
+    /// 域名格式：1字节长度 + 域名字节序列。
     Domain(String, u16),
 }
 
 impl Socks5Address {
-    /// Parse from SOCKS5 format
+    /// 从 SOCKS5 协议解析地址
+    ///
+    /// # 参数
+    /// - `reader`: 字节读取器
+    ///
+    /// # 返回值
+    /// - `Ok(Socks5Address)`: 解析成功
+    /// - `Err`: 解析失败（如未知地址类型）
+    ///
+    /// # SOCKS5 地址格式
+    ///
+    /// ```
+    /// |ATYP|  DST.ADDR                                    |
+    /// | 1  | Variable (1 or 4 or 16 bytes, plus port)    |
+    /// ```
     pub async fn parse_from<R: AsyncReadExt + Unpin>(reader: &mut R) -> std::io::Result<Self> {
         let mut buf = [0u8; 1];
 
@@ -73,7 +104,11 @@ impl Socks5Address {
         }
     }
 
-    /// Convert to SocketAddr if possible
+    /// 转换为 SocketAddr（如果可能）
+    ///
+    /// # 返回值
+    /// - `Some(SocketAddr)`: IPv4 或 IPv6 地址转换成功
+    /// - `None`: 域名地址需要 DNS 解析，无法直接转换
     pub fn to_socket_addr(&self) -> Option<SocketAddr> {
         match self {
             Socks5Address::IPv4(ip, port) => Some(SocketAddr::V4(SocketAddrV4::new(*ip, *port))),
@@ -84,7 +119,14 @@ impl Socks5Address {
         }
     }
 
-    /// Write in SOCKS5 format
+    /// 写入 SOCKS5 协议格式
+    ///
+    /// # 参数
+    /// - `writer`: 字节写入器
+    ///
+    /// # 格式
+    ///
+    /// 输出完整的 SOCKS5 地址表示（ATYP + 地址 + 端口）。
     pub async fn write_to<W: AsyncWriteExt + Unpin>(&self, writer: &mut W) -> std::io::Result<()> {
         match self {
             Socks5Address::IPv4(ip, port) => {

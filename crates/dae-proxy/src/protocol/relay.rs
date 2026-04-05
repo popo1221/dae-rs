@@ -1,10 +1,9 @@
-//! Bidirectional relay utilities for protocol handlers
+//! 双向数据中继工具 - 协议处理器通用模块
 //!
-//! This module provides a common interface for relaying data between client and remote
-//! connections in proxy protocols. All proxy protocols implement the same bidirectional
-//! relay pattern using tokio::io::copy.
+//! 本模块提供代理协议中客户端与远程服务器之间双向数据中继的通用接口。
+//! 所有代理协议都使用 tokio::io::copy 实现相同的双向中继模式。
 //!
-//! # Example
+//! # 使用示例
 //!
 //! ```
 //! use dae_proxy::protocol::relay::{relay_bidirectional, BidirectionalRelay};

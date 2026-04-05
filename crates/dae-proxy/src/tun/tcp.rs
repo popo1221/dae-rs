@@ -1,17 +1,19 @@
-//! TCP session handling for TUN proxy
+//! TUN 代理的 TCP 会话处理
 
 use std::time::{Duration, Instant};
 
-/// TCP session state for TUN proxy
+/// TUN 代理的 TCP 会话状态
+///
+/// 跟踪 TCP 会话的当前状态。
 #[derive(Debug, Clone)]
 pub enum TcpSessionState {
-    /// Waiting for connection setup
+    /// 等待连接建立（SYN 已发送）
     SynSent,
-    /// Connection established
+    /// 连接已建立
     Established,
-    /// Fin sent
+    /// FIN 已发送（等待关闭）
     FinWait,
-    /// Session closed
+    /// 会话已关闭
     Closed,
 }
 

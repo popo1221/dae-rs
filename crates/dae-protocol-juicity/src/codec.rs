@@ -1,27 +1,42 @@
-//! Juicity protocol codec
+//! Juicity 协议编解码器模块
 //!
-//! Implements the wire format encoding/decoding for Juicity protocol.
-//! Juicity uses a simple header format with connection ID, session ID,
-//! and packet sequence numbers for UDP-based communication.
+//! 实现了 Juicity 协议的二进制格式编码/解码功能。
 //!
-//! Protocol format:
-//! [1 byte command][4 bytes connection_id][4 bytes session_id]
-//! [4 bytes sequence][2 bytes port][1 byte address_type][address][payload...]
+//! # 协议格式
+//!
+//! [1 字节命令][4 字节连接 ID][4 字节会话 ID]
+//! [4 字节序列号][2 字节端口][1 字节地址类型][地址][载荷...]
+//!
+//! # 地址格式
+//!
+//! - IPv4: 1 字节类型(0x01) + 4 字节 IP + 2 字节端口
+//! - 域名: 1 字节类型(0x02) + 1 字节长度 + 域名 + 2 字节端口
+//! - IPv6: 1 字节类型(0x03) + 16 字节 IP + 2 字节端口
 
 use std::net::{IpAddr, Ipv4Addr, Ipv6Addr};
 
-/// Juicity protocol commands
+/// Juicity 协议命令
+///
+/// 定义了 Juicity 协议中的各种命令类型。
+///
+/// # 命令说明
+///
+/// - `Open`: 打开新连接（0x01）
+/// - `Send`: 发送数据（0x02）
+/// - `Close`: 关闭连接（0x03）
+/// - `Ping`: 心跳请求（0x04）
+/// - `Pong`: 心跳响应（0x05）
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum JuicityCommand {
-    /// Open a new connection
+    /// 打开新连接
     Open = 0x01,
-    /// Send data
+    /// 发送数据
     Send = 0x02,
-    /// Close connection
+    /// 关闭连接
     Close = 0x03,
-    /// Heartbeat/ping
+    /// 心跳请求
     Ping = 0x04,
-    /// Pong (heartbeat response)
+    /// 心跳响应
     Pong = 0x05,
 }
 
@@ -44,14 +59,22 @@ impl JuicityCommand {
     }
 }
 
-/// Juicity address type
+/// Juicity 地址类型
+///
+/// 定义了 Juicity 协议中支持的地址类型。
+///
+/// # 类型说明
+///
+/// - `Ipv4`: IPv4 地址（0x01）
+/// - `Domain`: 域名地址（0x02）
+/// - `Ipv6`: IPv6 地址（0x03）
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum JuicityAddressType {
-    /// IPv4
+    /// IPv4 地址
     Ipv4 = 0x01,
-    /// Domain
+    /// 域名地址
     Domain = 0x02,
-    /// IPv6
+    /// IPv6 地址
     Ipv6 = 0x03,
 }
 
@@ -72,7 +95,26 @@ impl JuicityAddressType {
     }
 }
 
-/// Juicity frame representing a single protocol message
+/// Juicity 帧
+///
+/// 表示 Juicity 协议中的一个完整消息。
+///
+/// # 字段说明
+///
+/// - `command`: 命令类型
+/// - `connection_id`: 连接 ID
+/// - `session_id`: 会话 ID
+/// - `sequence`: 序列号
+/// - `address`: 目标地址（仅 Open 命令）
+/// - `payload`: 载荷数据
+///
+/// # 创建方法
+///
+/// - `new_open`: 创建 Open 帧
+/// - `new_send`: 创建 Send 帧
+/// - `new_close`: 创建 Close 帧
+/// - `new_ping`: 创建 Ping 帧
+/// - `new_pong`: 创建 Pong 帧
 #[derive(Debug, Clone)]
 pub struct JuicityFrame {
     /// Command type
@@ -151,14 +193,22 @@ impl JuicityFrame {
     }
 }
 
-/// Juicity address representation
+/// Juicity 地址
+///
+/// 表示 Juicity 协议中的目标地址，可以是 IPv4、域名或 IPv6。
+///
+/// # 地址类型
+///
+/// - `Ipv4(IpAddr, u16)`: IPv4 地址和端口
+/// - `Domain(String, u16)`: 域名和端口
+/// - `Ipv6(IpAddr, u16)`: IPv6 地址和端口
 #[derive(Debug, Clone)]
 pub enum JuicityAddress {
-    /// IPv4 address with port
+    /// IPv4 地址和端口
     Ipv4(IpAddr, u16),
-    /// Domain name with port
+    /// 域名和端口
     Domain(String, u16),
-    /// IPv6 address with port
+    /// IPv6 地址和端口
     Ipv6(IpAddr, u16),
 }
 

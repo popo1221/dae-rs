@@ -1,16 +1,16 @@
-//! SOCKS5 protocol placeholder handler
+//! SOCKS5 协议占位处理器
 //!
-//! This file provides a placeholder for future SOCKS5-specific handler implementations.
-//! The main SOCKS5 logic is in `../../socks5.rs`.
+//! 本文件为未来的 SOCKS5 特定处理器实现提供占位符。
+//! 主要的 SOCKS5 逻辑在 `../../socks5.rs` 中。
 
 use crate::core::{Context, Result as ProxyResult};
 use crate::protocol::ProtocolHandler;
 use async_trait::async_trait;
 
-/// SOCKS5 protocol handler
+/// SOCKS5 协议处理器
 ///
-/// This is a placeholder struct that wraps the main SOCKS5 handler
-/// for integration with the protocol registry.
+/// 这是一个占位结构体，用于与协议注册表集成。
+/// 主要的 SOCKS5 逻辑在 `../../socks5.rs` 中。
 #[derive(Debug)]
 pub struct Socks5ProtocolHandler {
     // Future: SOCKS5-specific configuration

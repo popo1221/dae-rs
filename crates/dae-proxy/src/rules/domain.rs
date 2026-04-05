@@ -1,6 +1,6 @@
-//! Domain rule module
+//! 域名规则模块
 //!
-//! Contains domain-based rule types and matching logic.
+//! 包含基于域名的规则类型和匹配逻辑。
 
 use super::types::DomainRuleType;
 use crate::rule_engine::PacketInfo;

@@ -1,16 +1,16 @@
-//! Shadowsocks protocol module
+//! Shadowsocks 协议模块
 //!
-//! This module provides Shadowsocks protocol support.
+//! 本模块提供 Shadowsocks 协议支持。
 //!
-//! ## Protocol Overview
+//! ## 协议概述
 //!
-//! Shadowsocks is an encrypted socks5 proxy protocol designed to bypass
-//! network restrictions. It supports various AEAD ciphers.
+//! Shadowsocks 是一种加密的 SOCKS5 代理协议，设计用于绕过网络限制。
+//! 支持多种 AEAD 加密算法。
 //!
-//! ## Implementation
+//! ## 实现说明
 //!
-//! The main Shadowsocks handler implementation is in the parent module's `shadowsocks.rs` file.
-//! This module serves as a namespace and for future Shadowsocks-specific extensions.
+//! 主要的 Shadowsocks 处理器实现在父模块的 `shadowsocks.rs` 文件中。
+//! 本模块作为命名空间，用于未来 Shadowsocks 特定扩展。
 
 pub mod handler;
 

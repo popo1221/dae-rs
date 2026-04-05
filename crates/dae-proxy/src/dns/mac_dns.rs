@@ -1,8 +1,8 @@
-//! MAC-based DNS resolution
+//! 基于 MAC 地址的 DNS 解析
 //!
-//! Provides DNS resolution that selects DNS servers based on the client's MAC address.
-//! This enables different devices to receive different DNS results (e.g., for parental
-//! controls, device-specific filtering, or geo-restriction bypass).
+//! 提供根据客户端 MAC 地址选择 DNS 服务器的 DNS 解析功能。
+//! 这使得不同设备可以获得不同的 DNS 结果（例如用于家长控制、
+//! 设备特定过滤或地理限制绕过）。
 
 use std::collections::HashMap;
 use std::net::{IpAddr, ToSocketAddrs};
@@ -13,7 +13,9 @@ use tracing::{debug, warn};
 
 use crate::mac::MacAddr;
 
-/// DNS error types
+/// DNS 错误类型
+///
+/// 定义 DNS 解析过程中可能发生的错误。
 #[derive(Debug, thiserror::Error)]
 pub enum DnsError {
     #[error("No DNS server configured for MAC {0}")]
@@ -50,7 +52,9 @@ impl DnsCacheEntry {
     }
 }
 
-/// MAC-based DNS rule - maps a MAC address to specific DNS servers
+/// 基于 MAC 地址的 DNS 规则 - 将 MAC 地址映射到特定 DNS 服务器
+///
+/// 定义哪些 DNS 服务器用于特定 MAC 地址的设备。
 #[derive(Debug, Clone)]
 pub struct MacDnsRule {
     /// MAC address to match (exact match or with mask)
@@ -96,7 +100,9 @@ impl MacDnsRule {
     }
 }
 
-/// MAC-based DNS configuration
+/// 基于 MAC 地址的 DNS 配置
+///
+/// 配置基于 MAC 地址的 DNS 解析行为。
 #[derive(Debug, Clone)]
 pub struct MacDnsConfig {
     /// DNS rules for specific MAC addresses
@@ -123,7 +129,9 @@ impl Default for MacDnsConfig {
     }
 }
 
-/// DNS resolution result with metadata
+/// DNS 解析结果（包含元数据）
+///
+/// 包含 DNS 解析的详细信息。
 #[derive(Debug, Clone)]
 pub struct DnsResolution {
     /// Resolved IP addresses
@@ -136,10 +144,9 @@ pub struct DnsResolution {
     pub domain: String,
 }
 
-/// MAC-based DNS resolver
+/// 基于 MAC 地址的 DNS 解析器
 ///
-/// Selects appropriate DNS servers based on client MAC address and performs
-/// DNS resolution with caching.
+/// 根据客户端 MAC 地址选择合适的 DNS 服务器，并执行带缓存的 DNS 解析。
 pub struct MacDnsResolver {
     config: MacDnsConfig,
     cache: RwLock<HashMap<(MacAddr, String), DnsCacheEntry>>,

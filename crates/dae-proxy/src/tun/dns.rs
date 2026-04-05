@@ -1,4 +1,4 @@
-//! DNS hijacking module
+//! DNS 劫持模块
 
 use crate::tun::packet::DnsQuery;
 use std::collections::HashMap;
@@ -10,7 +10,9 @@ use tokio::sync::RwLock;
 use tokio::time::timeout;
 use tracing::{debug, error, warn};
 
-/// DNS hijack entry - maps queried IP to domain for rule matching
+/// DNS 劫持条目 - 将查询的 IP 映射到域名，用于规则匹配
+///
+/// 缓存 DNS 劫持的结果，将域名与返回的 IP 关联起来。
 #[derive(Debug, Clone)]
 pub struct DnsHijackEntry {
     /// The IP address that was returned in the DNS response
@@ -28,7 +30,9 @@ impl DnsHijackEntry {
     }
 }
 
-/// DNS hijacker for intercepting and handling DNS queries
+/// DNS 劫持器 - 拦截和处理 DNS 查询
+///
+/// 拦截 DNS 查询并返回伪造的响应，实现基于域名的流量路由。
 pub struct DnsHijacker {
     /// DNS cache: domain -> hijack entry
     cache: RwLock<HashMap<String, DnsHijackEntry>>,

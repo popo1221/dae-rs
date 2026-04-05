@@ -1,6 +1,6 @@
-//! VMess server implementation
+//! VMess 服务器实现模块
 //!
-//! Server that listens for VMess connections and handles them using the VMess handler.
+//! 本模块实现 VMess 服务器，负责监听连接并分发给处理器。
 
 use std::net::SocketAddr;
 use std::sync::Arc;
@@ -11,15 +11,35 @@ use tracing::{debug, error, info};
 use super::config::VmessClientConfig;
 use super::handler::VmessHandler;
 
-/// VMess server that listens for connections
+/// VMess 服务器
+///
+/// 负责监听 VMess 客户端连接，并分发给处理器。
+///
+/// # 字段说明
+/// - `handler`: VMess 处理器实例
+/// - `listener`: TCP 监听器
+/// - `listen_addr`: 监听地址
 pub struct VmessServer {
+    /// VMess 处理器实例
     handler: Arc<VmessHandler>,
+    /// TCP 监听器
     listener: TcpListener,
+    /// 监听地址
     listen_addr: SocketAddr,
 }
 
 impl VmessServer {
-    /// Create a new VMess server
+    /// 创建新的 VMess 服务器
+    ///
+    /// # 参数
+    /// - `addr`: 监听地址
+    ///
+    /// # 返回
+    /// - `Ok(Self)`: 创建成功
+    /// - `Err(std::io::Error)`: 绑定失败
+    ///
+    /// # 注意
+    /// 使用默认处理器配置。
     #[allow(dead_code)]
     pub async fn new(addr: SocketAddr) -> std::io::Result<Self> {
         let listener = TcpListener::bind(addr).await?;
@@ -30,7 +50,14 @@ impl VmessServer {
         })
     }
 
-    /// Create with custom configuration
+    /// 使用自定义配置创建服务器
+    ///
+    /// # 参数
+    /// - `config`: VMess 客户端配置
+    ///
+    /// # 返回
+    /// - `Ok(Self)`: 创建成功
+    /// - `Err(std::io::Error)`: 绑定失败
     pub async fn with_config(config: VmessClientConfig) -> std::io::Result<Self> {
         let listen_addr = config.listen_addr;
         let handler = Arc::new(VmessHandler::new(config));
@@ -42,7 +69,17 @@ impl VmessServer {
         })
     }
 
-    /// Start the VMess server
+    /// 启动 VMess 服务器
+    ///
+    /// # 返回
+    /// - `Ok(())`: 永不返回（服务器持续运行）
+    /// - `Err(std::io::Error)`: 接受连接时发生错误
+    ///
+    /// # 行为
+    /// 1. 在日志中记录监听地址
+    /// 2. 无限循环接受新连接
+    /// 3. 为每个连接克隆处理器并生成异步任务
+    /// 4. 处理错误只记录不断开（容错设计）
     pub async fn start(self: Arc<Self>) -> std::io::Result<()> {
         info!("VMess server listening on {}", self.listen_addr);
 

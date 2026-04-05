@@ -1,6 +1,20 @@
-//! Shadowsocks handler implementation
+//! Shadowsocks 处理器实现模块
 //!
-//! Implements the ss-local side connection handler.
+//! 实现了 ss-local（本地代理）侧的连接处理器，负责解析 Shadowsocks 协议并转发数据。
+//!
+//! # 处理流程
+//!
+//! 1. 读取 Shadowsocks AEAD 头部（包含目标地址信息）
+//! 2. 解析目标地址和端口
+//! 3. 连接到远程 Shadowsocks 服务器
+//! 4. 使用 `relay_bidirectional` 在客户端和服务器间双向转发数据
+//!
+//! # AEAD 协议格式
+//!
+//! AEAD 模式下，首个数据包包含加密的目标地址信息：
+//! - `[1 byte type][2 bytes length][encrypted payload]`
+//!
+//! 解密后 payload 格式：`[1 byte ATYP][address][2 bytes port]`
 
 use std::net::{IpAddr, Ipv4Addr, Ipv6Addr};
 use std::sync::Arc;
@@ -12,18 +26,42 @@ use tracing::{debug, error, info};
 use super::config::SsClientConfig;
 use super::protocol::TargetAddress;
 
-/// Shadowsocks handler that implements the ss-local side
+/// Shadowsocks 处理器，实现 ss-local 侧的数据处理
+///
+/// 负责处理单个 Shadowsocks 客户端连接，包括协议解析、目标地址提取、
+/// 服务器连接建立和数据转发。
+///
+/// # 使用方式
+///
+/// 通常不直接创建，而是通过 [`ShadowsocksServer`] 内部使用：
+///
+/// ```ignore
+/// let handler = Arc::new(ShadowsocksHandler::new(config));
+/// handler.handle(client_stream).await?;
+/// ```
 pub struct ShadowsocksHandler {
+    /// 客户端配置
     config: SsClientConfig,
 }
 
 impl ShadowsocksHandler {
-    /// Create a new Shadowsocks handler
+    /// 创建 Shadowsocks 处理器
+    ///
+    /// # 参数
+    ///
+    /// - `config`: 完整的客户端配置
+    ///
+    /// # 返回值
+    ///
+    /// 返回配置好的处理器实例，用于处理 Shadowsocks 连接。
     pub fn new(config: SsClientConfig) -> Self {
         Self { config }
     }
 
-    /// Create with default configuration
+    /// 使用默认配置创建处理器
+    ///
+    /// 默认配置监听 `127.0.0.1:1080`，服务器为 `127.0.0.1:8388`，
+    /// 加密方法为 `chacha20-ietf-poly1305`。
     #[allow(dead_code)]
     pub fn new_default() -> Self {
         Self {
@@ -31,13 +69,37 @@ impl ShadowsocksHandler {
         }
     }
 
-    /// Get the listen address
+    /// 获取监听地址
+    ///
+    /// # 返回值
+    ///
+    /// 返回处理器配置的本地监听地址。
     #[allow(dead_code)]
     pub fn listen_addr(&self) -> std::net::SocketAddr {
         self.config.listen_addr
     }
 
-    /// Handle a Shadowsocks connection
+    /// 处理 Shadowsocks 连接
+    ///
+    /// 这是处理器的主入口方法，处理一个完整的 Shadowsocks 客户端连接。
+    ///
+    /// # 参数
+    ///
+    /// - `self: Arc<Self>`: 处理器必须在 `Arc` 中以支持跨任务共享
+    /// - `client`: 与 Shadowsocks 客户端之间的 TCP 流
+    ///
+    /// # 处理步骤
+    ///
+    /// 1. **读取 AEAD 头部**：读取 Shadowsocks AEAD 首部的类型字节和长度前缀
+    /// 2. **解析目标地址**：从加密 payload 中解析目标地址和端口
+    /// 3. **连接服务器**：建立到 Shadowsocks 服务器的 TCP 连接
+    /// 4. **数据转发**：使用 `relay_bidirectional` 在客户端和服务器间双向转发数据
+    ///
+    /// # 错误处理
+    ///
+    /// - 连接超时：返回 `TimedOut` 错误
+    /// - 地址解析失败：返回 `InvalidData` 错误
+    /// - 服务器连接失败：返回对应的 IO 错误
     pub async fn handle(self: Arc<Self>, mut client: TcpStream) -> std::io::Result<()> {
         let client_addr = client.peer_addr()?;
 
@@ -107,7 +169,26 @@ impl ShadowsocksHandler {
         dae_relay::relay_bidirectional(client, remote).await
     }
 
-    /// Handle UDP traffic
+    /// 处理 UDP 流量
+    ///
+    /// Shadowsocks UDP 代理处理器，将 UDP 数据报转发到目标地址并接收响应。
+    ///
+    /// # 参数
+    ///
+    /// - `self: Arc<Self>`: 处理器实例
+    /// - `client`: 客户端 UDP 套接字
+    ///
+    /// # Shadowsocks UDP 数据报格式
+    ///
+    /// - ATYP (1 byte): 地址类型
+    /// - DST.ADDR (变长): 目标地址
+    /// - DST.PORT (2 bytes): 目标端口
+    /// - DATA (N bytes): 原始 UDP 数据负载
+    ///
+    /// - ATYP: 地址类型（0x01=IPv4, 0x03=域名, 0x04=IPv6）
+    /// - DST.ADDR: 目标地址（IPv4时4字节，IPv6时16字节，域名时1字节长度+域名）
+    /// - DST.PORT: 目标端口（2字节，大端序）
+    /// - DATA: 原始 UDP 数据负载
     #[allow(dead_code)]
     pub async fn handle_udp(self: Arc<Self>, client: UdpSocket) -> std::io::Result<()> {
         // Maximum UDP packet size for Shadowsocks

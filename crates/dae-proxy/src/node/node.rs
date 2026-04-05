@@ -1,34 +1,33 @@
-//! Node trait and types for dae-proxy node management
+//! dae-proxy 节点管理 - 核心 trait 和类型定义
 //!
-//! This module defines the core Node trait that all proxy node types implement.
+//! 本模块定义了所有代理节点类型必须实现的 Node trait。
 
 use async_trait::async_trait;
 
 // Re-export NodeError from the centralized error module
 pub use crate::core::error::NodeError;
 
-/// Node ID type - uniquely identifies a node in the configuration
+/// 节点 ID 类型 - 在配置中唯一标识一个节点
 pub type NodeId = String;
 
-/// Node trait - all node types implement this trait
+/// 节点 trait - 所有节点类型都必须实现此 trait
 ///
-/// This trait defines the common interface for all proxy nodes,
-/// including direct routing nodes and upstream proxy nodes.
+/// 此 trait 定义了所有代理节点的通用接口，包括直接路由节点和上游代理节点。
 #[async_trait]
 pub trait Node: Send + Sync {
-    /// Get the node's unique identifier
+    /// 获取节点的唯一标识符
     fn id(&self) -> &NodeId;
 
-    /// Get the node's display name
+    /// 获取节点的显示名称
     fn name(&self) -> &str;
 
-    /// Get the protocol name this node uses
+    /// 获取节点使用的协议名称
     fn protocol(&self) -> &'static str;
 
-    /// Ping the node and return latency in milliseconds
+    /// Ping 节点并返回延迟（毫秒）
     async fn ping(&self) -> Result<u32, NodeError>;
 
-    /// Check if the node is currently available
+    /// 检查节点当前是否可用
     async fn is_available(&self) -> bool;
 }
 

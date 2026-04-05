@@ -1,16 +1,16 @@
-//! VLESS protocol module
+//! VLESS 协议模块
 //!
-//! This module provides VLESS protocol support with XTLS.
+//! 本模块提供带 XTLS 的 VLESS 协议支持。
 //!
-//! ## Protocol Overview
+//! ## 协议概述
 //!
-//! VLESS is a stateless authentication protocol designed for cross-breach
-//! communication. It supports XTLS (TLS in TLS) for enhanced security.
+//! VLESS 是一种无状态认证协议，专为跨域通信设计。
+//! 支持 XTLS（TLS in TLS）以增强安全性。
 //!
-//! ## Implementation
+//! ## 实现说明
 //!
-//! The main VLESS handler implementation is in the parent module's `vless.rs` file.
-//! This module serves as a namespace and for future VLESS-specific extensions.
+//! 主要的 VLESS 处理器实现在父模块的 `vless.rs` 文件中。
+//! 本模块作为命名空间，用于未来 VLESS 特定扩展。
 
 pub mod handler;
 

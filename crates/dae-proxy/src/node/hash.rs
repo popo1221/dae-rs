@@ -1,21 +1,19 @@
-//! Hash algorithms for node selection
+//! 节点选择的哈希算法
 //!
-//! This module provides two hash algorithms used for consistent hashing
-//! and sticky session policies:
+//! 本模块提供两种用于一致性哈希和粘性会话策略的哈希算法：
 //!
-//! - [`Fnv1aHasher`]: FNV-1a (Fowler–Noll–Vo) hash algorithm
-//! - [`SipHasher`]: SipHash-2-4 algorithm (Rust DefaultHasher)
+//! - [`Fnv1aHasher`]: FNV-1a (Fowler–Noll–Vo) 哈希算法
+//! - [`SipHasher`]: SipHash-2-4 算法（Rust DefaultHasher）
 //!
 //! # FNV-1a
 //!
-//! FNV-1a is a non-cryptographic hash function designed for fast hashing.
-//! It has good distribution properties and is suitable for hash tables.
+//! FNV-1a 是一种非加密哈希函数，专为快速哈希而设计。
+//! 它具有良好的分布特性，适用于哈希表。
 //!
 //! # SipHash
 //!
-//! SipHash-2-4 is a cryptographically keyed hash function that provides
-//! protection against hash flooding attacks. Rust's `DefaultHasher` uses
-//! SipHash by default.
+//! SipHash-2-4 是一种加密学上有保障的密钥哈希函数，
+//! 可防止哈希洪水攻击。Rust 的 `DefaultHasher` 默认使用 SipHash。
 
 use std::hash::{Hash, Hasher};
 

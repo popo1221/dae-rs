@@ -1,15 +1,22 @@
+//! Hysteria2 协议实现 crate
 //!
-//! Hysteria2 protocol implementation
+//! Hysteria2 是一个基于 QUIC 的高性能、低延迟代理协议。
+//! 主要特点包括：
 //!
-//! Hysteria2 is a powerful, lightning fast and reliable proxy built on top of QUIC.
-//! It provides aggressive acceleration for proxy connections with features like:
-//! - QUIC-based transport for better performance
-//! - Obfuscation support to bypass DPI
-//! - Bandwidth congestion control
-//! - Simple authentication via password
+//! - 基于 QUIC 的传输层，获得更好的性能
+//! - 支持混淆（obfuscation）以绕过 DPI 检测
+//! - 带宽拥塞控制
+//! - 简单的密码认证机制
 //!
-//! **Note:** The QUIC transport layer (`quic` feature) is not yet implemented.
-//! The core Hysteria2 protocol works over TCP. QUIC support will be added in a future release.
+//! **注意**: QUIC 传输层（`quic` feature）尚未实现。
+//! 当前核心协议通过 TCP 工作。QUIC 支持将在未来版本中添加。
+//!
+//! # 主要导出
+//!
+//! - `Hysteria2Config`: 服务器配置
+//! - `Hysteria2Error`: 错误类型
+//! - `Hysteria2Handler`: 协议处理器
+//! - `Hysteria2Server`: 服务器实现
 
 mod hysteria2;
 #[cfg(feature = "quic")]

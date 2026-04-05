@@ -1,7 +1,23 @@
-//! Trojan handler implementation
+//! Trojan 处理器实现模块
 //!
-//! This module contains the TrojanHandler which implements the client-side
-//! Trojan protocol, including multi-backend support for failover.
+//! 本模块包含 `TrojanHandler`，负责处理 Trojan 协议的客户端连接逻辑。
+//!
+//! # 功能说明
+//! - 解析 Trojan 协议请求头（密码、命令、目标地址）
+//! - 支持 TCP 代理连接（`Proxy` 命令）
+//! - 支持 UDP 关联（`UdpAssociate` 命令）
+//! - 支持多后端服务器和轮询负载均衡
+//! - 使用常量时间比较防止时序攻击
+//!
+//! # 协议处理流程
+//! 1. 读取 56 字节密码并验证
+//! 2. 读取命令字节（Proxy/UdpAssociate）
+//! 3. 读取地址类型和目标地址信息
+//! 4. 根据命令类型执行相应处理
+//!
+//! # 安全特性
+//! - 密码验证使用 `subtle::ConstantTimeEq` 进行常量时间比较
+//! - 防止时序攻击（timing attack）
 
 use std::net::{IpAddr, Ipv4Addr, Ipv6Addr, SocketAddr};
 use std::sync::Arc;
@@ -15,17 +31,41 @@ use super::config::{TrojanClientConfig, TrojanServerConfig};
 use super::protocol::{TrojanCommand, TrojanTargetAddress, TROJAN_CRLF};
 use super::types::relay_bidirectional;
 
-/// Trojan handler that implements the client-side protocol
+/// Trojan 协议处理器
+///
+/// 负责处理 Trojan 客户端请求，实现协议解析、路由和流量转发。
+///
+/// # 字段说明
+/// - `config`: 客户端配置信息
+/// - `backends`: 远程服务器后端列表，支持多后端负载均衡
+/// - `current_index`: 轮询调度当前索引
+///
+/// # 多后端支持
+/// 处理器支持配置多个后端服务器，通过轮询（round-robin）策略选择后端。
+/// 当前连接失败时，下一次会尝试下一个后端。
 pub struct TrojanHandler {
+    /// 客户端配置
     config: TrojanClientConfig,
-    /// Multiple backends for failover
+    /// 远程服务器后端列表
     backends: Vec<TrojanServerConfig>,
-    /// Current backend index for round-robin
+    /// 轮询调度当前索引
     current_index: std::sync::atomic::AtomicUsize,
 }
 
 impl TrojanHandler {
-    /// Create a new Trojan handler with single backend
+    /// 创建只有一个后端的 Trojan 处理器
+    ///
+    /// # 参数
+    /// - `config`: Trojan 客户端配置，包含服务器信息和超时设置
+    ///
+    /// # 返回
+    /// 新的 TrojanHandler 实例
+    ///
+    /// # 示例
+    /// ```ignore
+    /// let config = TrojanClientConfig::default();
+    /// let handler = TrojanHandler::new(config);
+    /// ```
     pub fn new(config: TrojanClientConfig) -> Self {
         Self {
             backends: vec![config.server.clone()],
@@ -34,7 +74,15 @@ impl TrojanHandler {
         }
     }
 
-    /// Create a new Trojan handler with multiple backends
+    /// 创建支持多后端的 Trojan 处理器
+    ///
+    /// # 参数
+    /// - `config`: Trojan 客户端配置
+    /// - `backends`: 额外的服务器后端列表（会被追加到主服务器后）
+    ///
+    /// # 行为
+    /// - 如果 `backends` 为空，则只使用 `config.server` 作为唯一后端
+    /// - 轮询调度时会依次使用所有后端
     pub fn with_backends(config: TrojanClientConfig, backends: Vec<TrojanServerConfig>) -> Self {
         Self {
             backends: if backends.is_empty() {
@@ -47,7 +95,10 @@ impl TrojanHandler {
         }
     }
 
-    /// Create with default configuration
+    /// 使用默认配置创建 Trojan 处理器
+    ///
+    /// 使用 `TrojanClientConfig::default()` 初始化配置，
+    /// 连接到 127.0.0.1:443。
     #[allow(dead_code)]
     pub fn new_default() -> Self {
         Self {
@@ -57,7 +108,13 @@ impl TrojanHandler {
         }
     }
 
-    /// Get the next backend using round-robin
+    /// 获取下一个后端服务器（轮询调度）
+    ///
+    /// # 返回
+    /// 下一个后端服务器的配置引用
+    ///
+    /// # 线程安全
+    /// 使用原子操作实现无锁轮询，多线程并发调用安全
     fn next_backend(&self) -> &TrojanServerConfig {
         let idx = self
             .current_index
@@ -66,46 +123,79 @@ impl TrojanHandler {
         &self.backends[idx]
     }
 
-    /// Get all backends
+    /// 获取所有已配置的后端服务器列表
     #[allow(dead_code)]
     pub fn get_backends(&self) -> &[TrojanServerConfig] {
         &self.backends
     }
 
-    /// Get the number of configured backends
-    #[allow(dead_code)]
+    /// 获取已配置的后端服务器数量
+    ///
+    /// # 返回
+    /// 后端服务器总数
     pub fn backend_count(&self) -> usize {
         self.backends.len()
     }
 
-    /// Get the listen address
+    /// 获取本地监听地址
     #[allow(dead_code)]
     pub fn listen_addr(&self) -> SocketAddr {
         self.config.listen_addr
     }
 
-    /// Validate password using constant-time comparison to prevent timing attacks
+    /// 验证密码是否正确（常量时间比较）
+    ///
+    /// # 参数
+    /// - `password`: 待验证的密码字符串
+    ///
+    /// # 返回
+    /// - `true`: 密码匹配
+    /// - `false`: 密码不匹配
+    ///
+    /// # 安全说明
+    /// 使用 `subtle::ConstantTimeEq` 进行比较，防止时序攻击。
+    /// 即使密码长度不同，比较也会执行完整的固定时间，
+    /// 防止通过比较时间推断密码前缀。
     pub fn validate_password(&self, password: &str) -> bool {
-        // Use constant-time comparison to prevent timing attacks
         let expected = self.config.server.password.as_bytes();
         let input = password.as_bytes();
         expected.ct_eq(input).unwrap_u8() == 1
     }
 
-    /// Handle a Trojan TCP connection
+    /// 处理 Trojan TCP 连接
+    ///
+    /// # 参数
+    /// - `self`: Arc<Self>，确保处理器在多连接场景下共享
+    /// - `client`: 客户端 TCP 连接
+    ///
+    /// # 返回
+    /// - `Ok(())`: 处理成功完成
+    /// - `Err(std::io::Error)`: 处理过程中发生错误
+    ///
+    /// # 协议处理步骤
+    /// 1. 读取 56 字节密码
+    /// 2. 读取并验证 CRLF
+    /// 3. 读取命令字节
+    /// 4. 读取地址类型和目标地址
+    /// 5. 根据命令执行 TCP 代理或 UDP 关联
+    ///
+    /// # 错误处理
+    /// - 密码错误、CRLF 不匹配、未知命令等都会关闭连接
+    /// - 连接后端超时会在日志中记录并返回错误
     pub async fn handle(self: Arc<Self>, mut client: TcpStream) -> std::io::Result<()> {
         let client_addr = client.peer_addr()?;
 
-        // Trojan protocol:
-        // After TLS handshake, client sends:
-        // [password (56 bytes)][0x0D, 0x0A]  <- CRLF
-        // [command (1 byte)][address type (1 byte)][address][port (2 bytes)][0x0D, 0x0A]
+        // Trojan 协议格式:
+        // TLS 握手后，客户端发送:
+        // [password (56 bytes)][\r\n]
+        // [command (1 byte)][address type (1 byte)][address][port (2 bytes)][\r\n]
+        // [payload ...]
 
-        // Read password (56 bytes)
+        // 读取密码（56 字节）
         let mut password_buf = vec![0u8; 56];
         client.read_exact(&mut password_buf).await?;
 
-        // Read CRLF (2 bytes)
+        // 读取 CRLF（2 字节）
         let mut crlf_buf = [0u8; 2];
         client.read_exact(&mut crlf_buf).await?;
         if crlf_buf != TROJAN_CRLF {
@@ -116,7 +206,7 @@ impl TrojanHandler {
             ));
         }
 
-        // Read command and address
+        // 读取命令字节
         let mut cmd_buf = [0u8; 1];
         client.read_exact(&mut cmd_buf).await?;
         let command = cmd_buf[0];
@@ -135,16 +225,16 @@ impl TrojanHandler {
 
         debug!("Trojan TCP: {} command={:?}", client_addr, cmd);
 
-        // Read address header (common for both Proxy and UdpAssociate)
-        // Read address type
+        // 读取地址头（命令和 UDP Associate 共享此格式）
+        // 读取地址类型
         let mut atyp_buf = [0u8; 1];
         client.read_exact(&mut atyp_buf).await?;
         let atyp = atyp_buf[0];
 
-        // Read address based on type
+        // 根据地址类型读取地址
         let address = match atyp {
             0x01 => {
-                // IPv4 (4 bytes)
+                // IPv4（4 字节）
                 let mut ip_buf = [0u8; 4];
                 client.read_exact(&mut ip_buf).await?;
                 TrojanTargetAddress::Ipv4(IpAddr::V4(Ipv4Addr::new(
@@ -152,7 +242,7 @@ impl TrojanHandler {
                 )))
             }
             0x02 => {
-                // Domain (1 byte length + domain)
+                // 域名（1 字节长度 + 域名）
                 let mut len_buf = [0u8; 1];
                 client.read_exact(&mut len_buf).await?;
                 let domain_len = len_buf[0] as usize;
@@ -164,10 +254,10 @@ impl TrojanHandler {
                         "invalid domain in Trojan header",
                     )
                 })?;
-                TrojanTargetAddress::Domain(domain, 0) // Port will be read next
+                TrojanTargetAddress::Domain(domain, 0) // 端口后续读取
             }
             0x03 => {
-                // IPv6 (16 bytes)
+                // IPv6（16 字节）
                 let mut ip_buf = [0u8; 16];
                 client.read_exact(&mut ip_buf).await?;
                 TrojanTargetAddress::Ipv6(IpAddr::V6(Ipv6Addr::new(
@@ -189,12 +279,12 @@ impl TrojanHandler {
             }
         };
 
-        // Read port (2 bytes)
+        // 读取端口（2 字节）
         let mut port_buf = [0u8; 2];
         client.read_exact(&mut port_buf).await?;
         let port = u16::from_be_bytes(port_buf);
 
-        // Read final CRLF (2 bytes)
+        // 读取最后的 CRLF（2 字节）
         let mut crlf_buf = [0u8; 2];
         client.read_exact(&mut crlf_buf).await?;
         if crlf_buf != TROJAN_CRLF {
@@ -211,7 +301,7 @@ impl TrojanHandler {
                     _ => format!("{address}:{port}"),
                 };
 
-                // Select backend using round-robin
+                // 使用轮询选择后端
                 let backend = self.next_backend();
                 let remote_addr = format!("{}:{}", backend.addr, backend.port);
                 let timeout = self.config.tcp_timeout;
@@ -225,7 +315,7 @@ impl TrojanHandler {
                     self.backend_count()
                 );
 
-                // Connect to the selected backend
+                // 连接到选定的后端服务器
                 let remote =
                     match tokio::time::timeout(timeout, TcpStream::connect(&remote_addr)).await {
                         Ok(Ok(s)) => s,
@@ -250,13 +340,13 @@ impl TrojanHandler {
 
                 debug!("Connected to Trojan server {}", remote_addr);
 
-                // Relay data between client and remote
+                // 在客户端和远程之间转发数据
                 self.relay(client, remote).await
             }
             TrojanCommand::UdpAssociate => {
-                // Trojan UDP Associate - UDP packets are encapsulated in Trojan UDP frames
-                // Frame format: [cmd(1)][uuid(16)][ver(1)][port(2)][atyp(1)][addr][payload]
-                // After initial header is parsed (above), UDP frames are exchanged over TCP
+                // Trojan UDP 关联 - UDP 数据包封装在 Trojan UDP 帧中
+                // 帧格式: [cmd(1)][uuid(16)][ver(1)][port(2)][atyp(1)][addr][payload]
+                // 初始头部解析后，UDP 帧通过 TCP 交换
 
                 let address_str = match &address {
                     TrojanTargetAddress::Domain(d, _) => format!("{d}:{port}"),
@@ -270,11 +360,11 @@ impl TrojanHandler {
                     self.backend_count()
                 );
 
-                // Select backend using round-robin
+                // 使用轮询选择后端
                 let backend = self.next_backend();
                 let backend_addr = format!("{}:{}", backend.addr, backend.port);
 
-                // Connect UDP socket to the Trojan backend server
+                // 连接 UDP socket 到 Trojan 后端服务器
                 let remote_udp = match tokio::time::timeout(
                     self.config.udp_timeout,
                     UdpSocket::bind("0.0.0.0:0"),
@@ -302,7 +392,7 @@ impl TrojanHandler {
 
                 debug!("Connected UDP socket to backend {}", backend_addr);
 
-                // Relay UDP packets between client (TCP) and remote (UDP)
+                // 在客户端（TCP）和远程（UDP）之间转发 UDP 数据包
                 self.relay_udp_over_tcp(client, remote_udp, &address_str)
                     .await?;
 
@@ -311,17 +401,31 @@ impl TrojanHandler {
         }
     }
 
-    /// Relay data between client and remote
+    /// 在客户端和远程 TCP 连接之间转发数据
+    ///
+    /// # 参数
+    /// - `client`: 客户端 TCP 流
+    /// - `remote`: 远程服务器 TCP 流
     async fn relay(&self, client: TcpStream, remote: TcpStream) -> std::io::Result<()> {
         relay_bidirectional(client, remote).await
     }
 
-    /// Relay UDP packets between client (TCP stream) and remote (UDP socket)
+    /// 通过 TCP 传输的 Trojan UDP 帧协议，在客户端（TCP）和远程（UDP socket）之间转发 UDP 数据包
     ///
-    /// Trojan UDP frame format over TCP:
-    /// [cmd (1)][uuid (16)][ver (1)][target port (2)][addr type (1)][target addr (variable)][payload (variable)]
+    /// # Trojan UDP 帧格式（通过 TCP 传输）
+    /// ```text
+    /// [cmd (1 byte)][uuid (16 bytes)][ver (1 byte)][target port (2 bytes)][addr type (1 byte)][target addr (variable)][payload (variable)]
+    /// ```
     ///
-    /// Commands: 0x01 = UDP data, 0x02 = DISCONNECT, 0x03 = PING
+    /// # 命令类型
+    /// - `0x01`: UDP 数据包
+    /// - `0x02`: 断开连接（DISCONNECT）
+    /// - `0x03`: 心跳检测（PING/PONG）
+    ///
+    /// # 参数
+    /// - `client`: 客户端 TCP 流
+    /// - `remote_udp`: 到 Trojan 服务器的 UDP socket
+    /// - `target_info`: 目标地址信息字符串（用于日志）
     async fn relay_udp_over_tcp(
         &self,
         mut client: TcpStream,
@@ -333,14 +437,9 @@ impl TrojanHandler {
 
         info!("Starting Trojan UDP relay: {} via UDP socket", remote_addr);
 
-        // For Trojan UDP over TCP, we need to:
-        // 1. Read UDP frames from client TCP stream
-        // 2. Extract payload and forward to remote UDP socket
-        // 3. Read responses from UDP socket and send back via TCP
-
         loop {
-            // Read UDP frame header from TCP
-            // Minimum header: cmd(1) + uuid(16) + ver(1) + port(2) + atyp(1) = 21 bytes
+            // 从 TCP 读取 UDP 帧头
+            // 最小头部长度: cmd(1) + uuid(16) + ver(1) + port(2) + atyp(1) = 21 字节
             let mut header_buf = [0u8; 21];
             match tokio::time::timeout(self.config.udp_timeout, client.read_exact(&mut header_buf))
                 .await
@@ -357,12 +456,12 @@ impl TrojanHandler {
             };
 
             let cmd = header_buf[0];
-            // uuid is at header_buf[1..17] (16 bytes)
+            // uuid 位于 header_buf[1..17]（16 字节）
             let ver = header_buf[17];
             let target_port = u16::from_be_bytes([header_buf[18], header_buf[19]]);
             let atyp = header_buf[20];
 
-            // Validate version
+            // 验证版本号
             if ver != 0x01 {
                 debug!("Unknown Trojan UDP version: {}", ver);
                 continue;
@@ -370,17 +469,17 @@ impl TrojanHandler {
 
             match cmd {
                 0x01 => {
-                    // UDP data - read target address and payload
+                    // UDP 数据 - 读取目标地址和载荷
                     let target_addr = match atyp {
                         0x01 => {
-                            // IPv4 - 4 bytes
+                            // IPv4 - 4 字节
                             let mut ip_buf = [0u8; 4];
                             client.read_exact(&mut ip_buf).await?;
                             IpAddr::V4(Ipv4Addr::new(ip_buf[0], ip_buf[1], ip_buf[2], ip_buf[3]))
                                 .to_string()
                         }
                         0x02 => {
-                            // Domain - 1 byte length + domain
+                            // 域名 - 1 字节长度 + 域名
                             let mut len_buf = [0u8; 1];
                             client.read_exact(&mut len_buf).await?;
                             let domain_len = len_buf[0] as usize;
@@ -394,7 +493,7 @@ impl TrojanHandler {
                             })?
                         }
                         0x03 => {
-                            // IPv6 - 16 bytes
+                            // IPv6 - 16 字节
                             let mut ip_buf = [0u8; 16];
                             client.read_exact(&mut ip_buf).await?;
                             IpAddr::V6(Ipv6Addr::new(
@@ -417,12 +516,11 @@ impl TrojanHandler {
 
                     let target = format!("{}:{}", target_addr, target_port);
 
-                    // Read remaining UDP data (payload)
-                    // We need to read until EOF or timeout
+                    // 读取剩余的 UDP 数据（载荷）
                     let mut payload_buf = vec![0u8; MAX_UDP_FRAME_SIZE];
                     let mut total_read = 0;
 
-                    // Try to read as much as available (non-blocking-ish)
+                    // 尝试读取尽可能多的数据
                     loop {
                         match tokio::time::timeout(
                             std::time::Duration::from_millis(100),
@@ -454,7 +552,7 @@ impl TrojanHandler {
                         total_read, remote_addr, target
                     );
 
-                    // Forward payload to remote Trojan server via UDP
+                    // 通过 UDP 转发载荷到远程 Trojan 服务器
                     match remote_udp.send(&payload_buf[..total_read]).await {
                         Ok(n) => debug!("Sent {} bytes to UDP server", n),
                         Err(e) => {
@@ -462,7 +560,7 @@ impl TrojanHandler {
                         }
                     }
 
-                    // Read response from UDP server
+                    // 从 UDP 服务器读取响应
                     let mut response_buf = vec![0u8; MAX_UDP_FRAME_SIZE];
                     match tokio::time::timeout(
                         self.config.udp_timeout,
@@ -471,36 +569,32 @@ impl TrojanHandler {
                     .await
                     {
                         Ok(Ok(m)) if m > 0 => {
-                            // Build response frame and send back to client via TCP
-                            // Response frame: [0x01][uuid(16)][0x01][port(2)][atyp(1)][addr][payload]
+                            // 构建响应帧并通过 TCP 发送回客户端
+                            // 响应帧: [0x01][uuid(16)][0x01][port(2)][atyp(1)][addr][payload]
                             let mut response_frame = Vec::with_capacity(21 + m);
                             response_frame.push(0x01); // cmd = UDP
                             response_frame.extend_from_slice(&header_buf[1..17]); // uuid
                             response_frame.push(0x01); // ver
                             response_frame.extend_from_slice(&header_buf[18..20]); // port
-                            response_frame.push(atyp); // address type
+                            response_frame.push(atyp); // 地址类型
 
-                            // Add target address back
+                            // 重新添加目标地址
                             match atyp {
                                 0x01 => {
-                                    // IPv4 - read the 4 bytes we stored earlier
                                     let ip = target_addr.parse::<IpAddr>().unwrap();
                                     if let IpAddr::V4(v4) = ip {
                                         response_frame.extend_from_slice(&v4.octets());
                                     }
                                 }
                                 0x02 => {
-                                    // Domain
                                     let domain = &target_addr;
                                     response_frame.push(domain.len() as u8);
                                     response_frame.extend_from_slice(domain.as_bytes());
                                 }
                                 0x03 => {
-                                    // IPv6
                                     let ip = target_addr.parse::<IpAddr>().unwrap();
                                     if let IpAddr::V6(v6) = ip {
-                                        let octets = v6.octets();
-                                        response_frame.extend_from_slice(&octets);
+                                        response_frame.extend_from_slice(&v6.octets());
                                     }
                                 }
                                 _ => {}
@@ -513,7 +607,7 @@ impl TrojanHandler {
                             }
                         }
                         _ => {
-                            // Timeout or error - send PING to keepalive
+                            // 超时或错误 - 发送 PING 保持连接
                             debug!("No UDP response, sending PING");
                             let mut ping_frame = Vec::new();
                             ping_frame.push(0x03); // cmd = PING
@@ -530,16 +624,16 @@ impl TrojanHandler {
                     }
                 }
                 0x02 => {
-                    // DISCONNECT
+                    // DISCONNECT - 客户端请求断开连接
                     debug!("Trojan UDP: DISCONNECT received");
                     break;
                 }
                 0x03 => {
-                    // PING - client is checking if we're alive
+                    // PING - 客户端检查连接是否存活
                     debug!("Trojan UDP: PING received");
-                    // Send back PONG
+                    // 发送 PONG 响应
                     let mut pong_frame = Vec::new();
-                    pong_frame.push(0x03); // cmd = PING (PONG is same as PING in Trojan)
+                    pong_frame.push(0x03); // cmd = PING（Trojan 中 PONG 与 PING 相同）
                     pong_frame.extend_from_slice(&header_buf[1..17]); // uuid
                     pong_frame.push(0x01); // ver
                     pong_frame.extend_from_slice(&header_buf[18..20]); // port
@@ -560,7 +654,15 @@ impl TrojanHandler {
         Ok(())
     }
 
-    /// Handle UDP traffic
+    /// 处理 UDP 流量
+    ///
+    /// # 参数
+    /// - `self`: Arc<Self>
+    /// - `client`: 本地 UDP socket
+    ///
+    /// # 注意
+    /// 这是一个较老的 UDP 处理方式，直接在 UDP 层面操作。
+    /// 建议使用 `handle` 方法中的 UDP Associate 机制。
     #[allow(dead_code)]
     pub async fn handle_udp(self: Arc<Self>, client: UdpSocket) -> std::io::Result<()> {
         const MAX_UDP_SIZE: usize = 65535;
@@ -573,7 +675,7 @@ impl TrojanHandler {
                 continue;
             }
 
-            // Parse Trojan UDP header
+            // 解析 Trojan UDP 头
             let (target_addr, target_port, payload_offset) =
                 match TrojanTargetAddress::parse_from_bytes(&buf) {
                     Some((addr, port)) => (addr, port, 0),
@@ -590,7 +692,7 @@ impl TrojanHandler {
                 payload.len()
             );
 
-            // Forward to Trojan server and back
+            // 转发到 Trojan 服务器并返回响应
             let server_addr = format!("{}:{}", self.config.server.addr, self.config.server.port);
             let server_socket = UdpSocket::bind("0.0.0.0:0").await?;
             server_socket.send_to(payload, &server_addr).await?;
@@ -608,12 +710,12 @@ impl TrojanHandler {
     }
 }
 
-/// Implement Handler trait for TrojanHandler
 #[cfg(test)]
 mod tests {
     use super::super::config::TrojanTlsConfig;
     use super::*;
 
+    /// 测试处理器创建（单个后端）
     #[test]
     fn test_handler_creation() {
         let config = TrojanClientConfig::default();
@@ -621,6 +723,7 @@ mod tests {
         assert_eq!(handler.backend_count(), 1);
     }
 
+    /// 测试多后端处理器创建
     #[test]
     fn test_handler_with_multiple_backends() {
         let config = TrojanClientConfig::default();
@@ -635,6 +738,7 @@ mod tests {
         assert_eq!(handler.backend_count(), 2);
     }
 
+    /// 测试轮询调度
     #[test]
     fn test_next_backend_round_robin() {
         let config = TrojanClientConfig::default();
@@ -650,21 +754,22 @@ mod tests {
         ];
         let handler = TrojanHandler::with_backends(config, backends);
 
-        // First call should return first backend
-        // (due to fetch_add, the index is incremented first)
+        // 由于 fetch_add，索引会先递增
         let backend1 = handler.next_backend();
         let backend2 = handler.next_backend();
 
-        // Both should be different
+        // 两次调用应返回不同的后端
         assert_ne!(backend1.addr, backend2.addr);
     }
 
+    /// 测试客户端配置默认值
     #[test]
     fn test_trojan_client_config_default() {
         let config = TrojanClientConfig::default();
         assert_eq!(config.listen_addr, SocketAddr::from(([127, 0, 0, 1], 1080)));
     }
 
+    /// 测试服务器配置默认值
     #[test]
     fn test_trojan_server_config_default() {
         let config = TrojanServerConfig::default();
@@ -672,6 +777,7 @@ mod tests {
         assert_eq!(config.port, 443);
     }
 
+    /// 测试自定义服务器配置
     #[test]
     fn test_trojan_server_config_custom() {
         let config = TrojanServerConfig {

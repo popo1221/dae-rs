@@ -1,29 +1,32 @@
-//! SOCKS4 protocol types and constants
+//! SOCKS4 协议类型和常量定义模块
 //!
-//! Contains the core protocol definitions for SOCKS4 and SOCKS4a.
+//! 包含 SOCKS4 和 SOCKS4a 协议的核心类型定义。
 
 use std::net::{Ipv4Addr, SocketAddr, SocketAddrV4};
 use tokio::io::AsyncReadExt;
 use tracing::debug;
 
-/// SOCKS4 protocol constants
+/// SOCKS4 协议常量
 mod consts {
-    /// Protocol version
+    /// 协议版本号
     pub const VER: u8 = 0x04;
 
-    /// SOCKS4a magic address when domain is used
+    /// SOCKS4a 魔术地址前三个字节
+    ///
+    /// 当 DST.IP 前三个字节为 0.0.0 且第四个字节非零时，
+    /// 表示这是一个 SOCKS4a 请求，后续会有域名。
     #[allow(dead_code)]
     pub const SOCKS4A_MAGIC_IP: [u8; 3] = [0x00, 0x00, 0x00];
 
-    /// Commands
+    /// 命令码
     pub const CMD_CONNECT: u8 = 0x01;
     pub const CMD_BIND: u8 = 0x02;
 
-    /// Response codes
+    /// 响应码
     pub const REP_REQUEST_GRANTED: u8 = 0x5A;
     pub const REP_REQUEST_REJECTED: u8 = 0x5B;
-    pub const REP_REQUEST_FAILED: u8 = 0x5C; // Identd not running
-    pub const REP_REQUEST_FAILED_USER: u8 = 0x5D; // User id mismatch
+    pub const REP_REQUEST_FAILED: u8 = 0x5C; // Identd 未运行
+    pub const REP_REQUEST_FAILED_USER: u8 = 0x5D; // 用户 ID 不匹配
 }
 
 // Re-export constants for use in other modules
@@ -33,14 +36,26 @@ pub use consts::{
     REP_REQUEST_REJECTED, SOCKS4A_MAGIC_IP, VER,
 };
 
-/// SOCKS4 command
+/// SOCKS4 命令类型
+///
+/// 定义 SOCKS4 协议支持的命令。
 #[derive(Debug, Clone, Copy)]
 pub enum Socks4Command {
+    /// CONNECT 命令：请求连接到目标服务器
     Connect,
+    /// BIND 命令：请求服务器绑定地址并等待连接
     Bind,
 }
 
 impl Socks4Command {
+    /// 从字节值解析命令
+    ///
+    /// # 参数
+    /// - `v`: 原始字节值
+    ///
+    /// # 返回值
+    /// - `Some(Socks4Command)`: 有效的命令
+    /// - `None`: 无效的命令码
     pub fn from_u8(v: u8) -> Option<Self> {
         match v {
             consts::CMD_CONNECT => Some(Socks4Command::Connect),
@@ -50,16 +65,29 @@ impl Socks4Command {
     }
 }
 
-/// SOCKS4 response code
+/// SOCKS4 响应码
+///
+/// 定义 SOCKS4 服务器返回给客户端的响应状态。
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Socks4Reply {
+    /// 请求成功，连接已建立
     RequestGranted,
+    /// 请求被拒绝
     RequestRejected,
+    /// 请求失败，identd 未运行
     RequestFailedIdentd,
+    /// 请求失败，用户 ID 不匹配
     RequestFailedUserId,
 }
 
 impl Socks4Reply {
+    /// 转换为字节值
+    ///
+    /// # 返回值
+    /// - 0x5A: RequestGranted
+    /// - 0x5B: RequestRejected
+    /// - 0x5C: RequestFailedIdentd
+    /// - 0x5D: RequestFailedUserId
     pub fn to_u8(self) -> u8 {
         match self {
             Socks4Reply::RequestGranted => consts::REP_REQUEST_GRANTED,
@@ -81,17 +109,43 @@ impl std::fmt::Display for Socks4Reply {
     }
 }
 
-/// SOCKS4 address type (IPv4 only)
+/// SOCKS4 地址类型
+///
+/// SOCKS4 仅支持 IPv4 地址。
+///
+/// # SOCKS4 vs SOCKS4a 地址区别
+///
+/// SOCKS4:
+/// - DST.IP: 4 字节 IPv4 地址
+/// - DST.PORT: 2 字节端口号
+///
+/// SOCKS4a:
+/// - DST.IP: 0.0.0.X（X 非零，表示后续有域名）
+/// - DST.PORT: 2 字节端口号
+/// - 域名: null 结尾的字符串
 #[derive(Debug, Clone)]
 pub struct Socks4Address {
-    /// IPv4 address
+    /// IPv4 地址
     pub ip: Ipv4Addr,
-    /// Port
+    /// 端口号
     pub port: u16,
 }
 
 impl Socks4Address {
-    /// Parse from SOCKS4 request format
+    /// 从 SOCKS4 请求中解析地址
+    ///
+    /// # 参数
+    /// - `reader`: 字节读取器
+    /// - `use_socks4a`: 是否启用 SOCKS4a 支持
+    ///
+    /// # 返回值
+    /// - `Ok(Socks4Address)`: 解析成功
+    /// - `Err`: 解析失败
+    ///
+    /// # SOCKS4a 检测
+    ///
+    /// 当 `use_socks4a` 为 true 且 DST.IP 前三个字节为 0.0.0 时，
+    /// 会将第四个字节作为域名长度，读取并解析域名。
     pub async fn parse_from<R: AsyncReadExt + Unpin>(
         reader: &mut R,
         use_socks4a: bool,
@@ -136,7 +190,10 @@ impl Socks4Address {
         Ok(Socks4Address { ip, port })
     }
 
-    /// Convert to SocketAddr
+    /// 转换为 SocketAddr
+    ///
+    /// # 返回值
+    /// - `SocketAddr`: IPv4 Socket 地址
     pub fn to_socket_addr(&self) -> SocketAddr {
         SocketAddr::V4(SocketAddrV4::new(self.ip, self.port))
     }

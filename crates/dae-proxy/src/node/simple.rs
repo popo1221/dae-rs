@@ -1,7 +1,6 @@
-//! Simple node implementations for dae-proxy
+//! dae-proxy 简单节点实现
 //!
-//! This module provides concrete implementations of the node management
-//! traits defined in the parent module.
+//! 本模块提供节点管理 trait 的具体实现。
 
 use std::net::SocketAddr;
 use std::sync::Arc;
@@ -18,13 +17,13 @@ use super::node::{Node, NodeError, NodeId};
 use super::selector::{DefaultNodeSelector, NodeSelector};
 
 // ============================================================================
-// SimpleNode - Basic node implementation
+// SimpleNode - 基础节点实现
 // ============================================================================
 
-/// Simple node implementation for proxy servers
+/// 代理服务器的简单节点实现
 ///
-/// This struct represents a basic proxy node with TCP connectivity.
-/// It uses TCP connection time to measure latency.
+/// 此结构体表示一个具有 TCP 连接能力的基本代理节点。
+/// 使用 TCP 连接时间来测量延迟。
 #[derive(Debug, Clone)]
 pub struct SimpleNode {
     /// Unique node identifier
@@ -124,13 +123,13 @@ impl Node for SimpleNode {
 }
 
 // ============================================================================
-// SimpleNodeManager - Node lifecycle management
+// SimpleNodeManager - 节点生命周期管理
 // ============================================================================
 
-/// Simple node manager implementation
+/// 简单的节点管理器实现
 ///
-/// This struct manages node registration, selection, and latency tracking.
-/// It uses internal locks for thread-safe concurrent access.
+/// 此结构体管理节点注册、选择和延迟追踪。
+/// 使用内部锁实现线程安全的并发访问。
 pub struct SimpleNodeManager {
     /// Registered nodes by ID
     nodes: RwLock<HashMap<NodeId, Arc<dyn Node>>>,
@@ -352,13 +351,12 @@ impl LatencyTestResult {
 }
 
 // ============================================================================
-// LatencyMonitor - Periodic latency testing
+// LatencyMonitor - 定期延迟测试
 // ============================================================================
 
-/// Latency monitor for periodic latency testing
+/// 延迟监控器 - 定期执行延迟测试
 ///
-/// This struct runs latency tests at regular intervals and
-/// updates the node manager with the results.
+/// 此结构体定期运行延迟测试，并用结果更新节点管理器。
 pub struct LatencyMonitor {
     /// Reference to the node manager
     node_manager: Arc<SimpleNodeManager>,

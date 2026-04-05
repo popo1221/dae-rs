@@ -1,6 +1,20 @@
-//! TUIC protocol codec implementation
+//! TUIC 协议编解码器实现
 //!
-//! Provides serialization and deserialization for TUIC protocol messages.
+//! 提供了 TUIC 协议消息的序列化和反序列化功能。
+//!
+//! # 主要功能
+//!
+//! - 读写认证请求/响应
+//! - 读写连接请求/响应
+//! - 读写心跳消息
+//! - 读写 UDP 数据包
+//!
+//! # 协议消息格式
+//!
+//! - 认证请求: 版本(1字节) + UUID(36字节) + 令牌长度(2字节) + 令牌
+//! - 连接请求: 地址类型 + 地址 + 端口(2字节) + 会话ID(8字节)
+//! - 心跳: 时间戳(8字节)
+//! - UDP数据包: 会话ID(8字节) + 长度(2字节) + 数据
 
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use tracing::debug;
@@ -10,11 +24,41 @@ use super::tuic_impl::{
     TuicAuthRequest, TUIC_VERSION,
 };
 
-/// TUIC protocol codec
+/// TUIC 协议编解码器
+///
+/// 提供 TUIC 协议消息的异步读写功能。
+/// 支持认证、连接、心跳和 UDP 数据包的处理。
+///
+/// # 使用方式
+///
+/// ```rust,ignore
+/// use tuic::codec::TuicCodec;
+///
+/// // 读取认证请求
+/// let auth = TuicCodec::read_auth_request(&mut stream).await?;
+///
+/// // 写入认证响应
+/// TuicCodec::write_auth_response(&mut stream, true).await?;
+/// ```
 pub struct TuicCodec;
 
 impl TuicCodec {
-    /// Read authentication request from stream
+    /// 从流中读取认证请求
+    ///
+    /// 读取客户端发送的认证请求消息。
+    ///
+    /// # 参数
+    ///
+    /// - `reader`: 异步读取器
+    ///
+    /// # 返回值
+    ///
+    /// - `Ok(TuicAuthRequest)`: 读取成功
+    /// - `Err(TuicError)`: 读取失败（版本不支持、格式错误等）
+    ///
+    /// # 消息格式
+    ///
+    /// [1 字节版本][36 字节 UUID][2 字节令牌长度][令牌]
     pub async fn read_auth_request<R: AsyncReadExt + Unpin>(
         reader: &mut R,
     ) -> Result<TuicAuthRequest, TuicError> {
@@ -52,7 +96,19 @@ impl TuicCodec {
         Ok(TuicAuthRequest { version, uuid, token })
     }
 
-    /// Write authentication request to stream
+    /// 向流中写入认证请求
+    ///
+    /// 将认证请求写入流（通常是从客户端到服务器）。
+    ///
+    /// # 参数
+    ///
+    /// - `writer`: 异步写入器
+    /// - `req`: 要写入的认证请求
+    ///
+    /// # 返回值
+    ///
+    /// - `Ok(())`: 写入成功
+    /// - `Err(TuicError)`: 写入失败
     pub async fn write_auth_request<W: AsyncWriteExt + Unpin>(
         writer: &mut W,
         req: &TuicAuthRequest,
@@ -70,7 +126,19 @@ impl TuicCodec {
         Ok(())
     }
 
-    /// Read authentication response
+    /// 从流中读取认证响应
+    ///
+    /// 读取服务器返回的认证结果。
+    ///
+    /// # 参数
+    ///
+    /// - `reader`: 异步读取器
+    ///
+    /// # 返回值
+    ///
+    /// - `Ok(true)`: 认证成功
+    /// - `Ok(false)`: 认证失败
+    /// - `Err(TuicError)`: 读取失败
     pub async fn read_auth_response<R: AsyncReadExt + Unpin>(
         reader: &mut R,
     ) -> Result<bool, TuicError> {
@@ -79,7 +147,19 @@ impl TuicCodec {
         Ok(status_buf[0] == 0x00)
     }
 
-    /// Write authentication response
+    /// 向流中写入认证响应
+    ///
+    /// 将认证结果写入流（服务器到客户端）。
+    ///
+    /// # 参数
+    ///
+    /// - `writer`: 异步写入器
+    /// - `success`: 认证是否成功
+    ///
+    /// # 返回值
+    ///
+    /// - `Ok(())`: 写入成功
+    /// - `Err(TuicError)`: 写入失败
     pub async fn write_auth_response<W: AsyncWriteExt + Unpin>(
         writer: &mut W,
         success: bool,
@@ -88,7 +168,25 @@ impl TuicCodec {
         Ok(())
     }
 
-    /// Read a TUIC command from stream
+    /// 从流中读取 TUIC 命令
+    ///
+    /// 根据命令类型读取并解析相应的命令消息。
+    ///
+    /// # 参数
+    ///
+    /// - `reader`: 异步读取器
+    ///
+    /// # 返回值
+    ///
+    /// - `Ok(TuicCommand)`: 读取成功
+    /// - `Err(TuicError)`: 读取失败或未知命令类型
+    ///
+    /// # 支持的命令类型
+    ///
+    /// - `Connect`: 连接请求
+    /// - `Heartbeat`: 心跳
+    /// - `Disconnect`: 断开连接
+    /// - `UdpPacket`: UDP 数据包
     pub async fn read_command<R: AsyncReadExt + Unpin>(
         reader: &mut R,
     ) -> Result<TuicCommand, TuicError> {
@@ -127,7 +225,23 @@ impl TuicCodec {
         }
     }
 
-    /// Write a TUIC command to stream
+    /// 向流中写入 TUIC 命令
+    ///
+    /// 将命令写入流。
+    ///
+    /// # 参数
+    ///
+    /// - `writer`: 异步写入器
+    /// - `cmd`: 要写入的命令
+    ///
+    /// # 返回值
+    ///
+    /// - `Ok(())`: 写入成功
+    /// - `Err(TuicError)`: 写入失败
+    ///
+    /// # 注意
+    ///
+    /// `Auth` 命令应使用 `write_auth_request` 而不是此方法
     pub async fn write_command<W: AsyncWriteExt + Unpin>(
         writer: &mut W,
         cmd: &TuicCommand,
@@ -206,7 +320,19 @@ impl TuicCodec {
         Ok(TuicConnectRequest { addr_type, host, port, session_id })
     }
 
-    /// Write connect request
+    /// 写入连接请求
+    ///
+    /// 将连接请求写入流。
+    ///
+    /// # 参数
+    ///
+    /// - `writer`: 异步写入器
+    /// - `request`: 连接请求
+    ///
+    /// # 返回值
+    ///
+    /// - `Ok(())`: 写入成功
+    /// - `Err(TuicError)`: 写入失败
     pub async fn write_connect_request<W: AsyncWriteExt + Unpin>(
         writer: &mut W,
         request: &TuicConnectRequest,
@@ -257,7 +383,19 @@ impl TuicCodec {
         Ok(())
     }
 
-    /// Write heartbeat response
+    /// 写入心跳响应
+    ///
+    /// 将心跳响应写入流，返回客户端发送的时间戳。
+    ///
+    /// # 参数
+    ///
+    /// - `writer`: 异步写入器
+    /// - `timestamp`: 要返回的时间戳
+    ///
+    /// # 返回值
+    ///
+    /// - `Ok(())`: 写入成功
+    /// - `Err(TuicError)`: 写入失败
     pub async fn write_heartbeat_response<W: AsyncWriteExt + Unpin>(
         writer: &mut W,
         timestamp: i64,

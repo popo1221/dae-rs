@@ -1,16 +1,16 @@
-//! HTTP protocol placeholder handler
+//! HTTP 协议占位处理器
 //!
-//! This file provides a placeholder for future HTTP-specific handler implementations.
-//! The main HTTP logic is in `../../http_proxy.rs`.
+//! 本文件为未来的 HTTP 特定处理器实现提供占位符。
+//! 主要的 HTTP 逻辑在 `../../http_proxy.rs` 中。
 
 use crate::core::{Context, Result as ProxyResult};
 use crate::protocol::ProtocolHandler;
 use async_trait::async_trait;
 
-/// HTTP protocol handler
+/// HTTP 协议处理器
 ///
-/// This is a placeholder struct that wraps the main HTTP proxy handler
-/// for integration with the protocol registry.
+/// 这是一个占位结构体，用于与协议注册表集成。
+/// 主要的 HTTP 代理逻辑在 `../../http_proxy.rs` 中。
 #[derive(Debug)]
 pub struct HttpProtocolHandler {
     // Future: HTTP-specific configuration

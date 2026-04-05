@@ -1,6 +1,15 @@
-//! VMess handler implementation
+//! VMess 处理器实现模块
 //!
-//! Implements the client-side VMess handler with AEAD-2022 cryptographic operations.
+//! 本模块实现 VMess AEAD-2022 协议处理器：
+//! - 头部加密/解密（AES-256-GCM）
+//! - 密钥派生（HMAC-SHA256）
+//! - TCP 连接处理
+//! - UDP 数据包处理
+//!
+//! # VMess-AEAD-2022 工作原理
+//! 1. 使用 HMAC-SHA256(user_id, "VMess AEAD") 派生 user_key
+//! 2. 使用 nonce 和 user_key 派生 request_key 和 request_iv
+//! 3. 使用 AES-256-GCM 解密请求头
 
 use std::net::SocketAddr;
 use std::sync::Arc;
@@ -16,13 +25,14 @@ use tracing::{debug, error, info, warn};
 
 use super::config::{VmessClientConfig, VmessTargetAddress};
 
-/// Protocol type enum for handler trait
+/// 协议类型枚举
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ProtocolType {
     Vmess,
 }
 
 impl ProtocolType {
+    /// 获取协议的字符串表示
     pub fn as_str(&self) -> &'static str {
         match self {
             ProtocolType::Vmess => "vmess",
@@ -30,10 +40,12 @@ impl ProtocolType {
     }
 }
 
-/// Handler configuration trait
+/// 处理器配置 trait
 pub trait HandlerConfig: Send + Sync + std::fmt::Debug {}
 
-/// Unified Handler trait - single interface for all protocol handlers
+/// 统一处理器 trait
+///
+/// 为所有协议处理器定义的统一接口。
 #[async_trait]
 pub trait Handler: Send + Sync {
     type Config: HandlerConfig;
@@ -42,23 +54,34 @@ pub trait Handler: Send + Sync {
     fn protocol(&self) -> ProtocolType;
     fn config(&self) -> &Self::Config;
 
+    /// 处理 TCP 连接
     async fn handle(self: Arc<Self>, stream: TcpStream) -> std::io::Result<()>;
 }
 
+/// 为 VmessClientConfig 实现 HandlerConfig trait
 impl HandlerConfig for VmessClientConfig {}
 
-/// VMess handler that implements the client-side protocol
+/// VMess 协议处理器
+///
+/// 负责处理 VMess AEAD-2022 协议的客户端连接。
+///
+/// # 字段说明
+/// - `config`: VMess 客户端配置
 pub struct VmessHandler {
+    /// VMess 客户端配置
     config: VmessClientConfig,
 }
 
 impl VmessHandler {
-    /// Create a new VMess handler
+    /// 创建新的 VMess 处理器
+    ///
+    /// # 参数
+    /// - `config`: VMess 客户端配置
     pub fn new(config: VmessClientConfig) -> Self {
         Self { config }
     }
 
-    /// Create with default configuration
+    /// 使用默认配置创建处理器
     #[allow(dead_code)]
     pub fn new_default() -> Self {
         Self {
@@ -66,13 +89,13 @@ impl VmessHandler {
         }
     }
 
-    /// Get the listen address
+    /// 获取监听地址
     #[allow(dead_code)]
     pub fn listen_addr(&self) -> SocketAddr {
         self.config.listen_addr
     }
 
-    /// Get current timestamp (seconds since epoch)
+    /// 获取当前时间戳（自 Unix epoch 以来的秒数）
     #[allow(dead_code)]
     pub fn timestamp() -> u64 {
         SystemTime::now()
@@ -81,7 +104,14 @@ impl VmessHandler {
             .as_secs()
     }
 
-    /// Compute HMAC-SHA256
+    /// 计算 HMAC-SHA256
+    ///
+    /// # 参数
+    /// - `key`: HMAC 密钥
+    /// - `data`: 待认证的数据
+    ///
+    /// # 返回
+    /// 32 字节的 HMAC-SHA256 输出
     pub fn hmac_sha256(key: &[u8], data: &[u8]) -> [u8; 32] {
         use hmac::{Hmac, Mac};
         type HmacSha256 = Hmac<sha2::Sha256>;
@@ -90,15 +120,42 @@ impl VmessHandler {
         result.into_bytes().into()
     }
 
-    /// Derive VMess AEAD-2022 session key from user ID
+    /// 从 user_id 派生 VMess AEAD-2022 user_key
     ///
-    /// user_key = HMAC-SHA256(user_id, "VMess AEAD")
+    /// # VMess-AEAD-2022 密钥派生
+    /// `user_key = HMAC-SHA256(user_id, "VMess AEAD")`
+    ///
+    /// # 参数
+    /// - `user_id`: 用户 ID（UUID 字符串）
+    ///
+    /// # 返回
+    /// 32 字节的 user_key
+    ///
+    /// # 说明
+    /// 使用固定盐值 "VMess AEAD" 对 user_id 进行 HMAC-SHA256 运算，
+    /// 得到用于后续密钥派生的 user_key。
     pub fn derive_user_key(user_id: &str) -> [u8; 32] {
         let key = Self::hmac_sha256(user_id.as_bytes(), b"VMess AEAD");
         key
     }
 
-    /// Derive request encryption key and IV for VMess AEAD-2022
+    /// 从 user_key 和 nonce 派生请求加密密钥和 IV
+    ///
+    /// # 密钥派生流程
+    /// 1. `auth_result = HMAC-SHA256(user_key, nonce)`
+    /// 2. `request_key = HKDF-Expand-SHA256(auth_result, "VMess header" || 0x01, 32)`
+    /// 3. `request_iv = HMAC-SHA256(auth_result, nonce)[:12]`
+    ///
+    /// # 参数
+    /// - `user_key`: 32 字节的用户密钥
+    /// - `nonce`: 16 字节的随机数（Nonce）
+    ///
+    /// # 返回
+    /// - `(request_key, request_iv)`: 请求加密密钥（32 字节）和 IV（12 字节）
+    ///
+    /// # 注意
+    /// - request_key 用于 AES-256-GCM 加密/解密
+    /// - request_iv 是 GCM 模式的初始化向量
     pub fn derive_request_key_iv(user_key: &[u8; 32], nonce: &[u8]) -> ([u8; 32], [u8; 12]) {
         // request_auth_key = HMAC-SHA256(user_key, nonce)
         let auth_result = Self::hmac_sha256(user_key, nonce);
@@ -124,10 +181,29 @@ impl VmessHandler {
         (request_key, request_iv)
     }
 
-    /// Decrypt VMess AEAD-2022 header
+    /// 解密 VMess AEAD-2022 头部
     ///
-    /// Format: [16-byte nonce][encrypted data][16-byte auth tag]
-    /// Returns the decrypted header data on success.
+    /// # VMess AEAD 加密格式
+    /// ```
+    /// [16-byte nonce][encrypted data][16-byte auth tag]
+    /// ```
+    ///
+    /// # 参数
+    /// - `user_key`: 32 字节的用户密钥
+    /// - `encrypted`: 加密的头部数据（至少 32 字节）
+    ///
+    /// # 返回
+    /// - `Ok(Vec<u8>)`: 解密后的头部数据
+    /// - `Err(&str)`: 解密失败原因
+    ///
+    /// # 失败原因
+    /// - `"encrypted header too short (< 32 bytes)"`: 数据太短
+    /// - `"failed to create AES-GCM cipher"`: 密码创建失败
+    /// - `"AES-GCM decryption failed (auth tag mismatch or corrupt data)"`: 认证标签不匹配
+    ///
+    /// # 安全说明
+    /// GCM 模式的认证标签可防止头部被篡改。
+    /// 如果数据被修改，解密会失败并返回错误。
     pub fn decrypt_header(user_key: &[u8; 32], encrypted: &[u8]) -> Result<Vec<u8>, &'static str> {
         use aes_gcm::aead::KeyInit;
 
@@ -138,6 +214,7 @@ impl VmessHandler {
         let nonce = &encrypted[..16];
         let ciphertext_with_tag = &encrypted[16..];
 
+        // 派生 request_key 和 request_iv
         let (request_key, _) = Self::derive_request_key_iv(user_key, nonce);
 
         let cipher = Aes256Gcm::new_from_slice(&request_key)
@@ -154,15 +231,30 @@ impl VmessHandler {
             .map_err(|_| "AES-GCM decryption failed (auth tag mismatch or corrupt data)")
     }
 
-    /// Handle a VMess TCP connection
+    /// 处理 VMess TCP 连接
+    ///
+    /// # VMess AEAD 协议处理流程
+    /// 1. 读取 4 字节长度前缀（大端序）
+    /// 2. 读取加密的头部数据
+    /// 3. 派生 user_key 并解密头部
+    /// 4. 解析目标地址和端口
+    /// 5. 连接到上游 VMess 服务器
+    /// 6. 转发数据
+    ///
+    /// # 参数
+    /// - `client`: 客户端 TCP 连接
+    ///
+    /// # 头部格式
+    /// 加密部分包含：address type + address + port + ...
     pub async fn handle(self: Arc<Self>, mut client: TcpStream) -> std::io::Result<()> {
         let client_addr = client.peer_addr()?;
 
-        // Read length prefix (4 bytes, big-endian)
+        // 读取长度前缀（4 字节，大端序）
         let mut len_buf = [0u8; 4];
         client.read_exact(&mut len_buf).await?;
         let header_len = u32::from_be_bytes(len_buf) as usize;
 
+        // 防止过大头部（DoS 防护）
         if header_len > 65535 {
             warn!(
                 "VMess TCP: {} header_len {} too large",
@@ -174,16 +266,16 @@ impl VmessHandler {
             ));
         }
 
-        // Read encrypted header
+        // 读取加密的头部
         let mut encrypted_header = vec![0u8; header_len];
         client.read_exact(&mut encrypted_header).await?;
 
         debug!("VMess TCP: {} header_len={}", client_addr, header_len);
 
-        // Derive user key from user_id
+        // 从 user_id 派生 user_key
         let user_key = Self::derive_user_key(&self.config.server.user_id);
 
-        // Decrypt the VMess AEAD header
+        // 解密 VMess AEAD 头部
         let decrypted_header = match Self::decrypt_header(&user_key, &encrypted_header) {
             Ok(header) => header,
             Err(e) => {
@@ -198,7 +290,7 @@ impl VmessHandler {
             }
         };
 
-        // Parse the decrypted VMess header
+        // 解析解密后的 VMess 头部
         let (target_addr, target_port) =
             match VmessTargetAddress::parse_from_bytes(&decrypted_header) {
                 Some((addr, port)) => (addr, port),
@@ -214,6 +306,7 @@ impl VmessHandler {
                             .collect::<Vec<_>>()
                     );
 
+                    // 回退解析：尝试在解密数据中查找地址类型标记
                     if let Some(pos) = decrypted_header
                         .iter()
                         .position(|&b| matches!(b, 0x01..=0x03))
@@ -262,7 +355,7 @@ impl VmessHandler {
             client_addr, target_addr, target_port, self.config.server.addr, self.config.server.port
         );
 
-        // Connect to upstream VMess server
+        // 连接到上游 VMess 服务器
         let remote_addr = format!("{}:{}", self.config.server.addr, self.config.server.port);
         let timeout = self.config.tcp_timeout;
 
@@ -279,11 +372,20 @@ impl VmessHandler {
 
         debug!("Connected to VMess server {}", remote_addr);
 
-        // Relay data between client and remote
+        // 在客户端和服务器之间转发数据
         dae_relay::relay_bidirectional(client, remote).await
     }
 
-    /// Handle UDP traffic
+    /// 处理 UDP 流量
+    ///
+    /// # 参数
+    /// - `client`: 本地 UDP socket
+    ///
+    /// # 处理流程
+    /// 1. 接收 UDP 数据包
+    /// 2. 解析目标地址
+    /// 3. 发送到上游 VMess 服务器
+    /// 4. 接收响应并返回
     #[allow(dead_code)]
     pub async fn handle_udp(self: Arc<Self>, client: UdpSocket) -> std::io::Result<()> {
         const MAX_UDP_SIZE: usize = 65535;
@@ -326,7 +428,7 @@ impl VmessHandler {
     }
 }
 
-/// Implement Handler trait for VmessHandler
+/// 为 VmessHandler 实现 Handler trait
 #[async_trait]
 impl Handler for VmessHandler {
     type Config = VmessClientConfig;

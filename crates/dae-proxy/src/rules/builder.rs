@@ -1,6 +1,6 @@
-//! Rule builder module
+//! 规则构建器模块
 //!
-//! Contains RuleGroup for grouping rules together.
+//! 包含 RuleGroup，用于将规则分组。
 
 use super::{
     CapabilityRule, DnsTypeRule, DomainRule, GeoIpRule, IpCidrRule, NodeTagRule, ProcessRule,
