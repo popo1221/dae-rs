@@ -182,50 +182,78 @@ impl VmessHandler {
 
         // Parse the decrypted VMess header:
         // [version(1)][option(1)][port(2)][addr_type(1)][addr(var)][timestamp(4)][random(4)][checksum(4)]
-        let (target_addr, target_port) = match VmessTargetAddress::parse_from_bytes(
-            &decrypted_header,
-        ) {
-            Some((addr, port)) => (addr, port),
-            None => {
-                // Fallback: some VMess implementations may have non-standard header formatting.
-                // We try to find an address type marker (0x01=IPv4, 0x02=domain, 0x03=IPv6)
-                // in the decrypted data. This is a best-effort approach for compatibility.
-                //
-                // Note: This fallback is fragile because random bytes in the header
-                // could accidentally match address type markers. We log a warning
-                // when this fallback is used so operators can investigate.
-                warn!("VMess TCP: {} standard header parsing failed, trying fallback heuristic (may indicate non-standard implementation)", client_addr);
-                if let Some(pos) = decrypted_header
-                    .iter()
-                    .position(|&b| matches!(b, 0x01..=0x03))
-                {
-                    if let Some(result) =
-                        VmessTargetAddress::parse_from_bytes(&decrypted_header[pos..])
+        let (target_addr, target_port) =
+            match VmessTargetAddress::parse_from_bytes(&decrypted_header) {
+                Some((addr, port)) => (addr, port),
+                None => {
+                    // ⚠️ Fallback heuristic: some VMess implementations may have non-standard
+                    // header formatting. We search for an address type marker
+                    // (0x01=IPv4, 0x02=domain, 0x03=IPv6) in the decrypted data.
+                    //
+                    // WARNING: This heuristic is FRAGILE because random bytes in the header
+                    // could accidentally match address type markers, masking real bugs:
+                    // - Wrong decryption key would produce garbage that might coincidentally
+                    //   contain valid-looking address type bytes
+                    // - Protocol version mismatches might produce false positives
+                    //
+                    // The warn! log below indicates potential issues that should be investigated.
+                    // Operators should monitor for this warning - if it appears frequently
+                    // with different clients, it may indicate a configuration problem.
+                    warn!(
+                        "VMess TCP: {} standard header parsing failed, using fallback heuristic. \
+                    First 16 bytes (hex): {:?}",
+                        client_addr,
+                        decrypted_header
+                            .iter()
+                            .take(16)
+                            .map(|b| format!("{:02x}", b))
+                            .collect::<Vec<_>>()
+                    );
+
+                    // Find first occurrence of address type marker in the entire decrypted header
+                    if let Some(pos) = decrypted_header
+                        .iter()
+                        .position(|&b| matches!(b, 0x01 | 0x02 | 0x03))
                     {
                         debug!(
-                            "VMess TCP: {} fallback parsing succeeded at pos {}",
-                            client_addr, pos
+                            "VMess TCP: {} found address type marker 0x{:02x} at pos {}, \
+                        trying fallback parse",
+                            client_addr, decrypted_header[pos], pos
                         );
-                        (result.0, result.1)
+
+                        if let Some(result) =
+                            VmessTargetAddress::parse_from_bytes(&decrypted_header[pos..])
+                        {
+                            debug!(
+                                "VMess TCP: {} fallback parsing succeeded at pos {}",
+                                client_addr, pos
+                            );
+                            (result.0, result.1)
+                        } else {
+                            error!(
+                                "VMess TCP: {} fallback parsing at pos {} also failed. \
+                            Header may be corrupted or encryption key mismatch.",
+                                client_addr, pos
+                            );
+                            return Err(std::io::Error::new(
+                                std::io::ErrorKind::InvalidData,
+                                "invalid VMess decrypted header",
+                            ));
+                        }
                     } else {
-                        error!("VMess TCP: {} fallback parsing also failed", client_addr);
+                        error!(
+                            "VMess TCP: {} no valid address type (0x01/0x02/0x03) found in \
+                        decrypted header ({} bytes). Check encryption key configuration.",
+                            client_addr,
+                            decrypted_header.len()
+                        );
                         return Err(std::io::Error::new(
                             std::io::ErrorKind::InvalidData,
-                            "invalid VMess decrypted header",
+                            "no address in VMess header",
                         ));
                     }
-                } else {
-                    error!(
-                        "VMess TCP: {} no address type found in decrypted header",
-                        client_addr
-                    );
-                    return Err(std::io::Error::new(
-                        std::io::ErrorKind::InvalidData,
-                        "no address in VMess header",
-                    ));
                 }
-            }
-        };
+            };
 
         info!(
             "VMess TCP: {} -> {}:{} (via {}:{})",
