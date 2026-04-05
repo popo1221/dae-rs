@@ -1,0 +1,19 @@
+[package]
+name = "dae-protocol-hysteria2"
+version = "0.1.0"
+edition = "2021"
+description = "Hysteria2 protocol handler for dae-rs"
+
+[features]
+default = []
+quic = ["quinn"]
+
+[dependencies]
+tokio = { version = "1", features = ["full"] }
+tracing = "0.1"
+thiserror = "1"
+rand = "0.8"
+quinn = { version = "0.10", optional = true }
+
+[dev-dependencies]
+tokio-test = "0.4"
