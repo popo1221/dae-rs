@@ -219,10 +219,7 @@ static DIRECT_ROUTES: HashMap<u32, DirectRouteEntry> = HashMap::with_max_entries
 /// Always returns 1 (success) to allow kernel to continue processing
 #[sock_ops]
 pub fn sock_ops_main(ctx: SockOpsContext) -> u32 {
-    match sock_ops_prog(&ctx) {
-        Ok(ret) => ret,
-        Err(_) => 1,
-    }
+    sock_ops_prog(&ctx).unwrap_or(1)
 }
 
 /// Main sock_ops logic
@@ -278,7 +275,7 @@ fn handle_tcp_connect(ctx: &SockOpsContext) -> Result<u32, ()> {
     // The verifier ensures this.
     unsafe {
         if let Some(route) = DIRECT_ROUTES.get(&dst_ip) {
-            match (*route).rule_type {
+            match route.rule_type {
                 rule_type::DIRECT_RULE_IPV4_CIDR => {
                     if (*route).matches_ipv4(dst_ip) {
                         value.mark = 1; // Direct
@@ -323,13 +320,13 @@ fn handle_active_established(ctx: &SockOpsContext) -> Result<u32, ()> {
     // SAFETY: ctx.ops is valid; map operations require unsafe blocks.
     unsafe {
         if let Some(route) = DIRECT_ROUTES.get(&dst_ip) {
-            if (*route).rule_type == rule_type::DIRECT_RULE_IPV4_CIDR
+            if route.rule_type == rule_type::DIRECT_RULE_IPV4_CIDR
                 && (*route).matches_ipv4(dst_ip)
             {
                 value.mark = 1; // Direct
                 // Add to sockmap for redirect
                 let _ = SOCKMAP_OUT.update(0, ctx.ops, 0);
-            } else if (*route).rule_type == rule_type::DIRECT_RULE_PORT
+            } else if route.rule_type == rule_type::DIRECT_RULE_PORT
                 && (*route).matches_port(key.dst_port, key.protocol)
             {
                 value.mark = 1; // Direct
@@ -411,7 +408,7 @@ fn handle_state_change(ctx: &SockOpsContext) -> Result<u32, ()> {
                 // SAFETY: ctx.ops is valid.
                 unsafe {
                     if let Some(route) = DIRECT_ROUTES.get(&dst_ip) {
-                        if (*route).rule_type == rule_type::DIRECT_RULE_IPV4_CIDR
+                        if route.rule_type == rule_type::DIRECT_RULE_IPV4_CIDR
                             && (*route).matches_ipv4(dst_ip)
                         {
                             value.mark = 1;
@@ -525,10 +522,7 @@ fn get_tcp_state(ctx: &SockOpsContext) -> u32 {
 /// BPF redirect verdict (1 = redirect success, 0 = pass to kernel)
 #[sk_msg]
 pub fn sk_msg_out(ctx: SkMsgContext) -> u32 {
-    match sk_msg_prog_out(&ctx) {
-        Ok(ret) => ret,
-        Err(_) => 1,
-    }
+    sk_msg_prog_out(&ctx).unwrap_or(1)
 }
 
 /// sk_msg entry point for inbound message redirection
@@ -537,10 +531,7 @@ pub fn sk_msg_out(ctx: SkMsgContext) -> u32 {
 /// from the proxy.
 #[sk_msg]
 pub fn sk_msg_in(ctx: SkMsgContext) -> u32 {
-    match sk_msg_prog_in(&ctx) {
-        Ok(ret) => ret,
-        Err(_) => 1,
-    }
+    sk_msg_prog_in(&ctx).unwrap_or(1)
 }
 
 /// Main sk_msg logic for outbound messages
@@ -556,7 +547,7 @@ fn sk_msg_prog_out(ctx: &SkMsgContext) -> Result<u32, ()> {
     // Check if this connection should be redirected
     // SAFETY: ctx.msg is valid; map get requires unsafe.
     if let Some(value) = unsafe { CONNECTIONS.get(&key) } {
-        if (*value).mark == 1 {
+        if value.mark == 1 {
             // Marked for direct - redirect via sockmap to proxy
             // Index 0 is used for the proxy socket in our design
             // SAFETY: redirect_msg is unsafe due to raw pointer access.
