@@ -173,15 +173,19 @@ impl MacDnsResolver {
     }
 
     /// Check if the cache has a valid entry for the given MAC and domain
+    ///
+    /// Note: `domain` should be already lowercased to avoid redundant allocation.
     async fn get_cached(&self, mac: &MacAddr, domain: &str) -> Option<DnsCacheEntry> {
         let cache = self.cache.read().await;
         cache
-            .get(&(*mac, domain.to_lowercase()))
+            .get(&(*mac, domain.to_string()))
             .cloned()
             .filter(|e| !e.is_expired())
     }
 
     /// Store a resolution result in cache
+    ///
+    /// Note: `domain` should be already lowercased to avoid redundant allocation.
     async fn put_cached(&self, mac: &MacAddr, domain: &str, entry: DnsCacheEntry) {
         let mut cache = self.cache.write().await;
 
@@ -202,7 +206,7 @@ impl MacDnsResolver {
             }
         }
 
-        cache.insert((*mac, domain.to_lowercase()), entry);
+        cache.insert((*mac, domain.to_string()), entry);
     }
 
     /// Perform DNS resolution using a specific DNS server
