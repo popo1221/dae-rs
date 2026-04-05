@@ -92,9 +92,13 @@ impl GeoIpRule {
     }
 
     /// Check if this rule matches the given country code
+    ///
+    /// The country parameter is expected to be already uppercase (as returned by lookup_geoip).
+    /// We use case-insensitive comparison for robustness.
     pub fn matches_country(&self, country: &str) -> bool {
-        let country_upper = country.to_uppercase();
-        let matches = country_upper == self.country_code;
+        // lookup_geoip returns uppercase country codes, and rule stores uppercase.
+        // Use eq_ignore_ascii_case for case-insensitive comparison without allocation.
+        let matches = country.eq_ignore_ascii_case(&self.country_code);
         if self.is_exclude {
             !matches
         } else {
