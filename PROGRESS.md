@@ -67,6 +67,13 @@ Fix all issues from review-protocols and review-cicd:
   - Artifact name: `coverage-report`
   - Uploads coverage directory
 
+### 2026-04-05 19:35 GMT+8 - Benchmark job in CI
+- ✅ Added `benchmarks` job to CI workflow (`.github/workflows/ci.yml`)
+  - Runs `cargo bench --workspace` on stable Rust
+  - Only runs on push to main/master (not on PRs)
+  - Uses separate rust-cache key (`dae-rs-bench`)
+  - Separate job to avoid slowing down regular CI
+
 ---
 
 

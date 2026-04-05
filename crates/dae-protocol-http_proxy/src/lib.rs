@@ -6,9 +6,11 @@
 //! - Host:port parsing
 
 mod auth;
+mod error;
 mod parser;
 
 pub use auth::BasicAuth;
+pub use error::HttpProxyError;
 pub use parser::HttpConnectRequest;
 
 use std::net::SocketAddr;

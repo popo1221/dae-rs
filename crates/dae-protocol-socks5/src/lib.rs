@@ -6,6 +6,7 @@ mod address;
 pub mod auth;
 pub mod commands;
 mod consts;
+mod error;
 pub mod handler;
 pub mod handshake;
 pub mod reply;
