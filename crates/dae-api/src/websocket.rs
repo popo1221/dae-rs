@@ -156,8 +156,8 @@ impl Default for DashboardState {
 }
 
 /// Global dashboard state instance
-static DASHBOARD_STATE: std::sync::LazyLock<DashboardState> =
-    std::sync::LazyLock::new(DashboardState::new);
+static DASHBOARD_STATE: once_cell::sync::Lazy<DashboardState> =
+    once_cell::sync::Lazy::new(DashboardState::new);
 
 /// Get a clone of the global dashboard state
 pub fn get_dashboard_state() -> &'static DashboardState {

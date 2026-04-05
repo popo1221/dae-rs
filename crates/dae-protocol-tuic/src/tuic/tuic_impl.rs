@@ -6,7 +6,6 @@ use std::collections::HashMap;
 use std::net::SocketAddr;
 use std::sync::Arc;
 
-use tokio::io::AsyncWriteExt;
 use tokio::net::{TcpListener, TcpStream};
 use tokio::sync::RwLock;
 use tracing::{debug, error, info, warn};
@@ -355,6 +354,7 @@ pub struct TuicClientSession {
 /// TUIC handler
 #[derive(Debug, Clone)]
 pub struct TuicHandler {
+    #[allow(dead_code)]
     config: TuicConfig,
 }
 

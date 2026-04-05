@@ -76,6 +76,7 @@ pub enum Hysteria2Error {
 }
 
 /// Hysteria2 frame types
+#[allow(dead_code)]
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 #[repr(u8)]
 pub enum Hysteria2FrameType {
@@ -92,6 +93,7 @@ pub enum Hysteria2FrameType {
 }
 
 /// Hysteria2 address types
+#[allow(dead_code)]
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Hysteria2Address {
     /// IPv4 address
@@ -191,6 +193,7 @@ impl Hysteria2Address {
 }
 
 /// Hysteria2 client hello message
+#[allow(dead_code)]
 #[derive(Debug, Clone)]
 pub struct Hysteria2ClientHello {
     /// Protocol version (2 for Hysteria2)

@@ -17,7 +17,7 @@
 //! kernel eBPF because they:
 //!
 //! 1. **Do not share state with the kernel** — kernel BPF programs cannot read
-//!   /write these maps; data stays entirely in user space.
+//!    /write these maps; data stays entirely in user space.
 //!
 //! 2. **RoutingMapHandle uses exact-match** — The in-memory routing map performs
 //!    exact IP matching (`HashMap<u32, RoutingEntry>`), not LPM (Longest Prefix
