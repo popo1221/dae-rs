@@ -2,17 +2,19 @@
 name = "dae-ebpf-direct"
 version = "0.1.0"
 edition = "2021"
-description = "Real direct eBPF mode for dae-rs - sockmap-based transparent proxy"
+description = "Direct Socket eBPF programs for dae-rs - sockops and sk_msg based transparent proxy"
 authors = ["dae-rs team"]
 
 [dependencies]
-aya = "0.13"
 aya-ebpf = "0.1"
-tokio = { version = "1", features = ["full"] }
-tracing = "0.1"
-anyhow = "1"
-thiserror = "1"
 dae-ebpf-common = { path = "../dae-ebpf-common" }
+bitflags = "2.0"
 
-[features]
-default = []
+[profile.dev]
+opt-level = 0
+debug = true
+
+[profile.release]
+lto = true
+codegen-units = 1
+panic = "abort"
