@@ -18,6 +18,8 @@ use tokio::io::{AsyncBufReadExt, AsyncWriteExt};
 use tokio::net::TcpStream;
 use tracing::{debug, error, info, warn};
 
+use crate::protocol::relay::relay_bidirectional;
+
 /// HTTP proxy constants
 mod consts {
     pub const HTTP_OK: &[u8] = b"HTTP/1.1 200 Connection Established\r\n\r\n";
@@ -205,14 +207,7 @@ impl HttpProxyHandler {
 
     /// Relay data between client and remote
     async fn relay(&self, client: TcpStream, remote: TcpStream) -> std::io::Result<()> {
-        let (mut cr, mut cw) = tokio::io::split(client);
-        let (mut rr, mut rw) = tokio::io::split(remote);
-
-        let client_to_remote = tokio::io::copy(&mut cr, &mut rw);
-        let remote_to_client = tokio::io::copy(&mut rr, &mut cw);
-
-        tokio::try_join!(client_to_remote, remote_to_client)?;
-        Ok(())
+        relay_bidirectional(client, remote).await
     }
 }
 

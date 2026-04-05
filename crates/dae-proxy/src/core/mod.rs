@@ -21,17 +21,17 @@ mod tests {
 
     #[test]
     fn test_error_display() {
-        let err = Error::Io(std::io::Error::new(
+        let err = Error::Connect(std::io::Error::new(
             std::io::ErrorKind::NotFound,
             "test error",
         ));
-        assert!(err.to_string().contains("io error"));
+        assert!(err.to_string().contains("connect failed"));
 
         let err = Error::Protocol("invalid header".to_string());
         assert!(err.to_string().contains("protocol error"));
 
-        let err = Error::Timeout;
-        assert!(err.to_string().contains("timeout"));
+        let err = Error::Auth("unauthorized".to_string());
+        assert!(err.to_string().contains("authentication failed"));
     }
 
     #[test]
@@ -49,7 +49,7 @@ mod tests {
         let ok: Result<i32> = Ok(42);
         assert_eq!(ok.unwrap(), 42);
 
-        let err: Result<i32> = Err(Error::Timeout);
+        let err: Result<i32> = Err(Error::Protocol("test".to_string()));
         assert!(err.is_err());
     }
 }

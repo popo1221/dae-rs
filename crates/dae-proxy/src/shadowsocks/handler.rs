@@ -11,6 +11,7 @@ use tracing::{debug, error, info};
 
 use super::config::SsClientConfig;
 use super::protocol::TargetAddress;
+use crate::protocol::relay::relay_bidirectional;
 
 /// Shadowsocks handler that implements the ss-local side
 pub struct ShadowsocksHandler {
@@ -104,14 +105,7 @@ impl ShadowsocksHandler {
 
     /// Relay data between client and Shadowsocks server
     async fn relay(&self, client: TcpStream, remote: TcpStream) -> std::io::Result<()> {
-        let (mut cr, mut cw) = tokio::io::split(client);
-        let (mut rr, mut rw) = tokio::io::split(remote);
-
-        let client_to_remote = tokio::io::copy(&mut cr, &mut rw);
-        let remote_to_client = tokio::io::copy(&mut rr, &mut cw);
-
-        tokio::try_join!(client_to_remote, remote_to_client)?;
-        Ok(())
+        relay_bidirectional(client, remote).await
     }
 
     /// Handle UDP traffic

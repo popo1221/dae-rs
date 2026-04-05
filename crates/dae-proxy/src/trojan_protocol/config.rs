@@ -6,6 +6,8 @@
 use std::net::SocketAddr;
 use std::time::Duration;
 
+use crate::protocol::unified_handler::HandlerConfig;
+
 /// Trojan TLS configuration
 #[derive(Debug, Clone)]
 pub struct TrojanTlsConfig {
@@ -86,6 +88,8 @@ impl Default for TrojanClientConfig {
         }
     }
 }
+
+impl HandlerConfig for TrojanClientConfig {}
 
 #[cfg(test)]
 mod tests {

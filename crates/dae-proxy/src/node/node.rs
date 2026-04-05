@@ -4,6 +4,9 @@
 
 use async_trait::async_trait;
 
+// Re-export NodeError from the centralized error module
+pub use crate::core::error::NodeError;
+
 /// Node ID type - uniquely identifies a node in the configuration
 pub type NodeId = String;
 
@@ -29,26 +32,6 @@ pub trait Node: Send + Sync {
     async fn is_available(&self) -> bool;
 }
 
-/// Node errors
-#[derive(Debug, Clone, thiserror::Error)]
-pub enum NodeError {
-    #[error("timeout")]
-    Timeout,
-
-    #[error("connection failed: {0}")]
-    ConnectionFailed(String),
-
-    #[error("node unavailable")]
-    Unavailable,
-}
-
-impl NodeError {
-    /// Check if this error indicates a temporary failure
-    pub fn is_retryable(&self) -> bool {
-        matches!(self, NodeError::Timeout)
-    }
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -67,7 +50,7 @@ mod tests {
 
     #[test]
     fn test_node_error_unavailable_not_retryable() {
-        let err = NodeError::Unavailable;
+        let err = NodeError::Unavailable("node-1".to_string());
         assert!(!err.is_retryable());
     }
 
@@ -85,7 +68,7 @@ mod tests {
 
     #[test]
     fn test_node_error_display_unavailable() {
-        let err = NodeError::Unavailable;
-        assert_eq!(format!("{}", err), "node unavailable");
+        let err = NodeError::Unavailable("node-1".to_string());
+        assert!(format!("{}", err).contains("node unavailable"));
     }
 }
