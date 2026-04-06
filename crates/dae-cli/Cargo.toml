@@ -12,7 +12,7 @@ api = ["dep:dae-api"]
 dae-core = { path = "../dae-core" }
 dae-proxy = { path = "../dae-proxy" }
 dae-config = { path = "../dae-config" }
-tokio = { version = "1", features = ["full"] }
+tokio = { version = "1", features = ["rt", "sync", "time", "macros"] }
 clap = { version = "4", features = ["derive"] }
 tracing = "0.1"
 tracing-subscriber = "0.3"
