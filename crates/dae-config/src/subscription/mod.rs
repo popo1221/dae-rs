@@ -468,35 +468,6 @@ pub struct SingBoxSubscription {
 // URI Parsing Types
 // =============================================================================
 
-/// Parsed proxy URI
-#[derive(Debug, Clone)]
-pub struct ParsedProxyUri {
-    /// Protocol type
-    pub protocol: ProxyProtocol,
-    /// Server address
-    pub server: String,
-    /// Server port
-    pub port: u16,
-    /// Node name (from fragment)
-    pub name: Option<String>,
-    /// Method (for Shadowsocks)
-    pub method: Option<String>,
-    /// Password/secret
-    pub password: Option<String>,
-    /// UUID (for VMess, VLESS)
-    pub uuid: Option<String>,
-    /// Security (for VMess)
-    pub security: Option<String>,
-    /// TLS server name
-    pub tls_server_name: Option<String>,
-    /// TLS enabled
-    pub tls: bool,
-    /// VLESS flow
-    pub flow: Option<String>,
-    /// Additional plugin info
-    pub plugin: Option<String>,
-}
-
 /// Proxy protocol types
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ProxyProtocol {
