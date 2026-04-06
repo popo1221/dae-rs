@@ -13,6 +13,7 @@ use tokio::net::{TcpStream, UdpSocket};
 use tracing::{debug, error, info};
 
 use super::config::{TrojanClientConfig, TrojanServerConfig};
+use super::consts::*;
 use super::protocol::{TrojanCommand, TrojanTargetAddress, TROJAN_CRLF};
 use crate::protocol::relay::relay_bidirectional;
 use crate::protocol::unified_handler::Handler;
@@ -51,7 +52,6 @@ impl TrojanHandler {
     }
 
     /// Create with default configuration
-    #[allow(dead_code)]
     pub fn new_default() -> Self {
         Self {
             config: TrojanClientConfig::default(),
@@ -70,19 +70,16 @@ impl TrojanHandler {
     }
 
     /// Get all backends
-    #[allow(dead_code)]
     pub fn get_backends(&self) -> &[TrojanServerConfig] {
         &self.backends
     }
 
     /// Get the number of configured backends
-    #[allow(dead_code)]
     pub fn backend_count(&self) -> usize {
         self.backends.len()
     }
 
     /// Get the listen address
-    #[allow(dead_code)]
     pub fn listen_addr(&self) -> SocketAddr {
         self.config.listen_addr
     }
@@ -331,7 +328,7 @@ impl TrojanHandler {
         remote_udp: UdpSocket,
         target_info: &str,
     ) -> std::io::Result<()> {
-        const MAX_UDP_FRAME_SIZE: usize = 65535;
+        let max_frame_size = MAX_UDP_FRAME_SIZE;
         let remote_addr = target_info.to_string();
 
         info!("Starting Trojan UDP relay: {} via UDP socket", remote_addr);
@@ -344,7 +341,7 @@ impl TrojanHandler {
         loop {
             // Read UDP frame header from TCP
             // Minimum header: cmd(1) + uuid(16) + ver(1) + port(2) + atyp(1) = 21 bytes
-            let mut header_buf = [0u8; 21];
+            let mut header_buf = [0u8; TROJAN_UDP_HEADER_SIZE];
             match tokio::time::timeout(self.config.udp_timeout, client.read_exact(&mut header_buf))
                 .await
             {
@@ -366,13 +363,13 @@ impl TrojanHandler {
             let atyp = header_buf[20];
 
             // Validate version
-            if ver != 0x01 {
+            if ver != TROJAN_UDP_VERSION {
                 debug!("Unknown Trojan UDP version: {}", ver);
                 continue;
             }
 
             match cmd {
-                0x01 => {
+                TROJAN_UDP_CMD_DATA => {
                     // UDP data - read target address and payload
                     let target_addr = match atyp {
                         0x01 => {
@@ -436,7 +433,7 @@ impl TrojanHandler {
                             Ok(Ok(0)) => break,
                             Ok(Ok(n)) => {
                                 total_read += n;
-                                if total_read >= MAX_UDP_FRAME_SIZE {
+                                if total_read >= max_frame_size {
                                     break;
                                 }
                             }
@@ -475,11 +472,11 @@ impl TrojanHandler {
                     {
                         Ok(Ok(m)) if m > 0 => {
                             // Build response frame and send back to client via TCP
-                            // Response frame: [0x01][uuid(16)][0x01][port(2)][atyp(1)][addr][payload]
-                            let mut response_frame = Vec::with_capacity(21 + m);
-                            response_frame.push(0x01); // cmd = UDP
+                            // Response frame: [cmd][uuid(16)][ver][port(2)][atyp(1)][addr][payload]
+                            let mut response_frame = Vec::with_capacity(TROJAN_UDP_HEADER_SIZE + m);
+                            response_frame.push(TROJAN_UDP_CMD_DATA); // cmd = UDP
                             response_frame.extend_from_slice(&header_buf[1..17]); // uuid
-                            response_frame.push(0x01); // ver
+                            response_frame.push(TROJAN_UDP_VERSION); // ver
                             response_frame.extend_from_slice(&header_buf[18..20]); // port
                             response_frame.push(atyp); // address type
 
@@ -519,9 +516,9 @@ impl TrojanHandler {
                             // Timeout or error - send PING to keepalive
                             debug!("No UDP response, sending PING");
                             let mut ping_frame = Vec::new();
-                            ping_frame.push(0x03); // cmd = PING
+                            ping_frame.push(TROJAN_UDP_CMD_PING); // cmd = PING
                             ping_frame.extend_from_slice(&header_buf[1..17]); // uuid
-                            ping_frame.push(0x01); // ver
+                            ping_frame.push(TROJAN_UDP_VERSION); // ver
                             ping_frame.extend_from_slice(&header_buf[18..20]); // port
                             ping_frame.push(atyp);
 
@@ -532,19 +529,19 @@ impl TrojanHandler {
                         }
                     }
                 }
-                0x02 => {
+                TROJAN_UDP_CMD_DISCONNECT => {
                     // DISCONNECT
                     debug!("Trojan UDP: DISCONNECT received");
                     break;
                 }
-                0x03 => {
+                TROJAN_UDP_CMD_PING => {
                     // PING - client is checking if we're alive
                     debug!("Trojan UDP: PING received");
                     // Send back PONG
                     let mut pong_frame = Vec::new();
-                    pong_frame.push(0x03); // cmd = PING (PONG is same as PING in Trojan)
+                    pong_frame.push(TROJAN_UDP_CMD_PING); // cmd = PING (PONG is same as PING in Trojan)
                     pong_frame.extend_from_slice(&header_buf[1..17]); // uuid
-                    pong_frame.push(0x01); // ver
+                    pong_frame.push(TROJAN_UDP_VERSION); // ver
                     pong_frame.extend_from_slice(&header_buf[18..20]); // port
                     pong_frame.push(atyp);
 
@@ -563,52 +560,7 @@ impl TrojanHandler {
         Ok(())
     }
 
-    /// Handle UDP traffic
-    #[allow(dead_code)]
-    pub async fn handle_udp(self: Arc<Self>, client: UdpSocket) -> std::io::Result<()> {
-        const MAX_UDP_SIZE: usize = 65535;
-        let mut buf = vec![0u8; MAX_UDP_SIZE];
 
-        loop {
-            let (n, client_addr) = client.recv_from(&mut buf).await?;
-
-            if n < 5 {
-                continue;
-            }
-
-            // Parse Trojan UDP header
-            let (target_addr, target_port, payload_offset) =
-                match TrojanTargetAddress::parse_from_bytes(&buf) {
-                    Some((addr, port)) => (addr, port, 0),
-                    None => continue,
-                };
-
-            let payload = &buf[payload_offset..n];
-
-            debug!(
-                "Trojan UDP: {} -> {}:{} ({} bytes)",
-                client_addr,
-                target_addr,
-                target_port,
-                payload.len()
-            );
-
-            // Forward to Trojan server and back
-            let server_addr = format!("{}:{}", self.config.server.addr, self.config.server.port);
-            let server_socket = UdpSocket::bind("0.0.0.0:0").await?;
-            server_socket.send_to(payload, &server_addr).await?;
-
-            let mut response_buf = vec![0u8; MAX_UDP_SIZE];
-            if let Ok(Ok((m, _))) = tokio::time::timeout(
-                self.config.udp_timeout,
-                server_socket.recv_from(&mut response_buf),
-            )
-            .await
-            {
-                client.send_to(&response_buf[..m], &client_addr).await?;
-            }
-        }
-    }
 }
 
 /// Implement Handler trait for TrojanHandler

@@ -1,35 +1,6 @@
-//! Meek transport implementation for anti-censorship
-//!
-//! Meek is a forward-grade proxy that uses domain fronting to bypass censorship.
-//! It works by routing traffic through cloud services (Azure, AWS, Cloudflare)
-//! so that the censorship appears to be targeting legitimate cloud services.
-//!
-//! # How Meek Works
-//!
-//! 1. **Domain Fronting**: The client connects to a domain like `ajax.googleapis.com`
-//!    but the actual traffic is routed to `meek-server.azureedge.net` through CDN.
-//! 2. **HTTP/2**: Uses HTTP/2 for multiplexed connections and better camouflage.
-//! 3. **Tactics**: Different obfuscation strategies:
-//!    - `http`: Simple HTTP proxy through front domain
-//!       - `https`: HTTPS proxy through front domain
-//!    - `bytepolding`: Length-encoded requests with padding
-//!    - `snia`: Session ticket ID obfuscation (Azure specific)
-//!    - `patterns`: Pattern-based obfuscation
-//!    - `gimmie`: Simple tunnel with greeting
-//!    - `redirect`: Server-side redirect following
-//! 4. **Fronting Domain**: The domain that appears in the SNI/TLS Hello.
-//!
-//! # Azure Meek Configuration
-//!
-//! - Front: `ajax.googleapis.com` (or similar)
-//! - Server: `meek-reflect.appspot.com` -> `meek.azureedge.net`
-//!
-//! # AWS/CloudFront Meek Configuration
-//!
-//! - Front: `cdn.jsdelivr.net`
-//! - Server: `sni.cloudflarert.com` -> `cftweet.net`
+//! Meek transport implementation
 
-use super::Transport;
+use super::super::Transport;
 use async_trait::async_trait;
 use bytes::{BufMut, Bytes, BytesMut};
 use std::fmt::Debug;
@@ -39,39 +10,7 @@ use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use tokio::net::TcpStream;
 use tracing::{debug, info, warn};
 
-/// Meek obfuscation tactic
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
-pub enum MeekTactic {
-    /// HTTP proxy through front domain
-    Http,
-    /// HTTPS proxy through front domain
-    Https,
-    /// Length-encoded requests with padding (default)
-    #[default]
-    Bytepolding,
-    /// Session ticket ID obfuscation (Azure)
-    Snia,
-    /// Pattern-based obfuscation
-    Patterns,
-    /// Simple tunnel with greeting
-    Gimmie,
-    /// Server-side redirect following
-    Redirect,
-}
-
-impl std::fmt::Display for MeekTactic {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            MeekTactic::Http => write!(f, "http"),
-            MeekTactic::Https => write!(f, "https"),
-            MeekTactic::Bytepolding => write!(f, "bytepolding"),
-            MeekTactic::Snia => write!(f, "snia"),
-            MeekTactic::Patterns => write!(f, "patterns"),
-            MeekTactic::Gimmie => write!(f, "gimmie"),
-            MeekTactic::Redirect => write!(f, "redirect"),
-        }
-    }
-}
+use super::MeekTactic;
 
 /// Meek transport configuration
 #[derive(Debug, Clone)]

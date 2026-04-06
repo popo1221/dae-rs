@@ -11,9 +11,12 @@
 pub mod codec;
 #[allow(clippy::module_inception)]
 pub mod juicity;
+pub mod config;
+pub mod types;
 
 pub use codec::{JuicityAddress, JuicityCodec, JuicityCommand, JuicityFrame};
+pub use config::JuicityConfig;
 pub use juicity::{
-    CongestionControl, JuicityClient, JuicityConfig, JuicityConnection, JuicityError,
-    JuicityHandler, JuicityServer,
+    JuicityClient, JuicityConnection, JuicityHandler, JuicityServer,
 };
+pub use types::{CongestionControl, JuicityError};

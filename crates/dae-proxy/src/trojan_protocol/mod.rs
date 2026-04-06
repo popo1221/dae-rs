@@ -16,6 +16,7 @@
 //! Client -> dae-rs (Trojan client) -> remote Trojan server -> target
 
 pub mod config;
+pub mod consts;
 pub mod handler;
 pub mod protocol;
 pub mod server;
