@@ -20,8 +20,8 @@ use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use tracing::debug;
 
 use super::tuic_impl::{
-    TuicCommand, TuicCommandType, TuicConnectRequest, TuicError, TuicHeartbeatRequest,
-    TuicAuthRequest, TUIC_VERSION,
+    TuicAuthRequest, TuicCommand, TuicCommandType, TuicConnectRequest, TuicError,
+    TuicHeartbeatRequest, TUIC_VERSION,
 };
 
 /// TUIC 协议编解码器
@@ -91,9 +91,16 @@ impl TuicCodec {
             .trim_end_matches('\0')
             .to_string();
 
-        debug!("Read auth request: version=0x{:02x}, uuid={}", version, uuid);
+        debug!(
+            "Read auth request: version=0x{:02x}, uuid={}",
+            version, uuid
+        );
 
-        Ok(TuicAuthRequest { version, uuid, token })
+        Ok(TuicAuthRequest {
+            version,
+            uuid,
+            token,
+        })
     }
 
     /// 向流中写入认证请求
@@ -120,9 +127,14 @@ impl TuicCodec {
         uuid_buf[..copy_len].copy_from_slice(&uuid_bytes[..copy_len]);
         writer.write_all(&uuid_buf).await?;
         let token_bytes = req.token.as_bytes();
-        writer.write_all(&(token_bytes.len() as u16).to_be_bytes()).await?;
+        writer
+            .write_all(&(token_bytes.len() as u16).to_be_bytes())
+            .await?;
         writer.write_all(token_bytes).await?;
-        debug!("Wrote auth request: version=0x{:02x}, uuid={}", req.version, req.uuid);
+        debug!(
+            "Wrote auth request: version=0x{:02x}, uuid={}",
+            req.version, req.uuid
+        );
         Ok(())
     }
 
@@ -164,7 +176,9 @@ impl TuicCodec {
         writer: &mut W,
         success: bool,
     ) -> Result<(), TuicError> {
-        writer.write_all(&[if success { 0x00 } else { 0x01 }]).await?;
+        writer
+            .write_all(&[if success { 0x00 } else { 0x01 }])
+            .await?;
         Ok(())
     }
 
@@ -192,8 +206,9 @@ impl TuicCodec {
     ) -> Result<TuicCommand, TuicError> {
         let mut cmd_buf = [0u8; 1];
         reader.read_exact(&mut cmd_buf).await?;
-        let cmd_type = TuicCommandType::from_u8(cmd_buf[0])
-            .ok_or_else(|| TuicError::InvalidCommand(format!("Unknown command: 0x{:02x}", cmd_buf[0])))?;
+        let cmd_type = TuicCommandType::from_u8(cmd_buf[0]).ok_or_else(|| {
+            TuicError::InvalidCommand(format!("Unknown command: 0x{:02x}", cmd_buf[0]))
+        })?;
 
         match cmd_type {
             TuicCommandType::Connect => {
@@ -203,16 +218,18 @@ impl TuicCodec {
             TuicCommandType::Heartbeat => {
                 let mut ts_buf = [0u8; 8];
                 reader.read_exact(&mut ts_buf).await?;
-                Ok(TuicCommand::Heartbeat(TuicHeartbeatRequest { timestamp: i64::from_be_bytes(ts_buf) }))
+                Ok(TuicCommand::Heartbeat(TuicHeartbeatRequest {
+                    timestamp: i64::from_be_bytes(ts_buf),
+                }))
             }
             TuicCommandType::Disconnect => {
                 let mut sid_buf = [0u8; 8];
                 reader.read_exact(&mut sid_buf).await?;
                 Ok(TuicCommand::Disconnect(u64::from_be_bytes(sid_buf)))
             }
-            TuicCommandType::Auth => {
-                Err(TuicError::InvalidCommand("Auth not expected here".to_string()))
-            }
+            TuicCommandType::Auth => Err(TuicError::InvalidCommand(
+                "Auth not expected here".to_string(),
+            )),
             TuicCommandType::UdpPacket => {
                 let session_id = Self::read_session_id(reader).await?;
                 let mut len_buf = [0u8; 2];
@@ -248,34 +265,50 @@ impl TuicCodec {
     ) -> Result<(), TuicError> {
         match cmd {
             TuicCommand::Connect(request) => {
-                writer.write_all(&[TuicCommandType::Connect.as_u8()]).await?;
+                writer
+                    .write_all(&[TuicCommandType::Connect.as_u8()])
+                    .await?;
                 Self::write_connect_request(writer, request).await?;
             }
             TuicCommand::ConnectResponse(session_id, success) => {
-                writer.write_all(&[TuicCommandType::Connect.as_u8()]).await?;
+                writer
+                    .write_all(&[TuicCommandType::Connect.as_u8()])
+                    .await?;
                 writer.write_all(&session_id.to_be_bytes()).await?;
-                writer.write_all(&[if *success { 0x00 } else { 0x01 }]).await?;
+                writer
+                    .write_all(&[if *success { 0x00 } else { 0x01 }])
+                    .await?;
             }
             TuicCommand::Heartbeat(request) => {
-                writer.write_all(&[TuicCommandType::Heartbeat.as_u8()]).await?;
+                writer
+                    .write_all(&[TuicCommandType::Heartbeat.as_u8()])
+                    .await?;
                 writer.write_all(&request.timestamp.to_be_bytes()).await?;
             }
             TuicCommand::HeartbeatResponse(timestamp) => {
-                writer.write_all(&[TuicCommandType::Heartbeat.as_u8()]).await?;
+                writer
+                    .write_all(&[TuicCommandType::Heartbeat.as_u8()])
+                    .await?;
                 writer.write_all(&timestamp.to_be_bytes()).await?;
             }
             TuicCommand::Disconnect(session_id) => {
-                writer.write_all(&[TuicCommandType::Disconnect.as_u8()]).await?;
+                writer
+                    .write_all(&[TuicCommandType::Disconnect.as_u8()])
+                    .await?;
                 writer.write_all(&session_id.to_be_bytes()).await?;
             }
             TuicCommand::UdpPacket(session_id, data) => {
-                writer.write_all(&[TuicCommandType::UdpPacket.as_u8()]).await?;
+                writer
+                    .write_all(&[TuicCommandType::UdpPacket.as_u8()])
+                    .await?;
                 writer.write_all(&session_id.to_be_bytes()).await?;
                 writer.write_all(&(data.len() as u16).to_be_bytes()).await?;
                 writer.write_all(data).await?;
             }
             TuicCommand::Auth(_) => {
-                return Err(TuicError::InvalidCommand("Auth should use write_auth_request".to_string()));
+                return Err(TuicError::InvalidCommand(
+                    "Auth should use write_auth_request".to_string(),
+                ));
             }
         }
         Ok(())
@@ -296,14 +329,25 @@ impl TuicCodec {
                 len_buf[0] as usize
             }
             0x03 => 16,
-            _ => return Err(TuicError::InvalidProtocol(format!("Invalid address type: 0x{:02x}", addr_type))),
+            _ => {
+                return Err(TuicError::InvalidProtocol(format!(
+                    "Invalid address type: 0x{:02x}",
+                    addr_type
+                )))
+            }
         };
 
         let mut host_buf = vec![0u8; host_len];
         reader.read_exact(&mut host_buf).await?;
         let host = match addr_type {
-            0x01 => format!("{}.{}.{}.{}", host_buf[0], host_buf[1], host_buf[2], host_buf[3]),
-            0x02 => String::from_utf8(host_buf).map_err(|e| TuicError::InvalidProtocol(format!("Invalid host: {}", e)))?.trim_end_matches('\0').to_string(),
+            0x01 => format!(
+                "{}.{}.{}.{}",
+                host_buf[0], host_buf[1], host_buf[2], host_buf[3]
+            ),
+            0x02 => String::from_utf8(host_buf)
+                .map_err(|e| TuicError::InvalidProtocol(format!("Invalid host: {}", e)))?
+                .trim_end_matches('\0')
+                .to_string(),
             0x03 => format!("{:x?}", &host_buf),
             _ => unreachable!(),
         };
@@ -316,8 +360,16 @@ impl TuicCodec {
         reader.read_exact(&mut session_buf).await?;
         let session_id = u64::from_be_bytes(session_buf);
 
-        debug!("Read connect request: {}:{} session_id={}", host, port, session_id);
-        Ok(TuicConnectRequest { addr_type, host, port, session_id })
+        debug!(
+            "Read connect request: {}:{} session_id={}",
+            host, port, session_id
+        );
+        Ok(TuicConnectRequest {
+            addr_type,
+            host,
+            port,
+            session_id,
+        })
     }
 
     /// 写入连接请求
@@ -340,7 +392,11 @@ impl TuicCodec {
         writer.write_all(&[request.addr_type]).await?;
         match request.addr_type {
             0x01 => {
-                let parts: Vec<u8> = request.host.split('.').filter_map(|s| s.parse().ok()).collect();
+                let parts: Vec<u8> = request
+                    .host
+                    .split('.')
+                    .filter_map(|s| s.parse().ok())
+                    .collect();
                 if parts.len() != 4 {
                     return Err(TuicError::InvalidProtocol("Invalid IPv4".to_string()));
                 }
@@ -352,13 +408,23 @@ impl TuicCodec {
                 writer.write_all(host_bytes).await?;
             }
             0x03 => {
-                return Err(TuicError::InvalidProtocol("IPv6 not implemented".to_string()));
+                return Err(TuicError::InvalidProtocol(
+                    "IPv6 not implemented".to_string(),
+                ));
             }
-            _ => return Err(TuicError::InvalidProtocol(format!("Invalid addr type: 0x{:02x}", request.addr_type))),
+            _ => {
+                return Err(TuicError::InvalidProtocol(format!(
+                    "Invalid addr type: 0x{:02x}",
+                    request.addr_type
+                )))
+            }
         }
         writer.write_all(&request.port.to_be_bytes()).await?;
         writer.write_all(&request.session_id.to_be_bytes()).await?;
-        debug!("Wrote connect request: {}:{} session_id={}", request.host, request.port, request.session_id);
+        debug!(
+            "Wrote connect request: {}:{} session_id={}",
+            request.host, request.port, request.session_id
+        );
         Ok(())
     }
 
@@ -379,7 +445,9 @@ impl TuicCodec {
         success: bool,
     ) -> Result<(), TuicError> {
         writer.write_all(&session_id.to_be_bytes()).await?;
-        writer.write_all(&[if success { 0x00 } else { 0x01 }]).await?;
+        writer
+            .write_all(&[if success { 0x00 } else { 0x01 }])
+            .await?;
         Ok(())
     }
 
@@ -425,7 +493,9 @@ mod tests {
         };
         let mut buf = Vec::new();
         let mut writer = Cursor::new(&mut buf);
-        TuicCodec::write_auth_request(&mut writer, &request).await.unwrap();
+        TuicCodec::write_auth_request(&mut writer, &request)
+            .await
+            .unwrap();
         let mut reader = Cursor::new(&buf);
         let decoded = TuicCodec::read_auth_request(&mut reader).await.unwrap();
         assert_eq!(decoded.version, request.version);
@@ -437,13 +507,17 @@ mod tests {
     async fn test_auth_response_roundtrip() {
         let mut buf = Vec::new();
         let mut writer = Cursor::new(&mut buf);
-        TuicCodec::write_auth_response(&mut writer, true).await.unwrap();
+        TuicCodec::write_auth_response(&mut writer, true)
+            .await
+            .unwrap();
         let mut reader = Cursor::new(&buf);
         assert!(TuicCodec::read_auth_response(&mut reader).await.unwrap());
 
         buf.clear();
         let mut writer = Cursor::new(&mut buf);
-        TuicCodec::write_auth_response(&mut writer, false).await.unwrap();
+        TuicCodec::write_auth_response(&mut writer, false)
+            .await
+            .unwrap();
         let mut reader = Cursor::new(&buf);
         assert!(!TuicCodec::read_auth_response(&mut reader).await.unwrap());
     }
@@ -451,7 +525,10 @@ mod tests {
     #[test]
     fn test_command_type_conversion() {
         assert_eq!(TuicCommandType::from_u8(0x01), Some(TuicCommandType::Auth));
-        assert_eq!(TuicCommandType::from_u8(0x02), Some(TuicCommandType::Connect));
+        assert_eq!(
+            TuicCommandType::from_u8(0x02),
+            Some(TuicCommandType::Connect)
+        );
         assert_eq!(TuicCommandType::from_u8(0xff), None);
     }
 }

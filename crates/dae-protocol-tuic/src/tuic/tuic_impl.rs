@@ -219,7 +219,11 @@ impl TuicConfig {
     ///
     /// 返回配置好的 `TuicConfig` 实例
     pub fn new(token: String, uuid: String) -> Self {
-        Self { token, uuid, ..Default::default() }
+        Self {
+            token,
+            uuid,
+            ..Default::default()
+        }
     }
 
     /// 验证配置是否有效
@@ -230,7 +234,9 @@ impl TuicConfig {
     /// - `Err(TuicError)`: 配置无效（token 或 uuid 为空）
     pub fn validate(&self) -> Result<(), TuicError> {
         if self.token.is_empty() {
-            return Err(TuicError::InvalidConfig("token cannot be empty".to_string()));
+            return Err(TuicError::InvalidConfig(
+                "token cannot be empty".to_string(),
+            ));
         }
         if self.uuid.is_empty() {
             return Err(TuicError::InvalidConfig("uuid cannot be empty".to_string()));
@@ -439,32 +445,37 @@ async fn handle_client(
 
     loop {
         match TuicCodec::read_command(&mut stream).await {
-            Ok(command) => {
-                match command {
-                    TuicCommand::Connect(connect) => {
-                        debug!("Connect request: {}:{} session={}", connect.host, connect.port, connect.session_id);
-                        let mut session = TuicSession::new(connect.session_id, remote);
-                        session.target_addr = Some((connect.host.clone(), connect.port));
-                        session.connected = true;
-                        sessions.write().await.insert(connect.session_id, session.clone());
-                        TuicCodec::write_connect_response(&mut stream, connect.session_id, true).await?;
-                        handle_tcp_relay(stream, session).await?;
-                        break;
-                    }
-                    TuicCommand::Heartbeat(heartbeat) => {
-                        debug!("Heartbeat: timestamp={}", heartbeat.timestamp);
-                        TuicCodec::write_heartbeat_response(&mut stream, heartbeat.timestamp).await?;
-                    }
-                    TuicCommand::Disconnect(session_id) => {
-                        debug!("Disconnect: session_id={}", session_id);
-                        sessions.write().await.remove(&session_id);
-                        break;
-                    }
-                    _ => {
-                        warn!("Unexpected command type");
-                    }
+            Ok(command) => match command {
+                TuicCommand::Connect(connect) => {
+                    debug!(
+                        "Connect request: {}:{} session={}",
+                        connect.host, connect.port, connect.session_id
+                    );
+                    let mut session = TuicSession::new(connect.session_id, remote);
+                    session.target_addr = Some((connect.host.clone(), connect.port));
+                    session.connected = true;
+                    sessions
+                        .write()
+                        .await
+                        .insert(connect.session_id, session.clone());
+                    TuicCodec::write_connect_response(&mut stream, connect.session_id, true)
+                        .await?;
+                    handle_tcp_relay(stream, session).await?;
+                    break;
                 }
-            }
+                TuicCommand::Heartbeat(heartbeat) => {
+                    debug!("Heartbeat: timestamp={}", heartbeat.timestamp);
+                    TuicCodec::write_heartbeat_response(&mut stream, heartbeat.timestamp).await?;
+                }
+                TuicCommand::Disconnect(session_id) => {
+                    debug!("Disconnect: session_id={}", session_id);
+                    sessions.write().await.remove(&session_id);
+                    break;
+                }
+                _ => {
+                    warn!("Unexpected command type");
+                }
+            },
             Err(e) => {
                 error!("Command read error: {}", e);
                 break;
@@ -475,7 +486,10 @@ async fn handle_client(
     Ok(())
 }
 
-async fn handle_tcp_relay(mut client_stream: TcpStream, session: TuicSession) -> Result<(), TuicError> {
+async fn handle_tcp_relay(
+    mut client_stream: TcpStream,
+    session: TuicSession,
+) -> Result<(), TuicError> {
     if let Some((host, port)) = session.target_addr {
         let target: SocketAddr = format!("{}:{}", host, port)
             .parse()
@@ -515,7 +529,10 @@ impl TuicClient {
     ///
     /// 返回新的 `TuicClient` 实例
     pub fn new(config: TuicConfig, server_addr: SocketAddr) -> Self {
-        Self { config, server_addr }
+        Self {
+            config,
+            server_addr,
+        }
     }
 
     /// 连接到 TUIC 服务器
@@ -545,10 +562,16 @@ impl TuicClient {
         TuicCodec::write_auth_request(&mut stream, &auth_request).await?;
         let auth_success = TuicCodec::read_auth_response(&mut stream).await?;
         if !auth_success {
-            return Err(TuicError::AuthFailed("Server rejected authentication".to_string()));
+            return Err(TuicError::AuthFailed(
+                "Server rejected authentication".to_string(),
+            ));
         }
         info!("TUIC client connected to server");
-        Ok(TuicClientSession { stream, server_addr: self.server_addr, session_id: 0 })
+        Ok(TuicClientSession {
+            stream,
+            server_addr: self.server_addr,
+            session_id: 0,
+        })
     }
 
     /// 连接到目标地址
@@ -569,13 +592,22 @@ impl TuicClient {
     /// # 注意
     ///
     /// 必须先调用 `connect()` 建立服务器连接
-    pub async fn connect_target(&self, session: &mut TuicClientSession, host: String, port: u16) -> Result<(), TuicError> {
+    pub async fn connect_target(
+        &self,
+        session: &mut TuicClientSession,
+        host: String,
+        port: u16,
+    ) -> Result<(), TuicError> {
         use super::codec::TuicCodec;
         use super::tuic_impl::TuicConnectRequest;
         let session_id = rand::random::<u64>();
         session.session_id = session_id;
         let connect_request = TuicConnectRequest {
-            addr_type: if host.parse::<std::net::IpAddr>().is_ok() { 0x01 } else { 0x02 },
+            addr_type: if host.parse::<std::net::IpAddr>().is_ok() {
+                0x01
+            } else {
+                0x02
+            },
             host,
             port,
             session_id,
@@ -710,9 +742,18 @@ mod tests {
     #[test]
     fn test_tuic_command_type_conversion() {
         assert_eq!(TuicCommandType::from_u8(0x01), Some(TuicCommandType::Auth));
-        assert_eq!(TuicCommandType::from_u8(0x02), Some(TuicCommandType::Connect));
-        assert_eq!(TuicCommandType::from_u8(0x03), Some(TuicCommandType::Disconnect));
-        assert_eq!(TuicCommandType::from_u8(0x04), Some(TuicCommandType::Heartbeat));
+        assert_eq!(
+            TuicCommandType::from_u8(0x02),
+            Some(TuicCommandType::Connect)
+        );
+        assert_eq!(
+            TuicCommandType::from_u8(0x03),
+            Some(TuicCommandType::Disconnect)
+        );
+        assert_eq!(
+            TuicCommandType::from_u8(0x04),
+            Some(TuicCommandType::Heartbeat)
+        );
         assert_eq!(TuicCommandType::from_u8(0xFF), None);
         assert_eq!(TuicCommandType::Auth.as_u8(), 0x01);
         assert_eq!(TuicCommandType::Connect.as_u8(), 0x02);

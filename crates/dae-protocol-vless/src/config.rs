@@ -6,9 +6,9 @@
 //! - `VlessTlsConfig`: TLS 传输层配置
 //! - `VlessRealityConfig`: XTLS Reality 配置
 
+use dae_protocol_core::HandlerConfig;
 use std::net::SocketAddr;
 use std::time::Duration;
-use dae_protocol_core::HandlerConfig;
 
 /// VLESS 服务器配置
 ///

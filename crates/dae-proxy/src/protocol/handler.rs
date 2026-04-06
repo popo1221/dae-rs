@@ -93,8 +93,6 @@ mod tests {
     use super::*;
     use crate::core::{Context, Result as ProxyResult};
     use async_trait::async_trait;
-    
-    
 
     struct TestHandler {
         name: &'static str,
@@ -114,8 +112,6 @@ mod tests {
             Ok(())
         }
     }
-
-
 
     #[test]
     fn test_registry_new() {

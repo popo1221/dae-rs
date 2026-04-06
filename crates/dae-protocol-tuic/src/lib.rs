@@ -21,4 +21,7 @@
 pub mod tuic;
 
 // Re-exports from the tuic module
-pub use tuic::{TuicCodec, TuicCommand, TuicClient, TuicCommandType, TuicConfig, TuicError, TuicHandler, TuicServer};
+pub use tuic::{
+    TuicClient, TuicCodec, TuicCommand, TuicCommandType, TuicConfig, TuicError, TuicHandler,
+    TuicServer,
+};

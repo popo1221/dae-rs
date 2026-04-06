@@ -373,7 +373,10 @@ impl VmessHandler {
 
             debug!(
                 "VMess UDP: {} -> {}:{} ({} bytes)",
-                client_addr, target_addr, target_port, payload.len()
+                client_addr,
+                target_addr,
+                target_port,
+                payload.len()
             );
 
             let server_addr = format!("{}:{}", self.config.server.addr, self.config.server.port);

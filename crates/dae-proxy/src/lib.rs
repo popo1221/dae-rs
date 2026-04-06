@@ -21,13 +21,13 @@ pub use crate::ebpf_integration::{
     Result as EbpfResult,
 };
 // HTTP proxy protocol from external crate (module alias for internal path compatibility)
-pub use dae_protocol_http_proxy as http_proxy;
 pub use crate::protocol_dispatcher::{ProtocolDispatcher, ProtocolDispatcherConfig};
 pub use crate::proxy::{Proxy, ProxyConfig, ProxyError};
+pub use dae_protocol_http_proxy as http_proxy;
 // Shadowsocks protocol from external crate (module alias for internal path compatibility)
-pub use dae_protocol_shadowsocks as shadowsocks;
 pub use crate::tcp::{TcpProxy, TcpProxyConfig};
 pub use crate::udp::{UdpProxy, UdpProxyConfig};
+pub use dae_protocol_shadowsocks as shadowsocks;
 // VLESS protocol from external crate (module alias for internal path compatibility)
 pub use dae_protocol_vless as vless;
 // VMess protocol from external crate (module alias for internal path compatibility)
@@ -42,8 +42,6 @@ pub use crate::control::{
 // Logging module exports
 pub use crate::core::{Context, Error, Result};
 // Juicity protocol from external crate (QUIC-based, optional)
-#[cfg(feature = "protocol-juicity")]
-pub use dae_protocol_juicity as juicity;
 pub use crate::logging::{
     connect_to_log_stream, handle_control_log_command, parse_level_response, process_log_command,
     LogCommand, LogLevel, LogMessage, LogService, LogState,
@@ -69,6 +67,8 @@ pub use crate::rules::{
     DnsTypeRule, DomainRule, GeoIpRule, IpCidrRule, ProcessRule, Rule, RuleGroup, RuleMatchAction,
     RuleType,
 };
+#[cfg(feature = "protocol-juicity")]
+pub use dae_protocol_juicity as juicity;
 // Trojan protocol from external crate (module alias for internal path compatibility)
 pub use dae_protocol_trojan as trojan_protocol;
 
@@ -129,21 +129,39 @@ pub use dae_protocol_socks4::{
     Socks4Address, Socks4Command, Socks4Config, Socks4Reply, Socks4Request, Socks4Server,
 };
 pub use dae_protocol_socks5::{
-    Socks5Address,
     auth::{
         AuthHandler, CombinedAuthHandler, NoAuthHandler, UserCredentials, UsernamePasswordHandler,
     },
     commands::Socks5Command,
     handshake::Handshake,
     reply::Socks5Reply,
-    Socks5Handler, Socks5HandlerConfig, Socks5Server,
+    Socks5Address, Socks5Handler, Socks5HandlerConfig, Socks5Server,
 };
 
 // Re-export commonly used protocol types at crate root for convenience
+pub use dae_protocol_http_proxy::{HttpProxyHandler, HttpProxyServer};
+#[cfg(feature = "protocol-hysteria2")]
+pub use dae_protocol_hysteria2::{
+    Hysteria2Config, Hysteria2Error, Hysteria2Handler, Hysteria2Server,
+};
+#[cfg(feature = "protocol-juicity")]
+pub use dae_protocol_juicity::{
+    CongestionControl, JuicityAddress, JuicityClient, JuicityCodec, JuicityCommand, JuicityConfig,
+    JuicityConnection, JuicityError, JuicityFrame, JuicityHandler, JuicityServer,
+};
 pub use dae_protocol_shadowsocks::{
-    ShadowsocksHandler, ShadowsocksServer, SsCipherType, SsClientConfig, SsServerConfig, ObfsConfig,
-    ObfsHttp, ObfsMode, ObfsStream, ObfsTls, V2rayConfig, V2rayMode, V2rayPlugin, V2rayStream,
-    SsrClientConfig, SsrHandler, SsrObfs, SsrObfsHandler, SsrProtocol, SsrServerConfig,
+    ObfsConfig, ObfsHttp, ObfsMode, ObfsStream, ObfsTls, ShadowsocksHandler, ShadowsocksServer,
+    SsCipherType, SsClientConfig, SsServerConfig, SsrClientConfig, SsrHandler, SsrObfs,
+    SsrObfsHandler, SsrProtocol, SsrServerConfig, V2rayConfig, V2rayMode, V2rayPlugin, V2rayStream,
+};
+pub use dae_protocol_trojan::{
+    TrojanAddressType, TrojanClientConfig, TrojanCommand, TrojanHandler, TrojanServer,
+    TrojanServerConfig, TrojanTargetAddress, TrojanTlsConfig,
+};
+#[cfg(feature = "protocol-tuic")]
+pub use dae_protocol_tuic::{
+    TuicClient, TuicCodec, TuicCommand, TuicCommandType, TuicConfig, TuicError, TuicHandler,
+    TuicServer,
 };
 pub use dae_protocol_vless::{
     VlessAddressType, VlessClientConfig, VlessCommand, VlessHandler, VlessRealityConfig,
@@ -152,26 +170,6 @@ pub use dae_protocol_vless::{
 pub use dae_protocol_vmess::{
     VmessAddressType, VmessClientConfig, VmessCommand, VmessHandler, VmessSecurity, VmessServer,
     VmessServerConfig, VmessTargetAddress,
-};
-pub use dae_protocol_http_proxy::{HttpProxyHandler, HttpProxyServer};
-pub use dae_protocol_trojan::{
-    TrojanAddressType, TrojanClientConfig, TrojanCommand, TrojanHandler, TrojanServer,
-    TrojanServerConfig, TrojanTargetAddress, TrojanTlsConfig,
-};
-#[cfg(feature = "protocol-hysteria2")]
-pub use dae_protocol_hysteria2::{
-    Hysteria2Config, Hysteria2Error, Hysteria2Handler, Hysteria2Server,
-};
-#[cfg(feature = "protocol-juicity")]
-pub use dae_protocol_juicity::{
-    JuicityAddress, JuicityCodec, JuicityCommand, JuicityFrame, CongestionControl,
-    JuicityClient, JuicityConfig, JuicityConnection, JuicityError, JuicityHandler,
-    JuicityServer,
-};
-#[cfg(feature = "protocol-tuic")]
-pub use dae_protocol_tuic::{
-    TuicCodec, TuicCommand, TuicClient, TuicCommandType, TuicConfig, TuicError, TuicHandler,
-    TuicServer,
 };
 
 pub mod tcp;

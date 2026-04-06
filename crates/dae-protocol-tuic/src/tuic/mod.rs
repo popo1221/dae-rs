@@ -19,4 +19,6 @@ pub mod tuic_impl;
 
 // Re-exports for convenience
 pub use codec::TuicCodec;
-pub use tuic_impl::{TuicCommand, TuicClient, TuicCommandType, TuicConfig, TuicError, TuicHandler, TuicServer};
+pub use tuic_impl::{
+    TuicClient, TuicCommand, TuicCommandType, TuicConfig, TuicError, TuicHandler, TuicServer,
+};

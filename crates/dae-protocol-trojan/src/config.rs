@@ -9,9 +9,9 @@
 //! `TrojanClientConfig` 包含 `TrojanServerConfig`，后者又包含 `TrojanTlsConfig`。
 //! 这种嵌套结构使得配置既可以在客户端级别统一设置，也可以在服务器级别单独覆盖。
 
+use dae_protocol_core::HandlerConfig;
 use std::net::SocketAddr;
 use std::time::Duration;
-use dae_protocol_core::HandlerConfig;
 
 /// Trojan TLS 传输层配置
 ///

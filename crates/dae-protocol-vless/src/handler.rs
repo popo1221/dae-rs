@@ -23,9 +23,7 @@ use tracing::{debug, error, info};
 use crate::config::VlessClientConfig;
 use crate::crypto::hmac_sha256;
 use crate::protocol::VlessTargetAddress;
-use crate::protocol::{
-    VlessAddressType, VlessCommand, VLESS_HEADER_MIN_SIZE, VLESS_VERSION,
-};
+use crate::protocol::{VlessAddressType, VlessCommand, VLESS_HEADER_MIN_SIZE, VLESS_VERSION};
 use crate::relay_data;
 use dae_protocol_core::{Handler, ProtocolType};
 
@@ -142,9 +140,7 @@ impl VlessHandler {
                     "UDP traffic should use the UDP port",
                 ))
             }
-            VlessCommand::XtlsVision => {
-                self.handle_reality_vision(client, &header_buf).await
-            }
+            VlessCommand::XtlsVision => self.handle_reality_vision(client, &header_buf).await,
         }
     }
 
@@ -236,7 +232,10 @@ impl VlessHandler {
             const MIN_HEADER_SIZE: usize = 40;
 
             if n < MIN_HEADER_SIZE {
-                debug!("VLESS UDP: packet too small from {}: {} bytes", client_addr, n);
+                debug!(
+                    "VLESS UDP: packet too small from {}: {} bytes",
+                    client_addr, n
+                );
                 continue;
             }
 
@@ -260,7 +259,10 @@ impl VlessHandler {
 
             let ver = buf[17];
             if ver != VLESS_VERSION {
-                debug!("VLESS UDP: invalid protocol version {} from {}", ver, client_addr);
+                debug!(
+                    "VLESS UDP: invalid protocol version {} from {}",
+                    ver, client_addr
+                );
                 continue;
             }
 
@@ -290,12 +292,18 @@ impl VlessHandler {
                 }
                 Some(VlessAddressType::Domain) => {
                     if n < addr_start + 1 + 2 {
-                        debug!("VLESS UDP: buffer too small for domain length from {}", client_addr);
+                        debug!(
+                            "VLESS UDP: buffer too small for domain length from {}",
+                            client_addr
+                        );
                         continue;
                     }
                     let domain_len = buf[addr_start] as usize;
                     if n < addr_start + 1 + domain_len + 2 {
-                        debug!("VLESS UDP: buffer too small for domain from {}", client_addr);
+                        debug!(
+                            "VLESS UDP: buffer too small for domain from {}",
+                            client_addr
+                        );
                         continue;
                     }
                     let _domain = String::from_utf8(
@@ -322,7 +330,10 @@ impl VlessHandler {
                     (ip, 16)
                 }
                 None => {
-                    debug!("VLESS UDP: invalid address type {} from {}", atyp, client_addr);
+                    debug!(
+                        "VLESS UDP: invalid address type {} from {}",
+                        atyp, client_addr
+                    );
                     continue;
                 }
             };
@@ -343,7 +354,11 @@ impl VlessHandler {
 
             debug!(
                 "VLESS UDP: {} -> {}:{} ({} bytes, iv: {:?})",
-                client_addr, target_addr, port, payload.len(), &iv[..8]
+                client_addr,
+                target_addr,
+                port,
+                payload.len(),
+                &iv[..8]
             );
 
             let server_addr = format!("{}:{}", self.config.server.addr, self.config.server.port);

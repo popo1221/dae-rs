@@ -255,7 +255,6 @@ impl Hysteria2Address {
             ))),
         }
     }
-
 }
 
 /// Hysteria2 客户端 Hello 消息

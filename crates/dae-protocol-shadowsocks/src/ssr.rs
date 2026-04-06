@@ -348,7 +348,10 @@ impl SsrHandler {
         let mut resp = [0u8; 4];
         stream.read_exact(&mut resp).await?;
 
-        debug!("SSR auth handshake complete (connection_id={})", connection_id);
+        debug!(
+            "SSR auth handshake complete (connection_id={})",
+            connection_id
+        );
         Ok(())
     }
 
@@ -368,12 +371,7 @@ impl SsrHandler {
     /// # 返回值
     /// - 协议头字节向量：[版本(1字节), 协议类型(1字节), 保留(2字节)]
     fn build_protocol_header(&self, protocol_flag: u8) -> std::io::Result<Vec<u8>> {
-        Ok(vec![
-            0x01,
-            protocol_flag,
-            0x00,
-            0x00,
-        ])
+        Ok(vec![0x01, protocol_flag, 0x00, 0x00])
     }
 }
 
@@ -588,7 +586,9 @@ impl SsrObfsHandler {
 /// - `Some(usize)`: 子数组首次出现的位置
 /// - `None`: 未找到
 fn find_bytes(haystack: &[u8], needle: &[u8]) -> Option<usize> {
-    haystack.windows(needle.len()).position(|window| window == needle)
+    haystack
+        .windows(needle.len())
+        .position(|window| window == needle)
 }
 
 #[cfg(test)]
