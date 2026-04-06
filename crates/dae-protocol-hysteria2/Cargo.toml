@@ -14,6 +14,8 @@ tracing = "0.1"
 thiserror = "1"
 rand = "0.8"
 quinn = { version = "0.10", optional = true }
+dae-protocol-core = { path = "../dae-protocol-core" }
+async-trait = "0.1"
 
 [dev-dependencies]
 tokio-test = "0.4"

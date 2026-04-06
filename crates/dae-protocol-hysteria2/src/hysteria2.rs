@@ -25,9 +25,12 @@ use std::net::{IpAddr, Ipv4Addr, Ipv6Addr, SocketAddr};
 use std::sync::Arc;
 use std::time::Duration;
 
+use async_trait::async_trait;
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use tokio::net::{TcpListener, TcpStream};
 use tracing::{error, info, warn};
+
+use dae_protocol_core::{Handler, HandlerConfig, ProtocolType};
 
 /// Hysteria2 服务器配置
 ///
@@ -547,6 +550,32 @@ impl Hysteria2Server {
         }
     }
 }
+
+/// 实现 Handler trait for Hysteria2Handler
+#[async_trait]
+impl Handler for Hysteria2Handler {
+    type Config = Hysteria2Config;
+
+    fn name(&self) -> &'static str {
+        "hysteria2"
+    }
+
+    fn protocol(&self) -> ProtocolType {
+        ProtocolType::Hysteria2
+    }
+
+    fn config(&self) -> &Self::Config {
+        &self.config
+    }
+
+    async fn handle(self: Arc<Self>, _stream: TcpStream) -> std::io::Result<()> {
+        // Hysteria2 uses QUIC
+        Ok(())
+    }
+}
+
+/// Hysteria2Config 实现 HandlerConfig trait
+impl HandlerConfig for Hysteria2Config {}
 
 #[cfg(test)]
 mod tests {
