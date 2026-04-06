@@ -35,8 +35,10 @@ pub use dae_protocol_vmess as vmess;
 
 // Control plane types (local module)
 pub use crate::control::{
-    connect_and_get_status, connect_and_send, ControlCommand, ControlResponse, ControlServer,
-    ControlState, NodeTestResult, ProxyStats, ProxyStatus,
+    connect_and_get_status, connect_and_send, ControlServer, ControlState,
+};
+pub use crate::control_types::{
+    ControlCommand, ControlResponse, NodeTestResult, ProxyStats, ProxyStatus,
 };
 
 // Logging module exports
@@ -108,6 +110,8 @@ pub use crate::protocol::ProtocolHandler;
 pub mod connection;
 pub mod connection_pool;
 pub mod control;
+pub mod control_metrics;
+pub mod control_types;
 pub mod core;
 pub mod dns;
 pub mod ebpf_check;

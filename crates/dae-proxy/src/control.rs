@@ -7,8 +7,7 @@
 
 use crate::control_metrics::{get_bytes_received_total, get_bytes_sent_total, get_overall_from_metrics};
 use crate::control_types::{
-    ConfigState, ControlCommand, ControlResponse, LegacyOverallStats, NodeTestResult, ProxyStats,
-    ProxyStatus,
+    ConfigState, ControlResponse, NodeTestResult, ProxyStats, ProxyStatus,
 };
 use crate::metrics::{
     inc_node_latency_test, ACTIVE_TCP_CONNECTIONS_GAUGE, ACTIVE_UDP_CONNECTIONS_GAUGE,
@@ -37,13 +36,6 @@ pub struct ControlState {
     node_tester: Option<Arc<dyn Fn(&str) -> NodeTestResult + Send + Sync>>,
     /// Configuration state
     config_state: RwLock<ConfigState>,
-}
-
-/// Configuration state tracked by control interface
-struct ConfigState {
-    rules_loaded: bool,
-    rule_count: usize,
-    node_count: usize,
 }
 
 impl ControlState {
@@ -438,37 +430,6 @@ impl ControlServer {
     }
 }
 
-/// Legacy overall stats structure for metrics-based fallback
-struct LegacyOverallStats {
-    connections_total: u64,
-    bytes_in: u64,
-    bytes_out: u64,
-    rules_hit: u64,
-    nodes_tested: usize,
-}
-
-/// Get overall stats from Prometheus metrics (fallback when no tracking store)
-fn get_overall_from_metrics() -> LegacyOverallStats {
-    LegacyOverallStats {
-        connections_total: CONNECTION_COUNTER.get(),
-        bytes_in: get_bytes_received_total(),
-        bytes_out: get_bytes_sent_total(),
-        rules_hit: 0,    // Would need RULE_MATCH_COUNTER sum
-        nodes_tested: 0, // Would need NODE_LATENCY_TEST_COUNTER
-    }
-}
-
-/// Get total bytes received from metrics
-fn get_bytes_received_total() -> u64 {
-    // Sum across all transport labels
-    BYTES_RECEIVED_COUNTER.with_label_values(&["all"]).get()
-}
-
-/// Get total bytes sent from metrics  
-fn get_bytes_sent_total() -> u64 {
-    BYTES_SENT_COUNTER.with_label_values(&["all"]).get()
-}
-
 /// Connect to control socket and send command
 pub async fn connect_and_send(socket_path: &str, command: &str) -> std::io::Result<String> {
     let mut stream = UnixStream::connect(socket_path).await?;
@@ -503,6 +464,7 @@ pub async fn connect_and_get_status(socket_path: &str) -> std::io::Result<Contro
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::control_types::ControlCommand;
 
     #[tokio::test]
     async fn test_control_command_parsing() {

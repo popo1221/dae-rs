@@ -80,21 +80,11 @@ pub struct NodeTestResult {
 }
 
 /// Configuration state tracked by control interface
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Default)]
 pub struct ConfigState {
     pub rules_loaded: bool,
     pub rule_count: usize,
     pub node_count: usize,
-}
-
-impl Default for ConfigState {
-    fn default() -> Self {
-        Self {
-            rules_loaded: false,
-            rule_count: 0,
-            node_count: 0,
-        }
-    }
 }
 
 /// Legacy overall stats structure for metrics-based fallback
