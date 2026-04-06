@@ -45,7 +45,7 @@ impl Socks5Address {
     ///
     /// # SOCKS5 地址格式
     ///
-    /// ```
+    /// ```text
     /// |ATYP|  DST.ADDR                                    |
     /// | 1  | Variable (1 or 4 or 16 bytes, plus port)    |
     /// ```

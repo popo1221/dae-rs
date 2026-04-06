@@ -95,7 +95,7 @@ impl CommandHandler {
     ///
     /// # SOCKS5 请求格式
     ///
-    /// ```
+    /// ```text
     /// |VER |CMD |RSV |ATYP|  DST.ADDR   |  DST.PORT   |
     /// | 1  | 1  | 1  | 1  | Variable   |      2      |
     /// ```
@@ -325,7 +325,7 @@ impl CommandHandler {
     ///
     /// # 回复格式
     ///
-    /// ```
+    /// ```text
     /// |VER |REP |RSV |ATYP|  BND.ADDR   |  BND.PORT   |
     /// | 1  | 1  | 1  | 1  | Variable   |      2      |
     /// ```

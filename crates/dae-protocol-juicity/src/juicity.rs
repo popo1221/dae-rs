@@ -86,7 +86,7 @@ impl From<tokio::time::error::Elapsed> for JuicityError {
 /// # 示例
 ///
 /// ```rust
-/// use juicity::{JuicityConfig, CongestionControl};
+/// use dae_protocol_juicity::{JuicityConfig, CongestionControl};
 /// use std::time::Duration;
 ///
 /// let config = JuicityConfig {

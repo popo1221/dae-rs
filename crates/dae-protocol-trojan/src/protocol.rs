@@ -7,7 +7,7 @@
 //!
 //! # Trojan 协议格式
 //! Trojan 协议在 TLS 握手后发送请求头：
-//! ```
+//! ```text
 //! [password (56 bytes)][\r\n]
 //! [command (1 byte)][address type (1 byte)][address][port (2 bytes)][\r\n]
 //! [payload ...]
@@ -227,7 +227,7 @@ impl TrojanTargetAddress {
 /// - 地址信息和 payload 之间
 ///
 /// # 协议位置
-/// ```
+/// ```text
 /// [password (56 bytes)][\r\n]
 /// [command (1 byte)][address type (1 byte)][address][port (2 bytes)][\r\n]
 /// ```

@@ -207,7 +207,7 @@ impl VlessHandler {
     /// - `client`: 本地 UDP socket（Arc 包装以共享）
     ///
     /// # VLESS UDP 头部格式
-    /// ```
+    /// ```text
     /// [v1(1)][uuid(16)][ver(1)][cmd(1)][port(2)][atyp(1)][addr][iv(16)][payload]
     /// ```
     ///

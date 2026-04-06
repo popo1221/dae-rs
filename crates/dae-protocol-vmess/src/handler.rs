@@ -149,7 +149,7 @@ impl VmessHandler {
     /// 解密 VMess AEAD-2022 头部
     ///
     /// # VMess AEAD 加密格式
-    /// ```
+    /// ```text
     /// [16-byte nonce][encrypted data][16-byte auth tag]
     /// ```
     ///

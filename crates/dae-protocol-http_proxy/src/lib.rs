@@ -44,6 +44,8 @@ mod consts {
 /// # 示例
 ///
 /// ```rust
+/// use dae_protocol_http_proxy::HttpProxyHandlerConfig;
+///
 /// // 无认证配置
 /// let config = HttpProxyHandlerConfig::default();
 ///

@@ -175,7 +175,7 @@ pub enum TuicCommand {
 /// # 示例
 ///
 /// ```rust
-/// use tuic::TuicConfig;
+/// use dae_protocol_tuic::TuicConfig;
 ///
 /// let config = TuicConfig::new(
 ///     "your_token".to_string(),

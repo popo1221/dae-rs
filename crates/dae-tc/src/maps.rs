@@ -64,7 +64,7 @@ pub const DEFAULT_ROUTE_KEY: u32 = 0;
 /// # 算法
 ///
 /// DJB2 算法：
-/// ```
+/// ```text
 /// hash = 5381
 /// for each byte b in domain:
 ///     hash = hash * 33 + b
