@@ -1,10 +1,41 @@
-# Ralph Mode: dae-rs Module Refactoring
+# Ralph Mode: dae-rs Large File Refactoring
 
 ## Task ID
 task-1775460664785-129a3u
 
 ## Objective
-Split oversized modules/files into smaller, focused submodules.
+Refactor all dae-rs files >500 lines until no large files remain.
+
+## Large Files Inventory (>500 lines, excluding tests)
+
+| File | Lines | Status | Action |
+|------|-------|--------|--------|
+| subscription/mod.rs | 2267 | Analyzed | ❌ Skip (too coupled) |
+| ebpf_integration/mod.rs | 1530 | TODO | Split handles to submodules |
+| config/src/lib.rs | 1399 | TODO | Extract types to types.rs |
+| tracking/types.rs | 957 | TODO | Consider merge with tracking.rs |
+| vless/handler.rs | 880 | TODO | Extract handle_udp to udp_handler.rs |
+| connection_pool.rs | 853 | Analyzed | ❌ Skip (ConnectionKey dep) |
+| handler.rs (dae-protocol-vless) | 840 | TODO | Review structure |
+| handler.rs (dae-protocol-trojan) | 818 | TODO | Review structure |
+| tuic_impl.rs | 784 | TODO | Review structure |
+| control.rs | 752 | ✅ Done | +9 tests |
+| trojan_protocol/handler.rs | 714 | TODO | Review structure |
+| transport/meek.rs | 710 | TODO | Review structure |
+| juicity.rs | 678 | TODO | Review structure |
+| packet.rs (dae-tc) | 662 | TODO | Review structure |
+| vmess/mod.rs | 647 | TODO | Review structure |
+| ssr.rs (shadowsocks) | 645 | TODO | Review structure |
+| tuic/codec.rs | 626 | TODO | Review structure |
+| logging.rs | 612 | ✅ Done | +4 tests |
+| tuic/tuic.rs | 595 | TODO | Review structure |
+| codec.rs (juicity) | 594 | TODO | Review structure |
+| hysteria2.rs | 588 | TODO | Review structure |
+| transport/grpc.rs | 583 | TODO | Review structure |
+| tracking/store.rs | 575 | TODO | Review structure |
+| juicity/juicity.rs | 559 | TODO | Review structure |
+| shadowsocks/ssr.rs | 555 | TODO | Review structure |
+| transport/tls.rs | 545 | TODO | Review structure |
 
 ## Progress Overview
 
@@ -13,6 +44,7 @@ Split oversized modules/files into smaller, focused submodules.
 | Phase 1 | Optional QUIC (quinn) compilation | ✅ Complete (PR #101) |
 | Phase 2 | socks4.rs split into 4 modules | ✅ Complete (PR #102) |
 | Phase 3 | Continue module splitting | 🔄 In Progress |
+| Phase 4 | Large file refactoring | 🔄 In Progress |
 
 ## Completed in This Session
 
