@@ -534,7 +534,7 @@ impl Default for TrackingMetrics {
 mod tests {
     use super::*;
     use crate::tracking::constants::{
-        ConnectionState, NodeStatus, Protocol, RuleAction, RuleType, current_epoch_ms,
+        Protocol, RuleAction, RuleType, current_epoch_ms,
     };
 
     #[test]

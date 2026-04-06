@@ -18,15 +18,13 @@ mod integration_tests {
     async fn test_socks5_handler_creation() {
         let config = Socks5HandlerConfig::default();
         let _handler = Socks5Handler::new(config);
-        // Handler created successfully
-        assert!(true);
+        // Handler created successfully - no panic means pass
     }
 
     #[tokio::test]
     async fn test_socks5_handler_no_auth() {
         let _handler = Socks5Handler::new_no_auth();
-        // Handler created successfully
-        assert!(true);
+        // Handler created successfully - no panic means pass
     }
 
     #[tokio::test]

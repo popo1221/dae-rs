@@ -225,7 +225,7 @@ mod tests {
     use super::*;
 
     #[test]
-    fn test_handler_stats() {
+    fn test_handler_stats_basic_operations() {
         let stats = HandlerStats::new();
 
         assert_eq!(stats.active_connections(), 0);
@@ -247,7 +247,7 @@ mod tests {
     }
 
     #[test]
-    fn test_handler_stats_concurrent() {
+    fn test_handler_stats_concurrent_access() {
         use std::sync::Arc;
         use std::thread;
 
