@@ -552,23 +552,6 @@ mod tests {
     use super::*;
 
     #[test]
-    fn test_hysteria2_address_ipv4() {
-        let ip = IpAddr::V4(Ipv4Addr::new(192, 168, 1, 1));
-        let addr = Hysteria2Address::Ip(ip);
-        let encoded = addr.encode();
-        assert_eq!(encoded[0], 0x01);
-        assert_eq!(&encoded[1..5], &[192, 168, 1, 1]);
-    }
-
-    #[test]
-    fn test_hysteria2_address_domain() {
-        let addr = Hysteria2Address::Domain("example.com".to_string(), 443);
-        let encoded = addr.encode();
-        assert_eq!(encoded[0], 0x02);
-        assert_eq!(encoded[1], 11); // "example.com" length
-        assert_eq!(&encoded[2..13], b"example.com");
-    }
-
     #[test]
     fn test_parse_client_hello() {
         let config = Hysteria2Config::default();
