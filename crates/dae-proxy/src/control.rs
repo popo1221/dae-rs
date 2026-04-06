@@ -627,4 +627,126 @@ mod tests {
         assert!(json.contains("true"));
         assert!(json.contains("100"));
     }
+
+    #[test]
+    fn test_proxy_status_serialization() {
+        let status = ProxyStatus {
+            running: true,
+            uptime_secs: 3600,
+            tcp_connections: 10,
+            udp_sessions: 5,
+            rules_loaded: true,
+            rule_count: 100,
+            nodes_configured: 50,
+            total_connections: 1000,
+            total_bytes_in: 1024 * 1024 * 100,
+            total_bytes_out: 1024 * 1024 * 200,
+        };
+
+        let json = serde_json::to_string(&status)
+            .expect("test: serialization of ProxyStatus should not fail");
+        assert!(json.contains("\"running\":true"));
+        assert!(json.contains("\"uptime_secs\":3600"));
+        assert!(json.contains("\"tcp_connections\":10"));
+        assert!(json.contains("\"rules_loaded\":true"));
+        assert!(json.contains("\"rule_count\":100"));
+    }
+
+    #[test]
+    fn test_proxy_stats_serialization() {
+        let stats = ProxyStats {
+            total_connections: 5000,
+            total_bytes_in: 1024 * 1024 * 500,
+            total_bytes_out: 1024 * 1024 * 1000,
+            active_tcp_connections: 25,
+            active_udp_sessions: 15,
+            rules_hit: 999,
+            nodes_tested: 48,
+            rule_count: 100,
+            node_count: 50,
+        };
+
+        let json = serde_json::to_string(&stats)
+            .expect("test: serialization of ProxyStats should not fail");
+        assert!(json.contains("\"total_connections\":5000"));
+        assert!(json.contains("\"active_tcp_connections\":25"));
+        assert!(json.contains("\"rules_hit\":999"));
+    }
+
+    #[test]
+    fn test_control_command_debug() {
+        // Test that ControlCommand implements Debug correctly
+        let cmd = ControlCommand::Status;
+        let debug_str = format!("{:?}", cmd);
+        assert!(debug_str.contains("Status"));
+
+        let cmd2 = ControlCommand::TestNode("us-east".to_string());
+        let debug_str2 = format!("{:?}", cmd2);
+        assert!(debug_str2.contains("TestNode"));
+        assert!(debug_str2.contains("us-east"));
+    }
+
+    #[test]
+    fn test_control_response_debug() {
+        let resp = ControlResponse::Ok("success".to_string());
+        let debug_str = format!("{:?}", resp);
+        assert!(debug_str.contains("Ok"));
+        assert!(debug_str.contains("success"));
+
+        let resp2 = ControlResponse::Error("failed".to_string());
+        let debug_str2 = format!("{:?}", resp2);
+        assert!(debug_str2.contains("Error"));
+        assert!(debug_str2.contains("failed"));
+    }
+
+    #[tokio::test]
+    async fn test_control_state_trigger_reload_no_callback() {
+        let state = ControlState::new();
+        // No reload callback set, should return false
+        assert!(!state.trigger_reload());
+    }
+
+    #[tokio::test]
+    async fn test_control_state_test_node_no_tester() {
+        let state = ControlState::new();
+        // No node tester set, should return None
+        assert!(state.test_node("any-node").is_none());
+    }
+
+    #[tokio::test]
+    async fn test_control_state_update_config() {
+        let state = ControlState::new();
+
+        // Update config
+        state.update_config(true, 50, 25).await;
+
+        // Verify through get_status
+        let status = state.get_status().await;
+        assert!(status.rules_loaded);
+        assert_eq!(status.rule_count, 50);
+        assert_eq!(status.nodes_configured, 25);
+    }
+
+    #[test]
+    fn test_node_test_result_deserialization() {
+        let json = r#"{"node_name":"proxy-1","success":false,"latency_ms":null,"error":"timeout"}"#;
+        let result: NodeTestResult = serde_json::from_str(json)
+            .expect("test: deserialization of NodeTestResult should not fail");
+
+        assert_eq!(result.node_name, "proxy-1");
+        assert!(!result.success);
+        assert!(result.latency_ms.is_none());
+        assert_eq!(result.error.as_deref(), Some("timeout"));
+    }
+
+    #[test]
+    fn test_control_command_variant_access() {
+        // Test ControlCommand::TestNode extraction
+        let cmd = ControlCommand::TestNode("asia-east".to_string());
+        if let ControlCommand::TestNode(name) = cmd {
+            assert_eq!(name, "asia-east");
+        } else {
+            panic!("Expected TestNode variant");
+        }
+    }
 }

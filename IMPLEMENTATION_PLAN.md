@@ -52,6 +52,7 @@ Split oversized modules/files into smaller, focused submodules.
 
 ## Current Branch Status
 ```
+bd5e3a4 refactor(subscription): remove dead code ParsedProxyUri (29 lines)
 e258164 docs: update IMPLEMENTATION_PLAN.md - tracking tests complete
 02dcda3 test(tracking): add 17 new tests for types.rs
 24bd5f6 docs: update IMPLEMENTATION_PLAN.md - subscription.rs analysis complete
@@ -87,8 +88,9 @@ cargo clippy --workspace ✅
 | 2026-04-06T08:30 | Committed analysis | bac268b |
 | 2026-04-06T08:40 | Added tracking tests | 17 new tests |
 | 2026-04-06T17:35 | Final recommendation | Do NOT split subscription.rs |
+| 2026-04-06T17:49 | Cleaned dead code | Removed ParsedProxyUri (29 lines) |
 
 ## Current Status
-- Progress: 40%
+- Progress: 45%
 - Blockers: None
 - Recommendation: Focus on test coverage, not refactoring
