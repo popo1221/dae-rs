@@ -416,6 +416,28 @@ mod tests {
     use super::*;
 
     #[test]
+    fn test_log_level_as_str() {
+        assert_eq!(LogLevel::Trace.as_str(), "trace");
+        assert_eq!(LogLevel::Debug.as_str(), "debug");
+        assert_eq!(LogLevel::Info.as_str(), "info");
+        assert_eq!(LogLevel::Warn.as_str(), "warn");
+        assert_eq!(LogLevel::Error.as_str(), "error");
+    }
+
+    #[test]
+    fn test_log_level_default() {
+        let default_level = LogLevel::default();
+        assert_eq!(default_level, LogLevel::Info);
+    }
+
+    #[test]
+    fn test_log_level_display() {
+        // Display should produce the same as as_str
+        let level = LogLevel::Debug;
+        assert_eq!(format!("{}", level), level.as_str());
+    }
+
+    #[test]
     fn test_log_level_from_str() {
         assert_eq!(LogLevel::from_str("trace"), Some(LogLevel::Trace));
         assert_eq!(LogLevel::from_str("debug"), Some(LogLevel::Debug));
