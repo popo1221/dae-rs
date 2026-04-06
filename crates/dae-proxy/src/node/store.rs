@@ -1,9 +1,8 @@
-//! Node Store - Zed-inspired naming for node management
+//! Node Store - Zed 风格的节点管理命名
 //!
-//! This module follows Zed's naming conventions where `*Store` indicates
-//! an abstraction over local/remote operations.
+//! 本模块遵循 Zed 的命名约定，`*Store` 表示本地/远程操作的抽象。
 //!
-//! # Architecture (Zed Pattern)
+//! # 架构设计 (Zed 模式)
 //!
 //! ```text
 //! ┌─────────────────────────────────────────────────────────────┐
@@ -18,19 +17,18 @@
 //!    └──────────┘        └─────────────┘       └─────────────┘
 //! ```
 //!
-//! # Naming Conventions (Zed Pattern)
+//! # 命名规范 (Zed 模式)
 //!
-//! - **NodeStore**: Abstract interface for node operations
-//! - **NodeManager**: Concrete implementation managing lifecycle
-//! - **NodeHandle**: Reference to a managed entity
-//! - **NodeState**: Immutable state snapshot
+//! - **NodeStore**: 节点操作的抽象接口
+//! - **NodeManager**: 管理生命周期的具体实现
+//! - **NodeHandle**: 托管实体的引用
+//! - **NodeState**: 不可变的状态快照
 
 use std::sync::Arc;
 
-/// Node selector trait - defines operations for selecting nodes
+/// 节点存储 trait - 定义节点选择操作的接口
 ///
-/// Following Zed's naming convention where `*Store` indicates an abstraction
-/// over local/remote operations.
+/// 遵循 Zed 的命名约定，`*Store` 表示本地/远程操作的抽象。
 pub trait NodeStore: Send + Sync {
     /// Select a node based on the selection policy
     fn select(&self) -> Option<Arc<dyn Node>>;
@@ -47,9 +45,9 @@ pub trait NodeStore: Send + Sync {
     }
 }
 
-/// NodeManager - concrete implementation for node lifecycle management
+/// 节点管理器 - 节点生命周期管理的具体实现
 ///
-/// Manages node creation, health monitoring, and lifecycle.
+/// 管理节点的创建、健康监控和生命周期。
 pub trait NodeManager: NodeStore {
     /// Add a new node
     fn add_node(&mut self, node: Arc<dyn Node>) -> Result<(), NodeError>;
@@ -64,7 +62,9 @@ pub trait NodeManager: NodeStore {
     fn reload(&mut self, config: NodeManagerConfig) -> Result<(), NodeError>;
 }
 
-/// Configuration for NodeManager
+/// NodeManager 配置
+///
+/// 配置节点管理器的行为参数。
 #[derive(Debug, Clone)]
 pub struct NodeManagerConfig {
     /// Selection policy

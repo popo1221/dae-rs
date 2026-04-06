@@ -1,10 +1,12 @@
-//! Process rule module
+//! 进程规则模块
 //!
-//! Contains process name rule type and matching logic.
+//! 包含进程名规则类型及匹配逻辑。
 
 use crate::rule_engine::PacketInfo;
 
-/// A process name rule (Linux only)
+/// 进程名规则（仅 Linux）
+///
+/// 根据进程名匹配数据包的规则。
 #[derive(Debug, Clone)]
 pub struct ProcessRule {
     /// Process name to match

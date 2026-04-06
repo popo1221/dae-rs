@@ -52,10 +52,9 @@ mod tests {
 
     #[test]
     fn test_ebpf_system_config() {
-        let config = EbpfSystemConfig::detect();
+        let _config = EbpfSystemConfig::detect();
 
-        // Should be able to detect JIT status
-        assert!(true); // JIT detection works
+        // JIT detection works - no panic means success
     }
 
     #[test]

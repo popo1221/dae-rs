@@ -13,6 +13,7 @@ use futures::{SinkExt, StreamExt};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::sync::Arc;
+use std::sync::OnceLock;
 use tokio::sync::{broadcast, RwLock};
 use tower_http::cors::{Any, CorsLayer};
 use tracing::{error, info, warn};
@@ -156,12 +157,11 @@ impl Default for DashboardState {
 }
 
 /// Global dashboard state instance
-static DASHBOARD_STATE: std::sync::LazyLock<DashboardState> =
-    std::sync::LazyLock::new(DashboardState::new);
+static DASHBOARD_STATE: OnceLock<DashboardState> = OnceLock::new();
 
 /// Get a clone of the global dashboard state
 pub fn get_dashboard_state() -> &'static DashboardState {
-    &DASHBOARD_STATE
+    DASHBOARD_STATE.get_or_init(DashboardState::new)
 }
 
 /// Create a shared reference to dashboard state
@@ -171,7 +171,7 @@ pub fn shared_dashboard_state() -> Arc<DashboardState> {
 
 /// WebSocket upgrade handler for dashboard
 pub async fn dashboard_handler(ws: WebSocketUpgrade) -> Response {
-    ws.on_upgrade(|socket| dashboard_socket(socket))
+    ws.on_upgrade(dashboard_socket)
 }
 
 /// Handle WebSocket connection for dashboard

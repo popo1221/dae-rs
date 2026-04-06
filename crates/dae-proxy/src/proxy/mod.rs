@@ -410,7 +410,7 @@ mod tests {
         let err: ProxyError = io_err.into();
         match err {
             ProxyError::Connect(_) => {}
-            _ => panic!("Expected Connect variant"),
+            _ => unreachable!(),
         }
     }
 

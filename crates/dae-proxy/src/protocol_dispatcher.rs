@@ -78,7 +78,7 @@ impl Default for ProtocolDispatcherConfig {
 /// Protocol dispatcher that routes connections to appropriate handlers
 pub struct ProtocolDispatcher {
     config: ProtocolDispatcherConfig,
-    socks5_handler: Option<Arc<crate::socks5::Socks5Handler>>,
+    socks5_handler: Option<Arc<dae_protocol_socks5::Socks5Handler>>,
     http_handler: Option<Arc<crate::http_proxy::HttpProxyHandler>>,
 }
 
@@ -93,7 +93,7 @@ impl ProtocolDispatcher {
     }
 
     /// Create with SOCKS5 handler
-    pub fn with_socks5_handler(mut self, handler: Arc<crate::socks5::Socks5Handler>) -> Self {
+    pub fn with_socks5_handler(mut self, handler: Arc<dae_protocol_socks5::Socks5Handler>) -> Self {
         self.socks5_handler = Some(handler);
         self
     }
@@ -105,7 +105,7 @@ impl ProtocolDispatcher {
     }
 
     /// Set SOCKS5 handler
-    pub fn set_socks5_handler(&mut self, handler: Arc<crate::socks5::Socks5Handler>) {
+    pub fn set_socks5_handler(&mut self, handler: Arc<dae_protocol_socks5::Socks5Handler>) {
         self.socks5_handler = Some(handler);
     }
 
@@ -197,7 +197,7 @@ impl ProtocolDispatcher {
 pub struct CombinedProxyServer {
     #[allow(dead_code)]
     config: ProtocolDispatcherConfig,
-    socks5_server: Option<Arc<crate::socks5::Socks5Server>>,
+    socks5_server: Option<Arc<dae_protocol_socks5::Socks5Server>>,
     http_server: Option<Arc<crate::http_proxy::HttpProxyServer>>,
 }
 
@@ -212,7 +212,7 @@ impl CombinedProxyServer {
 
         // Create SOCKS5 server if configured
         if let Some(addr) = config.socks5_addr {
-            let s5_server = crate::socks5::Socks5Server::new(addr).await?;
+            let s5_server = dae_protocol_socks5::Socks5Server::new(addr).await?;
             server.socks5_server = Some(Arc::new(s5_server));
         }
 
@@ -368,5 +368,46 @@ mod tests {
             DetectedProtocol::detect(b"GET /api/v1/users HTTP/1.1"),
             DetectedProtocol::HttpOther
         );
+    }
+
+    #[test]
+    fn test_detect_http_trace() {
+        assert_eq!(
+            DetectedProtocol::detect(b"TRACE / HTTP/1.1"),
+            DetectedProtocol::HttpOther
+        );
+    }
+
+    #[test]
+    fn test_detected_protocol_debug() {
+        let proto = DetectedProtocol::Socks5;
+        let debug_str = format!("{:?}", proto);
+        assert!(debug_str.contains("Socks5"));
+
+        let proto2 = DetectedProtocol::HttpConnect;
+        let debug_str2 = format!("{:?}", proto2);
+        assert!(debug_str2.contains("HttpConnect"));
+    }
+
+    #[test]
+    fn test_detected_protocol_equality() {
+        assert_eq!(DetectedProtocol::Socks5, DetectedProtocol::Socks5);
+        assert_eq!(DetectedProtocol::HttpConnect, DetectedProtocol::HttpConnect);
+        assert_ne!(DetectedProtocol::Socks5, DetectedProtocol::HttpConnect);
+        assert_ne!(DetectedProtocol::HttpOther, DetectedProtocol::Unknown);
+    }
+
+    #[test]
+    fn test_detect_http_connect_case_sensitive() {
+        // Protocol detection should be case-sensitive for first byte
+        // 0x05 is SOCKS5, not ASCII letter
+        assert_eq!(DetectedProtocol::detect(&[0x05]), DetectedProtocol::Socks5);
+    }
+
+    #[test]
+    fn test_detect_socks5_with_longer_data() {
+        // SOCKS5 should be detected regardless of additional bytes
+        let data = [0x05, 0x02, 0x00, 0x01, 0xC0, 0xA8, 0x01, 0x64, 0x1B, 0x58];
+        assert_eq!(DetectedProtocol::detect(&data), DetectedProtocol::Socks5);
     }
 }

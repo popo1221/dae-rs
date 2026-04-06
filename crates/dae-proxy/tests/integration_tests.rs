@@ -4,7 +4,7 @@
 
 #[cfg(test)]
 mod integration_tests {
-    use dae_proxy::socks5::Socks5HandlerConfig;
+    use dae_proxy::Socks5HandlerConfig;
     use dae_proxy::{
         ConnectionKey, ConnectionPool, DomainRule, IpCidrRule, Protocol, Rule, RuleAction,
         RuleEngine, RuleEngineConfig, RuleGroup, RuleMatchAction, Socks5Handler,
@@ -18,15 +18,13 @@ mod integration_tests {
     async fn test_socks5_handler_creation() {
         let config = Socks5HandlerConfig::default();
         let _handler = Socks5Handler::new(config);
-        // Handler created successfully
-        assert!(true);
+        // Handler created successfully - no panic means pass
     }
 
     #[tokio::test]
     async fn test_socks5_handler_no_auth() {
         let _handler = Socks5Handler::new_no_auth();
-        // Handler created successfully
-        assert!(true);
+        // Handler created successfully - no panic means pass
     }
 
     #[tokio::test]

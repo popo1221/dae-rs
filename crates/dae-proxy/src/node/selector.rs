@@ -1,7 +1,6 @@
-//! Node selector implementations
+//! 节点选择器实现
 //!
-//! This module provides the NodeSelector trait and implementations
-//! for various node selection strategies.
+//! 本模块提供 NodeSelector trait 和各种节点选择策略的实现。
 
 use async_trait::async_trait;
 use std::sync::atomic::{AtomicU32, Ordering};
@@ -10,10 +9,9 @@ use std::sync::Arc;
 use super::manager::{ConnectionFingerprint, SelectionPolicy};
 use super::node::Node;
 
-/// NodeSelector trait - implements selection logic for nodes
+/// 节点选择器 trait - 实现节点选择逻辑
 ///
-/// This trait allows for pluggable selection strategies
-/// that can be configured at runtime.
+/// 此 trait 允许可插拔的选择策略，可在运行时配置。
 #[async_trait]
 pub trait NodeSelector: Send + Sync {
     /// Select a node from the given list based on policy
@@ -24,7 +22,9 @@ pub trait NodeSelector: Send + Sync {
     ) -> Option<Arc<dyn Node>>;
 }
 
-/// Default node selector implementation
+/// 默认节点选择器实现
+///
+/// 提供多种选择策略：最低延迟、特定节点、随机、轮询、粘性会话等。
 pub struct DefaultNodeSelector {
     /// Round-robin counter (atomic for thread safety)
     rr_counter: Arc<AtomicU32>,

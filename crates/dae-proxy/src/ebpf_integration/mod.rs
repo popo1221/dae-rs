@@ -28,6 +28,7 @@
 mod checks;
 mod config;
 mod diagnostics;
+mod errors;
 mod maps;
 mod metrics;
 
@@ -37,6 +38,7 @@ pub use diagnostics::{
     can_use_ebpf, detect_and_log_ebpf_support, detect_ebpf_support, EbpfSystemConfig,
     RecommendedProgramType,
 };
+pub use errors::{EbpfError, Result};
 pub use maps::{EbpfMaps, RoutingMapHandle, SessionMapHandle, StatsMapHandle};
 pub use metrics::{EbpfMapMetrics, EbpfMapMetricsSnapshot};
 
@@ -46,58 +48,7 @@ use dae_ebpf_common::routing::RoutingEntry;
 use dae_ebpf_common::session::{SessionEntry, SessionKey};
 use dae_ebpf_common::stats::{idx as stats_idx, StatsEntry};
 use std::sync::Arc;
-use thiserror::Error;
 use tracing::{debug, info, warn};
-
-// Re-export Result type for convenience
-
-/// Error type for eBPF operations
-#[derive(Error, Debug)]
-pub enum EbpfError {
-    #[error("Map not found: {0}")]
-    MapNotFound(String),
-    #[error("Key not found: {0}")]
-    KeyNotFound(String),
-    #[error("Update failed: {0}")]
-    UpdateFailed(String),
-    #[error("Lookup failed: {0}")]
-    LookupFailed(String),
-    #[error("Permission denied: {0}")]
-    PermissionDenied(String),
-    #[error("eBPF not available: {0}")]
-    EbpfNotAvailable(String),
-    #[error("Kernel version not supported: {0}")]
-    KernelNotSupported(String),
-    #[error("Other error: {0}")]
-    Other(String),
-}
-
-impl From<std::io::Error> for EbpfError {
-    fn from(e: std::io::Error) -> Self {
-        EbpfError::Other(e.to_string())
-    }
-}
-
-impl From<aya::EbpfError> for EbpfError {
-    fn from(e: aya::EbpfError) -> Self {
-        EbpfError::Other(e.to_string())
-    }
-}
-
-impl From<aya::maps::MapError> for EbpfError {
-    fn from(e: aya::maps::MapError) -> Self {
-        EbpfError::Other(e.to_string())
-    }
-}
-
-impl From<aya::programs::ProgramError> for EbpfError {
-    fn from(e: aya::programs::ProgramError) -> Self {
-        EbpfError::Other(e.to_string())
-    }
-}
-
-/// Result type for eBPF operations
-pub type Result<T> = std::result::Result<T, EbpfError>;
 
 // ============================================
 // eBPF Runtime and Context (aya integration)

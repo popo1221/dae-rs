@@ -1,0 +1,205 @@
+{
+  "id": "2026-04-06-081106",
+  "generated_at": "2026-04-06T00:11:06.079020103Z",
+  "language": "zh",
+  "pages": [
+    {
+      "slug": "1-xiang-mu-gai-shu",
+      "title": "项目概述",
+      "file": "1-xiang-mu-gai-shu.md",
+      "section": "入门指南",
+      "level": "Beginner"
+    },
+    {
+      "slug": "2-kuai-su-kai-shi",
+      "title": "快速开始",
+      "file": "2-kuai-su-kai-shi.md",
+      "section": "入门指南",
+      "level": "Beginner"
+    },
+    {
+      "slug": "3-an-zhuang-zhi-nan",
+      "title": "安装指南",
+      "file": "3-an-zhuang-zhi-nan.md",
+      "section": "入门指南",
+      "level": "Beginner"
+    },
+    {
+      "slug": "4-xi-tong-jia-gou-she-ji",
+      "title": "系统架构设计",
+      "file": "4-xi-tong-jia-gou-she-ji.md",
+      "section": "入门指南",
+      "group": "核心架构",
+      "level": "Intermediate"
+    },
+    {
+      "slug": "5-mo-kuai-jie-gou-gai-lan",
+      "title": "模块结构概览",
+      "file": "5-mo-kuai-jie-gou-gai-lan.md",
+      "section": "入门指南",
+      "group": "核心架构",
+      "level": "Intermediate"
+    },
+    {
+      "slug": "6-dai-li-he-xin-shi-xian",
+      "title": "代理核心实现",
+      "file": "6-dai-li-he-xin-shi-xian.md",
+      "section": "核心功能",
+      "level": "Advanced"
+    },
+    {
+      "slug": "7-lian-jie-chi-guan-li",
+      "title": "连接池管理",
+      "file": "7-lian-jie-chi-guan-li.md",
+      "section": "核心功能",
+      "level": "Advanced"
+    },
+    {
+      "slug": "8-vless-xie-yi",
+      "title": "VLESS 协议",
+      "file": "8-vless-xie-yi.md",
+      "section": "核心功能",
+      "group": "协议实现",
+      "level": "Intermediate"
+    },
+    {
+      "slug": "9-vmess-xie-yi",
+      "title": "VMess 协议",
+      "file": "9-vmess-xie-yi.md",
+      "section": "核心功能",
+      "group": "协议实现",
+      "level": "Intermediate"
+    },
+    {
+      "slug": "10-shadowsocks-xie-yi",
+      "title": "Shadowsocks 协议",
+      "file": "10-shadowsocks-xie-yi.md",
+      "section": "核心功能",
+      "group": "协议实现",
+      "level": "Intermediate"
+    },
+    {
+      "slug": "11-trojan-xie-yi",
+      "title": "Trojan 协议",
+      "file": "11-trojan-xie-yi.md",
+      "section": "核心功能",
+      "group": "协议实现",
+      "level": "Intermediate"
+    },
+    {
+      "slug": "12-tuic-xie-yi",
+      "title": "TUIC 协议",
+      "file": "12-tuic-xie-yi.md",
+      "section": "核心功能",
+      "group": "协议实现",
+      "level": "Intermediate"
+    },
+    {
+      "slug": "13-hysteria2-xie-yi",
+      "title": "Hysteria2 协议",
+      "file": "13-hysteria2-xie-yi.md",
+      "section": "核心功能",
+      "group": "协议实现",
+      "level": "Intermediate"
+    },
+    {
+      "slug": "14-juicity-xie-yi",
+      "title": "Juicity 协议",
+      "file": "14-juicity-xie-yi.md",
+      "section": "核心功能",
+      "group": "协议实现",
+      "level": "Intermediate"
+    },
+    {
+      "slug": "15-chuan-shu-ceng-chou-xiang",
+      "title": "传输层抽象",
+      "file": "15-chuan-shu-ceng-chou-xiang.md",
+      "section": "传输与路由",
+      "level": "Intermediate"
+    },
+    {
+      "slug": "16-tls-yu-reality",
+      "title": "TLS 与 Reality",
+      "file": "16-tls-yu-reality.md",
+      "section": "传输与路由",
+      "level": "Intermediate"
+    },
+    {
+      "slug": "17-ebpf-xdp-ji-cheng",
+      "title": "eBPF/XDP 集成",
+      "file": "17-ebpf-xdp-ji-cheng.md",
+      "section": "传输与路由",
+      "group": "透明代理与流量处理",
+      "level": "Advanced"
+    },
+    {
+      "slug": "18-gui-ze-yin-qing",
+      "title": "规则引擎",
+      "file": "18-gui-ze-yin-qing.md",
+      "section": "传输与路由",
+      "group": "透明代理与流量处理",
+      "level": "Advanced"
+    },
+    {
+      "slug": "19-full-cone-nat-shi-xian",
+      "title": "Full-Cone NAT 实现",
+      "file": "19-full-cone-nat-shi-xian.md",
+      "section": "传输与路由",
+      "group": "透明代理与流量处理",
+      "level": "Advanced"
+    },
+    {
+      "slug": "20-pei-zhi-can-kao-shou-ce",
+      "title": "配置参考手册",
+      "file": "20-pei-zhi-can-kao-shou-ce.md",
+      "section": "配置与部署",
+      "group": "配置系统",
+      "level": "Intermediate"
+    },
+    {
+      "slug": "21-jie-dian-pei-zhi",
+      "title": "节点配置",
+      "file": "21-jie-dian-pei-zhi.md",
+      "section": "配置与部署",
+      "group": "配置系统",
+      "level": "Intermediate"
+    },
+    {
+      "slug": "22-bu-shu-zhi-nan",
+      "title": "部署指南",
+      "file": "22-bu-shu-zhi-nan.md",
+      "section": "配置与部署",
+      "level": "Beginner"
+    },
+    {
+      "slug": "23-ce-shi-zhi-nan",
+      "title": "测试指南",
+      "file": "23-ce-shi-zhi-nan.md",
+      "section": "运维与测试",
+      "level": "Intermediate"
+    },
+    {
+      "slug": "24-xing-neng-ce-shi",
+      "title": "性能测试",
+      "file": "24-xing-neng-ce-shi.md",
+      "section": "运维与测试",
+      "level": "Intermediate"
+    },
+    {
+      "slug": "25-control-socket-api",
+      "title": "Control Socket API",
+      "file": "25-control-socket-api.md",
+      "section": "运维与测试",
+      "group": "运维接口",
+      "level": "Intermediate"
+    },
+    {
+      "slug": "26-dns-xi-tong",
+      "title": "DNS 系统",
+      "file": "26-dns-xi-tong.md",
+      "section": "运维与测试",
+      "group": "运维接口",
+      "level": "Intermediate"
+    }
+  ]
+}

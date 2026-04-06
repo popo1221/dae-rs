@@ -1,18 +1,18 @@
-//! TUN transparent proxy implementation
+//! TUN 透明代理实现
 //!
-//! Provides TUN device management and IP packet routing for transparent proxy.
+//! 提供 TUN 设备管理和 IP 数据包路由，用于透明代理。
 //!
-//! This module intercepts network traffic at the IP level and routes it based
-//! on the rule engine decisions - either through the proxy or directly.
+//! 本模块在 IP 层拦截网络流量，根据规则引擎的决策路由数据包——
+//! 要么通过代理，要么直接连接。
 //!
-//! # Architecture
+//! # 架构设计
 //!
-//! - `TunDevice`: TUN device wrapper using tokio-tun
-//! - `TunPacketParser`: Parse IP/TCP/UDP headers from raw packets
-//! - `DnsHijacker`: Handle DNS hijacking for domain-based routing
-//! - `TunRouter`: Route packets based on rule engine decisions
+//! - `TunDevice`: 使用 tokio-tun 的 TUN 设备封装
+//! - `TunPacketParser`: 从原始数据包解析 IP/TCP/UDP 头部
+//! - `DnsHijacker`: 处理 DNS 劫持以实现基于域名的路由
+//! - `TunRouter`: 根据规则引擎决策路由数据包
 //!
-//! # Usage
+//! # 使用示例
 //!
 //! ```ignore
 //! let config = TunConfig {

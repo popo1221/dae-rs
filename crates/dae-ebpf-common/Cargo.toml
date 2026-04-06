@@ -1,0 +1,13 @@
+[package]
+name = "dae-ebpf-common"
+version = "0.1.0"
+edition = "2021"
+description = "Shared eBPF types for dae-rs"
+authors = ["dae-rs team"]
+
+[dependencies]
+aya-ebpf = "0.1"
+bitflags = "1"
+
+[features]
+default = []

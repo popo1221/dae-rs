@@ -1,7 +1,6 @@
-//! NodeManager trait for node lifecycle management
+//! NodeManager trait - 节点生命周期管理
 //!
-//! This module defines the NodeManager trait for managing
-//! node registration, selection, and latency tracking.
+//! 本模块定义 NodeManager trait，用于管理节点注册、选择和延迟追踪。
 
 use async_trait::async_trait;
 use std::collections::HashMap;
@@ -10,20 +9,22 @@ use std::sync::Arc;
 pub use super::hash::{fnv1a_hash, sip_hash, Fnv1aHasher, SipHasher};
 pub use super::node::{Node, NodeError, NodeId};
 
-/// Connection fingerprint for hash-based policies
+/// 连接指纹 - 用于基于哈希的负载均衡策略
+///
+/// 记录连接的 5 元组信息，用于一致性哈希等策略。
 #[derive(Debug, Clone, Default)]
 pub struct ConnectionFingerprint {
-    /// Source IP (network byte order, u32 for IPv4)
+    /// 源 IP（网络字节序，IPv4 为 u32）
     pub src_ip: u32,
-    /// Destination IP (network byte order, u32 for IPv4)
+    /// 目标 IP（网络字节序，IPv4 为 u32）
     pub dst_ip: u32,
-    /// Source port
+    /// 源端口
     pub src_port: u16,
-    /// Destination port
+    /// 目标端口
     pub dst_port: u16,
-    /// Protocol (6=TCP, 17=UDP)
+    /// 协议（6=TCP, 17=UDP）
     pub proto: u8,
-    /// URL or hostname for URL-based hashing (optional)
+    /// URL 或主机名（用于基于 URL 的哈希，可选）
     pub url: Option<String>,
 }
 
@@ -77,24 +78,26 @@ impl ConnectionFingerprint {
     }
 }
 
-/// Selection policy for node selection
+/// 节点选择策略
+///
+/// 定义了多种节点选择策略，用于决定如何从可用节点池中选择一个节点处理连接。
 #[derive(Debug, Clone)]
 pub enum SelectionPolicy {
-    /// Select the node with lowest latency
+    /// 选择延迟最低的节点
     LowestLatency,
-    /// Select a specific node by ID
+    /// 根据 ID 选择特定节点
     Specific(NodeId),
-    /// Select a random available node
+    /// 随机选择一个可用节点
     Random,
-    /// Select nodes in round-robin fashion (requires atomic counter in selector)
+    /// 轮询选择节点（需要在选择器中使用原子计数器）
     RoundRobin,
-    /// Prefer direct routing (no proxy)
+    /// 优先直连（不经过代理）
     PreferDirect,
-    /// Consistent hashing - same fingerprint always routes to same node
+    /// 一致性哈希 - 相同指纹始终路由到相同节点
     ConsistentHashing(ConnectionFingerprint),
-    /// Sticky session - based on source IP hash
+    /// 粘性会话 - 基于源 IP 哈希
     StickySession(ConnectionFingerprint),
-    /// URL hash - based on HTTP host/URL hash
+    /// URL 哈希 - 基于 HTTP host/URL 哈希
     UrlHash(ConnectionFingerprint),
 }
 

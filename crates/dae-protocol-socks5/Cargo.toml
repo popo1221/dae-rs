@@ -1,0 +1,15 @@
+[package]
+name = "dae-protocol-socks5"
+version = "0.1.0"
+edition = "2021"
+description = "SOCKS5 protocol handler for dae-rs"
+
+[dependencies]
+tokio = { version = "1", features = ["full"] }
+tracing = "0.1"
+async-trait = "0.1"
+thiserror = "1"
+dae-relay = { path = "../dae-relay" }
+
+[dev-dependencies]
+tokio-test = "0.4"

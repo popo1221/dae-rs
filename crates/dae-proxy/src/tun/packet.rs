@@ -1,16 +1,22 @@
-//! Packet parsing - IP, TCP, UDP, DNS header parsing
+//! 数据包解析模块 - IP、TCP、UDP、DNS 头部解析
 
 use crate::connection_pool::ConnectionKey;
 use crate::rule_engine::PacketInfo;
 use std::net::{IpAddr, Ipv4Addr};
 
-/// IP protocol numbers
+/// IP 协议号枚举
+///
+/// 定义常见的 IP 协议号。
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 #[repr(u8)]
 pub enum IpProtocol {
+    /// ICMP 协议
     Icmp = 1,
+    /// TCP 协议
     Tcp = 6,
+    /// UDP 协议
     Udp = 17,
+    /// ICMPv6 协议
     IcmpV6 = 58,
 }
 
@@ -26,7 +32,9 @@ impl From<u8> for IpProtocol {
     }
 }
 
-/// Parsed IP packet header
+/// 已解析的 IP 数据包头部
+///
+/// 从原始字节解析得到的 IP 头部信息。
 #[derive(Debug, Clone)]
 pub struct IpHeader {
     /// Version (4 or 6)
@@ -115,13 +123,18 @@ pub struct TcpHeader {
 }
 
 bitflags::bitflags! {
-    /// TCP flags
+        /// TCP 标志位
     #[derive(Clone, Copy, Debug, PartialEq, Eq)]
     pub struct TcpFlags: u8 {
+        /// FIN - 结束连接
         const FIN = 0x01;
+        /// SYN - 同步序列号
         const SYN = 0x02;
+        /// RST - 重置连接
         const RST = 0x04;
+        /// PSH - 推送数据
         const PSH = 0x08;
+        /// ACK - 确认
         const ACK = 0x10;
     }
 }
@@ -278,12 +291,14 @@ impl DnsQuery {
     }
 }
 
-/// TUN packet direction
+/// TUN 数据包方向
+///
+/// 标识数据包是出站（从 TUN 到网络）还是入站（从网络到 TUN）。
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum PacketDirection {
-    /// Outbound packet (from TUN to network)
+    /// 出站数据包（从 TUN 到网络）
     Outbound,
-    /// Inbound packet (from network to TUN)
+    /// 入站数据包（从网络到 TUN）
     Inbound,
 }
 

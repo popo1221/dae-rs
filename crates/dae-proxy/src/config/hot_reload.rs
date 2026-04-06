@@ -7,7 +7,7 @@ use crate::core::Error;
 use crate::rule_engine::RuleEngine;
 use dae_config::{Config, ConfigError};
 use notify::{Config as NotifyConfig, Event, RecommendedWatcher, RecursiveMode, Watcher};
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::sync::mpsc::{channel, Receiver};
 use std::time::Duration;
 use tracing::{debug, error, info, warn};
@@ -295,7 +295,7 @@ impl HotReload {
     }
 
     /// Load configuration from file
-    fn load_config(path: &PathBuf) -> std::result::Result<Config, HotReloadError> {
+    fn load_config(path: &Path) -> std::result::Result<Config, HotReloadError> {
         let content = std::fs::read_to_string(path)
             .map_err(|e| HotReloadError::Parse(format!("Failed to read config file: {e}")))?;
 
@@ -309,7 +309,7 @@ impl HotReload {
     }
 
     /// Get the path being watched
-    pub fn config_path(&self) -> &PathBuf {
+    pub fn config_path(&self) -> &Path {
         &self.config_path
     }
 }

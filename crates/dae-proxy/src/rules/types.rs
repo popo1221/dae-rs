@@ -1,8 +1,10 @@
-//! Rule types module
+//! 规则类型模块
 //!
-//! Contains basic rule type enums and domain rule types.
+//! 包含基础规则类型枚举和域名规则类型。
 
-/// Rule types supported by the rule engine
+/// 规则引擎支持的规则类型
+///
+/// 包含所有支持的规则类型，如域名、IP CIDR、GeoIP 等。
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum RuleType {
     /// Domain exact match (e.g., "example.com")
@@ -25,7 +27,9 @@ pub enum RuleType {
     NodeTag,
 }
 
-/// Domain rule types
+/// 域名规则类型
+///
+/// 定义域名匹配的几种方式：精确匹配、后缀匹配、关键词匹配。
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum DomainRuleType {
     /// Exact domain match

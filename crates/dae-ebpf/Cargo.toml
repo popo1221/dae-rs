@@ -1,0 +1,31 @@
+[package]
+name = "dae-ebpf"
+version = "0.1.0"
+edition = "2021"
+description = "User-space eBPF loader for dae-rs - aggregates TC and XDP programs"
+authors = ["dae-rs team"]
+
+[dependencies]
+# Note: The existing codebase uses aya 0.13 API.
+# aya 0.1 user-space crate does not exist on crates.io.
+# Using aya 0.13 which matches the existing code in loader.rs, maps.rs, etc.
+aya = "0.13"
+libc = "0.2"
+dae-ebpf-common = { path = "../dae-ebpf-common" }
+
+# Logging
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+
+# Async runtime
+tokio = { version = "1", features = ["full"] }
+
+# Error handling
+anyhow = "1"
+thiserror = "1"
+
+# CLI arguments
+clap = { version = "4", features = ["derive"] }
+
+[features]
+default = []

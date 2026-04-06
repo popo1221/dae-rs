@@ -1,11 +1,13 @@
-//! UDP session handling for TUN proxy
+//! TUN 代理的 UDP 会话处理
 
 use std::net::SocketAddr;
 use std::sync::Arc;
 use std::time::{Duration, Instant};
 use tokio::net::UdpSocket;
 
-/// UDP session data for TUN proxy
+/// TUN 代理的 UDP 会话数据
+///
+/// 存储 UDP 会话的状态和 socket 信息。
 #[derive(Debug)]
 pub struct UdpSessionData {
     /// Client address (TUN side)

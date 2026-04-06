@@ -5,13 +5,16 @@
 //!
 //! The control socket is typically at /var/run/dae/control.sock
 
+use crate::control_metrics::{
+    get_bytes_received_total, get_bytes_sent_total, get_overall_from_metrics,
+};
+use crate::control_types::{ConfigState, ControlResponse, NodeTestResult, ProxyStats, ProxyStatus};
 use crate::metrics::{
     inc_node_latency_test, ACTIVE_TCP_CONNECTIONS_GAUGE, ACTIVE_UDP_CONNECTIONS_GAUGE,
-    BYTES_RECEIVED_COUNTER, BYTES_SENT_COUNTER, CONNECTION_COUNTER,
+    CONNECTION_COUNTER,
 };
 use crate::tracking::store::SharedTrackingStore;
 use crate::tracking::types::ConnectionState;
-use serde::{Deserialize, Serialize};
 use std::path::Path;
 use std::sync::Arc;
 use std::time::SystemTime;
@@ -19,81 +22,6 @@ use tokio::io::{AsyncBufReadExt, AsyncReadExt, AsyncWriteExt, BufStream};
 use tokio::net::{UnixListener, UnixStream};
 use tokio::sync::RwLock;
 use tracing::{error, info, warn};
-
-/// Control command types
-#[derive(Debug, Clone)]
-pub enum ControlCommand {
-    /// Get proxy status
-    Status,
-    /// Reload configuration (hot reload)
-    Reload,
-    /// Get statistics
-    Stats,
-    /// Shutdown the proxy gracefully
-    Shutdown,
-    /// Test connectivity to a specific node
-    TestNode(String),
-    /// Get version information
-    Version,
-    /// Get help
-    Help,
-}
-
-/// Control response types
-#[derive(Debug, Clone)]
-pub enum ControlResponse {
-    /// Success response with data
-    Ok(String),
-    /// Error response
-    Error(String),
-    /// Statistics response
-    Stats(ProxyStats),
-    /// Status response
-    Status(ProxyStatus),
-    /// Test result response
-    TestResult(NodeTestResult),
-    /// Version response
-    Version(String),
-}
-
-/// Proxy running status
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct ProxyStatus {
-    pub running: bool,
-    pub uptime_secs: u64,
-    pub tcp_connections: usize,
-    pub udp_sessions: usize,
-    pub rules_loaded: bool,
-    pub rule_count: usize,
-    pub nodes_configured: usize,
-    // Extended stats
-    pub total_connections: u64,
-    pub total_bytes_in: u64,
-    pub total_bytes_out: u64,
-}
-
-/// Proxy statistics
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct ProxyStats {
-    pub total_connections: u64,
-    pub total_bytes_in: u64,
-    pub total_bytes_out: u64,
-    pub active_tcp_connections: usize,
-    pub active_udp_sessions: usize,
-    pub rules_hit: u64,
-    pub nodes_tested: usize,
-    pub rule_count: usize,
-    pub node_count: usize,
-}
-
-/// Node test result
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct NodeTestResult {
-    pub node_name: String,
-    pub success: bool,
-    pub latency_ms: Option<u64>,
-    pub error: Option<String>,
-}
 
 /// Shared control state
 pub struct ControlState {
@@ -108,13 +36,6 @@ pub struct ControlState {
     node_tester: Option<Arc<dyn Fn(&str) -> NodeTestResult + Send + Sync>>,
     /// Configuration state
     config_state: RwLock<ConfigState>,
-}
-
-/// Configuration state tracked by control interface
-struct ConfigState {
-    rules_loaded: bool,
-    rule_count: usize,
-    node_count: usize,
 }
 
 impl ControlState {
@@ -509,37 +430,6 @@ impl ControlServer {
     }
 }
 
-/// Legacy overall stats structure for metrics-based fallback
-struct LegacyOverallStats {
-    connections_total: u64,
-    bytes_in: u64,
-    bytes_out: u64,
-    rules_hit: u64,
-    nodes_tested: usize,
-}
-
-/// Get overall stats from Prometheus metrics (fallback when no tracking store)
-fn get_overall_from_metrics() -> LegacyOverallStats {
-    LegacyOverallStats {
-        connections_total: CONNECTION_COUNTER.get(),
-        bytes_in: get_bytes_received_total(),
-        bytes_out: get_bytes_sent_total(),
-        rules_hit: 0,    // Would need RULE_MATCH_COUNTER sum
-        nodes_tested: 0, // Would need NODE_LATENCY_TEST_COUNTER
-    }
-}
-
-/// Get total bytes received from metrics
-fn get_bytes_received_total() -> u64 {
-    // Sum across all transport labels
-    BYTES_RECEIVED_COUNTER.with_label_values(&["all"]).get()
-}
-
-/// Get total bytes sent from metrics  
-fn get_bytes_sent_total() -> u64 {
-    BYTES_SENT_COUNTER.with_label_values(&["all"]).get()
-}
-
 /// Connect to control socket and send command
 pub async fn connect_and_send(socket_path: &str, command: &str) -> std::io::Result<String> {
     let mut stream = UnixStream::connect(socket_path).await?;
@@ -574,6 +464,7 @@ pub async fn connect_and_get_status(socket_path: &str) -> std::io::Result<Contro
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::control_types::ControlCommand;
 
     #[tokio::test]
     async fn test_control_command_parsing() {
@@ -607,9 +498,9 @@ mod tests {
         state.set_running(true).await;
         assert!(state.is_running().await);
 
-        // Wait a bit and check uptime (u64 is always >= 0, so use >= 0)
+        // Wait a bit and check uptime is being tracked
         tokio::time::sleep(std::time::Duration::from_millis(10)).await;
-        assert!(state.uptime_secs() >= 0);
+        let _uptime = state.uptime_secs(); // Verify uptime is tracked
     }
 
     #[test]
@@ -626,5 +517,127 @@ mod tests {
         assert!(json.contains("test-node"));
         assert!(json.contains("true"));
         assert!(json.contains("100"));
+    }
+
+    #[test]
+    fn test_proxy_status_serialization() {
+        let status = ProxyStatus {
+            running: true,
+            uptime_secs: 3600,
+            tcp_connections: 10,
+            udp_sessions: 5,
+            rules_loaded: true,
+            rule_count: 100,
+            nodes_configured: 50,
+            total_connections: 1000,
+            total_bytes_in: 1024 * 1024 * 100,
+            total_bytes_out: 1024 * 1024 * 200,
+        };
+
+        let json = serde_json::to_string(&status)
+            .expect("test: serialization of ProxyStatus should not fail");
+        assert!(json.contains("\"running\":true"));
+        assert!(json.contains("\"uptime_secs\":3600"));
+        assert!(json.contains("\"tcp_connections\":10"));
+        assert!(json.contains("\"rules_loaded\":true"));
+        assert!(json.contains("\"rule_count\":100"));
+    }
+
+    #[test]
+    fn test_proxy_stats_serialization() {
+        let stats = ProxyStats {
+            total_connections: 5000,
+            total_bytes_in: 1024 * 1024 * 500,
+            total_bytes_out: 1024 * 1024 * 1000,
+            active_tcp_connections: 25,
+            active_udp_sessions: 15,
+            rules_hit: 999,
+            nodes_tested: 48,
+            rule_count: 100,
+            node_count: 50,
+        };
+
+        let json = serde_json::to_string(&stats)
+            .expect("test: serialization of ProxyStats should not fail");
+        assert!(json.contains("\"total_connections\":5000"));
+        assert!(json.contains("\"active_tcp_connections\":25"));
+        assert!(json.contains("\"rules_hit\":999"));
+    }
+
+    #[test]
+    fn test_control_command_debug() {
+        // Test that ControlCommand implements Debug correctly
+        let cmd = ControlCommand::Status;
+        let debug_str = format!("{:?}", cmd);
+        assert!(debug_str.contains("Status"));
+
+        let cmd2 = ControlCommand::TestNode("us-east".to_string());
+        let debug_str2 = format!("{:?}", cmd2);
+        assert!(debug_str2.contains("TestNode"));
+        assert!(debug_str2.contains("us-east"));
+    }
+
+    #[test]
+    fn test_control_response_debug() {
+        let resp = ControlResponse::Ok("success".to_string());
+        let debug_str = format!("{:?}", resp);
+        assert!(debug_str.contains("Ok"));
+        assert!(debug_str.contains("success"));
+
+        let resp2 = ControlResponse::Error("failed".to_string());
+        let debug_str2 = format!("{:?}", resp2);
+        assert!(debug_str2.contains("Error"));
+        assert!(debug_str2.contains("failed"));
+    }
+
+    #[tokio::test]
+    async fn test_control_state_trigger_reload_no_callback() {
+        let state = ControlState::new();
+        // No reload callback set, should return false
+        assert!(!state.trigger_reload());
+    }
+
+    #[tokio::test]
+    async fn test_control_state_test_node_no_tester() {
+        let state = ControlState::new();
+        // No node tester set, should return None
+        assert!(state.test_node("any-node").is_none());
+    }
+
+    #[tokio::test]
+    async fn test_control_state_update_config() {
+        let state = ControlState::new();
+
+        // Update config
+        state.update_config(true, 50, 25).await;
+
+        // Verify through get_status
+        let status = state.get_status().await;
+        assert!(status.rules_loaded);
+        assert_eq!(status.rule_count, 50);
+        assert_eq!(status.nodes_configured, 25);
+    }
+
+    #[test]
+    fn test_node_test_result_deserialization() {
+        let json = r#"{"node_name":"proxy-1","success":false,"latency_ms":null,"error":"timeout"}"#;
+        let result: NodeTestResult = serde_json::from_str(json)
+            .expect("test: deserialization of NodeTestResult should not fail");
+
+        assert_eq!(result.node_name, "proxy-1");
+        assert!(!result.success);
+        assert!(result.latency_ms.is_none());
+        assert_eq!(result.error.as_deref(), Some("timeout"));
+    }
+
+    #[test]
+    fn test_control_command_variant_access() {
+        // Test ControlCommand::TestNode extraction
+        let cmd = ControlCommand::TestNode("asia-east".to_string());
+        if let ControlCommand::TestNode(name) = cmd {
+            assert_eq!(name, "asia-east");
+        } else {
+            panic!("Expected TestNode variant");
+        }
     }
 }

@@ -1,59 +1,18 @@
-//! Unified Handler trait - a single interface for all protocol handlers
+//! 统一 Handler trait - 所有协议处理器的单一接口
 //!
-//! This module provides a unified [`Handler`] trait that all protocol handlers
-//! should implement.
+//! 本模块提供统一的 [`Handler`] trait，所有协议处理器都应实现此 trait。
 //!
-//! # Design Goals
+//! # 设计目标
 //!
-//! 1. **Single Source of Truth**: One trait for all protocol handlers
-//! 2. **Stream-centric**: Works directly with TcpStream for simplicity
-//! 3. **Simple API**: Single handle method with Arc<Self> pattern
-//! 4. **Type Safe**: Generic Config associated type
+//! 1. **单一真相来源**: 一个 trait 适用于所有协议处理器
+//! 2. **流中心**: 直接使用 TcpStream，保持简洁
+//! 3. **简单 API**: 单个 handle 方法，使用 Arc<Self> 模式
+//! 4. **类型安全**: 泛型 Config 关联类型
 //!
-//! # Architecture
+//! # 架构设计
 //!
-//! All protocol handlers (Trojan, VLESS, VMess, SOCKS5, etc.) implement the
-//! unified `Handler` trait using the `Arc<Self>` + `TcpStream` pattern:
-//!
-//! ```text
-//! ┌─────────────────────────────────────────────────────────────┐
-//! │                      Handler Trait                          │
-//! │  async fn handle(self: Arc<Self>, stream: TcpStream)       │
-//! └─────────────────────────────────────────────────────────────┘
-//!         ▲                    │                    ▲
-//!         │                    │                    │
-//!    ┌────┴─────┐        ┌──────┴──────┐       ┌──────┴──────┐
-//!    │ Trojan   │        │   VLESS     │       │   VMess     │
-//!    │ Handler  │        │   Handler   │       │   Handler   │
-//!    └──────────┘        └─────────────┘       └─────────────┘
-//! ```
-//!
-//! # Example: Implementing Handler
-//!
-//! ```ignore
-//! use async_trait::async_trait;
-//! use dae_proxy::{Handler, ProxyError, ProtocolType};
-//! use std::sync::Arc;
-//! use tokio::net::TcpStream;
-//!
-//! struct MyHandler {
-//!     config: MyConfig,
-//! }
-//!
-//! #[async_trait]
-//! impl Handler for MyHandler {
-//!     type Config = MyConfig;
-//!
-//!     fn name(&self) -> &'static str { "my-handler" }
-//!     fn protocol(&self) -> ProtocolType { ProtocolType::Custom("my") }
-//!     fn config(&self) -> &Self::Config { &self.config }
-//!
-//!     async fn handle(self: Arc<Self>, stream: TcpStream) -> std::io::Result<()> {
-//!         // Handle the connection
-//!         Ok(())
-//!     }
-//! }
-//! ```
+//! 所有协议处理器（Trojan、VLESS、VMess、SOCKS5 等）都使用
+//! `Arc<Self>` + `TcpStream` 模式实现统一的 `Handler` trait
 
 use async_trait::async_trait;
 use std::sync::Arc;

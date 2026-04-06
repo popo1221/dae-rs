@@ -1,14 +1,15 @@
-//! Health checking for proxy nodes
+//! 代理节点健康检查模块
 //!
-//! This module provides health checking functionality to monitor
-//! node availability and performance.
+//! 本模块提供健康检查功能，用于监控节点的可用性和性能。
 
 use std::sync::Arc;
 use std::time::Duration;
 
 use super::node::{Node, NodeError, NodeId};
 
-/// Health check result
+/// 健康检查结果
+///
+/// 包含节点健康检查的详细结果。
 #[derive(Debug, Clone)]
 pub struct HealthCheckResult {
     pub node_id: NodeId,
@@ -17,7 +18,9 @@ pub struct HealthCheckResult {
     pub error: Option<NodeError>,
 }
 
-/// HealthChecker configuration
+/// 健康检查器配置
+///
+/// 配置健康检查的各项参数。
 #[derive(Debug, Clone)]
 pub struct HealthCheckerConfig {
     /// Interval between health checks
@@ -41,16 +44,15 @@ impl Default for HealthCheckerConfig {
     }
 }
 
-/// HealthChecker for monitoring node health
+/// 健康检查器 - 监控节点健康状态
 ///
-/// Performs periodic health checks on nodes and tracks
-/// availability metrics.
+/// 对节点执行定期健康检查并追踪可用性指标。
 pub struct HealthChecker {
     config: HealthCheckerConfig,
 }
 
 impl HealthChecker {
-    /// Create a new HealthChecker with the given configuration
+    /// 使用指定配置创建新的健康检查器
     pub fn new(config: HealthCheckerConfig) -> Self {
         Self { config }
     }

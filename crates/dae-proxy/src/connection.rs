@@ -288,7 +288,7 @@ mod tests {
     fn test_connection_is_expired_after_wait() {
         let src: SocketAddr = "192.168.1.100:8080".parse().unwrap();
         let dst: SocketAddr = "8.8.8.8:443".parse().unwrap();
-        let mut conn = Connection::new(src, dst, Protocol::Tcp, Duration::from_secs(30));
+        let conn = Connection::new(src, dst, Protocol::Tcp, Duration::from_secs(30));
 
         // Immediately after creation, should not be expired
         assert!(!conn.is_expired(Duration::from_secs(30)));
@@ -341,5 +341,112 @@ mod tests {
             assert!(conn.is_active());
             assert_eq!(conn.protocol(), Protocol::Udp);
         }
+    }
+
+    #[tokio::test]
+    async fn test_src_addr_getter() {
+        let src: SocketAddr = "10.0.0.1:12345".parse().unwrap();
+        let dst: SocketAddr = "8.8.8.8:443".parse().unwrap();
+        let conn = Connection::new(src, dst, Protocol::Tcp, Duration::from_secs(30));
+        assert_eq!(conn.src_addr(), src);
+    }
+
+    #[tokio::test]
+    async fn test_dst_addr_getter() {
+        let src: SocketAddr = "10.0.0.1:12345".parse().unwrap();
+        let dst: SocketAddr = "93.184.216.34:443".parse().unwrap();
+        let conn = Connection::new(src, dst, Protocol::Udp, Duration::from_secs(60));
+        assert_eq!(conn.dst_addr(), dst);
+    }
+
+    #[tokio::test]
+    async fn test_idle_time_after_touch() {
+        let src: SocketAddr = "127.0.0.1:8080".parse().unwrap();
+        let dst: SocketAddr = "127.0.0.1:443".parse().unwrap();
+        let mut conn = Connection::new(src, dst, Protocol::Tcp, Duration::from_secs(30));
+
+        // Initial idle time should be very small
+        let initial_idle = conn.idle_time();
+        assert!(initial_idle < Duration::from_millis(10));
+
+        // Wait a bit then touch
+        tokio::time::sleep(Duration::from_millis(50)).await;
+        conn.touch();
+
+        // After touch, idle_time should be small again
+        let new_idle = conn.idle_time();
+        assert!(new_idle < Duration::from_millis(10));
+    }
+
+    #[tokio::test]
+    async fn test_establish_sets_active() {
+        let src: SocketAddr = "127.0.0.1:8080".parse().unwrap();
+        let dst: SocketAddr = "127.0.0.1:443".parse().unwrap();
+        let mut conn = Connection::new(src, dst, Protocol::Tcp, Duration::from_secs(30));
+
+        assert_eq!(conn.state(), ConnectionState::New);
+        conn.establish();
+        assert_eq!(conn.state(), ConnectionState::Active);
+        assert!(conn.is_active());
+    }
+
+    #[tokio::test]
+    async fn test_start_close_sets_closing() {
+        let src: SocketAddr = "127.0.0.1:8080".parse().unwrap();
+        let dst: SocketAddr = "127.0.0.1:443".parse().unwrap();
+        let mut conn = Connection::new(src, dst, Protocol::Tcp, Duration::from_secs(30));
+
+        conn.establish();
+        assert!(conn.is_active());
+
+        conn.start_close();
+        assert_eq!(conn.state(), ConnectionState::Closing);
+        assert!(!conn.is_active());
+    }
+
+    #[tokio::test]
+    async fn test_close_sets_closed() {
+        let src: SocketAddr = "127.0.0.1:8080".parse().unwrap();
+        let dst: SocketAddr = "127.0.0.1:443".parse().unwrap();
+        let mut conn = Connection::new(src, dst, Protocol::Tcp, Duration::from_secs(30));
+
+        conn.establish();
+        conn.close();
+        assert_eq!(conn.state(), ConnectionState::Closed);
+        assert!(!conn.is_active());
+    }
+
+    #[tokio::test]
+    async fn test_is_active_only_when_established() {
+        let src: SocketAddr = "127.0.0.1:8080".parse().unwrap();
+        let dst: SocketAddr = "127.0.0.1:443".parse().unwrap();
+        let mut conn = Connection::new(src, dst, Protocol::Tcp, Duration::from_secs(30));
+
+        // Initially not active
+        assert!(!conn.is_active());
+
+        // After establish, is active
+        conn.establish();
+        assert!(conn.is_active());
+
+        // After start_close, not active
+        conn.start_close();
+        assert!(!conn.is_active());
+
+        // After close, not active
+        conn.close();
+        assert!(!conn.is_active());
+    }
+
+    #[tokio::test]
+    async fn test_protocol_getter() {
+        let src: SocketAddr = "127.0.0.1:8080".parse().unwrap();
+        let dst: SocketAddr = "127.0.0.1:443".parse().unwrap();
+
+        let tcp_conn = Connection::new(src, dst, Protocol::Tcp, Duration::from_secs(30));
+        assert_eq!(tcp_conn.protocol(), Protocol::Tcp);
+
+        let udp_conn = Connection::new(src, dst, Protocol::Udp, Duration::from_secs(60));
+        assert_eq!(udp_conn.protocol(), Protocol::Udp);
     }
 }

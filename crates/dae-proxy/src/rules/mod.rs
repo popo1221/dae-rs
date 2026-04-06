@@ -1,16 +1,16 @@
-//! Rules module
+//! 规则模块
 //!
-//! This module provides rule matching types for routing decisions.
+//! 本模块提供用于路由决策的规则匹配类型。
 //!
-//! # Structure
+//! # 模块结构
 //!
-//! - `types`: Basic rule type enums (RuleType, DomainRuleType)
-//! - `domain`: Domain-based rule types (DomainRule)
-//! - `ip`: IP CIDR and GeoIP rule types
-//! - `process`: Process name rule types
-//! - `dns`: DNS query type rule types
-//! - `capability`: Node capability and tag rule types
-//! - `builder`: RuleGroup, Rule, RuleWithAction, RuleMatchAction
+//! - `types`: 基础规则类型枚举（RuleType、DomainRuleType）
+//! - `domain`: 基于域名的规则类型（DomainRule）
+//! - `ip`: IP CIDR 和 GeoIP 规则类型
+//! - `process`: 进程名规则类型
+//! - `dns`: DNS 查询类型规则类型
+//! - `capability`: 节点能力和标签规则类型
+//! - `builder`: RuleGroup、Rule、RuleWithAction、RuleMatchAction
 
 pub mod builder;
 pub mod capability;

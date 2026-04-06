@@ -64,6 +64,7 @@ impl KernelVersion {
             }
 
             // Fallback: try to use utsname via libc
+            // SAFETY: libc::uname is safe to call and we properly initialize the utsname struct.
             unsafe {
                 let mut uts = std::mem::MaybeUninit::<libc::utsname>::zeroed();
                 if libc::uname(uts.as_mut_ptr()) == 0 {

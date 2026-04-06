@@ -1,23 +1,21 @@
+//! dae-proxy 节点管理模块
 //!
-//! Node management module for dae-proxy
+//! 本模块提供节点抽象、节点选择和健康检查功能，遵循 Zed 的 Store 模式设计。
 //!
-//! This module provides node abstraction, selection, and health checking
-//! for the proxy system, following Zed's Store pattern for local/remote abstraction.
+//! # 架构设计 (Zed 风格)
 //!
-//! # Architecture (Zed-inspired)
+//! - `node`: 核心 Node trait 和 NodeId 类型
+//! - `manager`: NodeManager trait 用于节点生命周期管理
+//! - `selector`: NodeSelector 实现（遵循 *Store 命名规范）
+//! - `health`: HealthChecker 用于可用性监控
+//! - `simple`: 具体实现（SimpleNode、SimpleNodeManager、LatencyMonitor）
 //!
-//! - `node`: Core Node trait and NodeId type
-//! - `manager`: NodeManager trait for node lifecycle
-//! - `selector`: NodeSelector implementations (following *Store naming)
-//! - `health`: HealthChecker for availability monitoring
-//! - `simple`: Concrete implementations (SimpleNode, SimpleNodeManager, LatencyMonitor)
+//! # 命名规范 (Zed 模式)
 //!
-//! # Naming Conventions (Zed Pattern)
-//!
-//! Following Zed's conventions:
-//! - `*Store`: Abstract interface for operations (like `NodeSelector` -> `NodeStore`)
-//! - `*Manager`: Concrete implementation managing lifecycle
-//! - `*Handle`: Reference to a managed entity
+//! 遵循 Zed 的命名约定：
+//! - `*Store`: 操作的抽象接口（如 `NodeSelector` -> `NodeStore`）
+//! - `*Manager`: 管理生命周期的具体实现
+//! - `*Handle`: 托管实体的引用
 
 pub mod capability;
 pub mod hash;

@@ -1,21 +1,25 @@
-//! Capability rule module
+//! 节点能力规则模块
 //!
-//! Contains node capability and node tag rule types and matching logic.
+//! 包含节点能力和节点标签规则类型及匹配逻辑。
 
 use crate::rule_engine::PacketInfo;
 
-/// Node capability type
+/// 节点能力类型
+///
+/// 定义节点支持的不同能力。
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum CapabilityType {
-    /// Full-Cone NAT capability
+    /// 全锥型 NAT（Full-Cone NAT）能力
     FullCone,
-    /// UDP protocol support
+    /// UDP 协议支持
     Udp,
-    /// V2Ray compatibility
+    /// V2Ray 兼容性
     V2Ray,
 }
 
-/// A node capability rule
+/// 节点能力规则
+///
+/// 根据节点能力匹配数据包的规则。
 #[derive(Debug, Clone)]
 pub struct CapabilityRule {
     /// Capability type to match

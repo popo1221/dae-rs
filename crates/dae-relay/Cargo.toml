@@ -1,0 +1,8 @@
+[package]
+name = "dae-relay"
+version = "0.1.0"
+edition = "2021"
+description = "Shared relay utilities for dae-rs protocol handlers"
+
+[dependencies]
+tokio = { version = "1", features = ["io-util", "net", "rt", "macros"] }

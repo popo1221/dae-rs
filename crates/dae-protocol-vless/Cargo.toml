@@ -1,0 +1,22 @@
+[package]
+name = "dae-protocol-vless"
+version = "0.1.0"
+edition = "2021"
+description = "VLESS protocol handler for dae-rs"
+
+[dependencies]
+tokio = { version = "1", features = ["io-util", "net", "sync", "time", "rt"] }
+tracing = "0.1"
+async-trait = "0.1"
+bytes = "1"
+rand = "0.8"
+hmac = "0.12"
+sha2 = "0.10"
+curve25519-dalek = { version = "4", features = ["rand_core"] }
+serde = { version = "1", features = ["derive"] }
+dae-relay = { path = "../dae-relay" }
+dae-protocol-core = { path = "../dae-protocol-core" }
+thiserror = "1"
+
+[dev-dependencies]
+tokio-test = "0.4"

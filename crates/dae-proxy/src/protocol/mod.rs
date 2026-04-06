@@ -1,34 +1,32 @@
-//! Protocol abstraction layer for dae-proxy
+//! dae-proxy 协议抽象层
 //!
-//! # Architecture (Zed-inspired)
+//! 本模块提供两种处理器 trait 系统，用于处理不同代理协议的入站和出站连接。
 //!
-//! This module provides two handler trait systems:
+//! # 架构设计 (Zed 风格)
 //!
-//! ## 1. Handler Trait (Recommended)
-//! The [`Handler`] trait from [`unified_handler`] is the recommended interface.
-//! It provides a simple, connection-centric approach:
-//! - `handle(conn: Connection)` - single method for handling connections
-//! - Built-in stats tracking via [`HandlerStats`]
-//! - Hot reload support via [`Handler::reload()`]
+//! ## 1. Handler Trait (推荐)
+//! [`Handler`] trait 是推荐的接口方式，遵循 Zed 的设计理念：
+//! - `handle(conn: Connection)` - 单方法处理连接
+//! - 内置统计追踪 via [`HandlerStats`]
+//! - 热重载支持 via [`Handler::reload()`]
 //!
-//! ## 2. ProtocolHandler Trait (Legacy)
-//! The [`ProtocolHandler`] trait is the legacy interface using Context:
-//! - `handle_inbound()` and `handle_outbound()` methods
-//! - More complex but more flexible
-//! - For backward compatibility; new code should use Handler
+//! ## 2. ProtocolHandler Trait (遗留接口)
+//! [`ProtocolHandler`] trait 是旧版接口，使用 Context 模式：
+//! - `handle_inbound()` 和 `handle_outbound()` 方法
+//! - 更复杂但更灵活
+//! - 为向后兼容而保留；新代码应使用 Handler
 //!
-//! # Modules
-//! - [`simple_handler`] - Deprecated, provides simple Handler without Debug bound
-//! - [`unified_handler`] - Canonical Handler trait with full features
-//! - Protocol implementations: http, shadowsocks, socks5, vless
+//! # 模块结构
+//! - [`simple_handler`] - 已废弃，提供不含 Debug bound 的简单 Handler
+//! - [`unified_handler`] - 规范 Handler trait，功能完整
 
 use crate::core::{Context, Result as ProxyResult};
 use async_trait::async_trait;
 
-/// Protocol handler trait - all protocol implementations must implement this trait
+/// 协议处理器 trait - 所有协议实现必须实现此 trait
 ///
-/// This trait defines the interface for handling inbound and outbound connections
-/// for a specific proxy protocol.
+/// 此 trait 定义了处理特定代理协议入站和出站连接的接口。
+/// 每个代理协议（如 SOCKS5、HTTP、Trojan 等）都需要实现此 trait。
 #[async_trait]
 pub trait ProtocolHandler: Send + Sync {
     /// Returns the protocol name
@@ -41,7 +39,9 @@ pub trait ProtocolHandler: Send + Sync {
     async fn handle_outbound(&self, ctx: &mut Context) -> ProxyResult<()>;
 }
 
-/// Protocol types supported by the proxy
+/// 代理支持的协议类型
+///
+/// 包含所有 dae-proxy 支持的代理协议类型。
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum ProtocolType {
     /// SOCKS4/SOCKS4a protocol
@@ -136,12 +136,8 @@ pub use simple_handler::{
     HandlerStats as SimpleHandlerStats, HandlerStatsExt as SimpleHandlerStatsExt,
 };
 
-// Protocol submodules for future expansion
-pub mod http;
+// Protocol submodules
 pub mod relay;
-pub mod shadowsocks;
-pub mod socks5;
-pub mod vless;
 
 #[cfg(test)]
 mod tests {

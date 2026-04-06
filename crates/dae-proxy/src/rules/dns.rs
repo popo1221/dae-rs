@@ -1,31 +1,33 @@
-//! DNS rule module
+//! DNS 规则模块
 //!
-//! Contains DNS query type rule types and matching logic.
+//! 包含 DNS 查询类型规则类型及匹配逻辑。
 
 use crate::rule_engine::PacketInfo;
 
-/// DNS query types
+/// DNS 查询类型枚举
+///
+/// 定义常见的 DNS 查询类型。
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum DnsQueryType {
-    /// A record (IPv4)
+    /// A 记录（IPv4 地址）
     A = 1,
-    /// NS record
+    /// NS 记录（域名服务器）
     NS = 2,
-    /// CNAME record
+    /// CNAME 记录（规范名称）
     CNAME = 5,
-    /// SOA record
+    /// SOA 记录（授权起始）
     SOA = 6,
-    /// PTR record
+    /// PTR 记录（指针）
     PTR = 12,
-    /// MX record
+    /// MX 记录（邮件交换）
     MX = 15,
-    /// TXT record
+    /// TXT 记录（文本）
     TXT = 16,
-    /// AAAA record (IPv6)
+    /// AAAA 记录（IPv6 地址）
     AAAA = 28,
-    /// SRV record
+    /// SRV 记录（服务定位）
     SRV = 33,
-    /// Any (special)
+    /// ANY（任意类型，特殊值）
     ANY = 255,
 }
 

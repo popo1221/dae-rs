@@ -1,0 +1,16 @@
+[package]
+name = "dae-protocol-tuic"
+version = "0.1.0"
+edition = "2021"
+description = "TUIC protocol handler for dae-rs"
+
+[dependencies]
+tokio = { version = "1", features = ["io-util", "net", "sync", "rt"] }
+tracing = "0.1"
+thiserror = "1"
+rand = "0.8"
+dae-protocol-core = { path = "../dae-protocol-core" }
+async-trait = "0.1"
+
+[dev-dependencies]
+tokio-test = "0.4"

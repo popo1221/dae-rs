@@ -93,8 +93,6 @@ mod tests {
     use super::*;
     use crate::core::{Context, Result as ProxyResult};
     use async_trait::async_trait;
-    use std::net::{IpAddr, SocketAddr};
-    use std::str::FromStr;
 
     struct TestHandler {
         name: &'static str,
@@ -113,12 +111,6 @@ mod tests {
         async fn handle_outbound(&self, _ctx: &mut Context) -> ProxyResult<()> {
             Ok(())
         }
-    }
-
-    fn create_test_context() -> Context {
-        let source = SocketAddr::from((IpAddr::from_str("127.0.0.1").unwrap(), 8080));
-        let dest = SocketAddr::from((IpAddr::from_str("192.168.1.1").unwrap(), 80));
-        Context::new(source, dest)
     }
 
     #[test]

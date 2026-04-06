@@ -1,6 +1,6 @@
-//! Rule engine implementation
+//! 规则引擎实现
 //!
-//! Contains the core RuleEngine implementation for matching packets against rules.
+//! 包含核心 RuleEngine 实现，用于将数据包与规则进行匹配。
 
 use super::{RuleAction, RuleEngineConfig, RuleEngineStats};
 use crate::metrics::observe_rule_match_latency;
@@ -10,6 +10,50 @@ use std::time::Instant;
 use tokio::sync::RwLock;
 use tracing::{debug, info, warn};
 
+/// GeoIP database kind - determines which lookup struct to use
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum GeoIpDatabaseKind {
+    /// GeoLite2-Country or GeoIP2-Country database
+    Country,
+    /// GeoLite2-City or GeoIP2-City database
+    City,
+    /// GeoLite2-ASN or GeoIP2-ISP database (not suitable for country lookup)
+    Asn,
+    /// Unknown database type
+    Unknown,
+}
+
+impl std::fmt::Display for GeoIpDatabaseKind {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            GeoIpDatabaseKind::Country => write!(f, "Country"),
+            GeoIpDatabaseKind::City => write!(f, "City"),
+            GeoIpDatabaseKind::Asn => write!(f, "ASN"),
+            GeoIpDatabaseKind::Unknown => write!(f, "Unknown"),
+        }
+    }
+}
+
+/// Detect GeoIP database kind from database type string
+///
+/// Database type strings include:
+/// - "GeoLite2-Country", "GeoIP2-Country"
+/// - "GeoLite2-City", "GeoIP2-City", "GeoLite2-City-IPv6"
+/// - "GeoLite2-ASN", "GeoIP2-ISP"
+fn detect_geoip_database_kind(database_type: &str) -> GeoIpDatabaseKind {
+    let dt = database_type.to_lowercase();
+    if dt.contains("asn") || dt.contains("isp") {
+        GeoIpDatabaseKind::Asn
+    } else if dt.contains("city") {
+        GeoIpDatabaseKind::City
+    } else if dt.contains("country") {
+        GeoIpDatabaseKind::Country
+    } else {
+        // Unknown type, try Country decode first as fallback
+        GeoIpDatabaseKind::Unknown
+    }
+}
+
 /// Rule engine for matching packets against rules
 pub struct RuleEngine {
     /// Configuration
@@ -18,6 +62,8 @@ pub struct RuleEngine {
     rule_groups: RwLock<Vec<RuleGroup>>,
     /// GeoIP reader data (lazy loaded)
     geoip_reader: RwLock<Option<maxminddb::Reader<Vec<u8>>>>,
+    /// GeoIP database kind (detected on load)
+    geoip_kind: RwLock<GeoIpDatabaseKind>,
     /// Whether rules have been loaded
     loaded: RwLock<bool>,
 }
@@ -29,6 +75,7 @@ impl RuleEngine {
             config,
             rule_groups: RwLock::new(Vec::new()),
             geoip_reader: RwLock::new(None),
+            geoip_kind: RwLock::new(GeoIpDatabaseKind::Unknown),
             loaded: RwLock::new(false),
         }
     }
@@ -51,6 +98,13 @@ impl RuleEngine {
     }
 
     /// Initialize GeoIP database
+    ///
+    /// Supports multiple database types:
+    /// - GeoLite2-Country / GeoIP2-Country: returns ISO country code
+    /// - GeoLite2-City / GeoIP2-City: returns ISO country code from city data
+    /// - GeoLite2-ASN / GeoIP2-ISP: suitable for ASN lookup (country returns None)
+    ///
+    /// The database type is auto-detected from the database metadata.
     async fn init_geoip(&self) -> Result<(), String> {
         let db_path = self
             .config
@@ -74,10 +128,28 @@ impl RuleEngine {
                 .map_err(|e| format!("Failed to load GeoIP database: {e}"))?
                 .map_err(|e| format!("Failed to open GeoIP database: {e}"))?;
 
+        // Detect database type from metadata
+        let db_type = reader.metadata.database_type.clone();
+        let kind = detect_geoip_database_kind(&db_type);
+        info!(
+            "GeoIP database loaded from {} (type: {}, kind: {})",
+            db_path, db_type, kind
+        );
+
+        // Warn if using ASN database for country lookup (won't work well)
+        if kind == GeoIpDatabaseKind::Asn {
+            warn!(
+                "GeoIP ASN database loaded. Note: country lookup will return None. \
+                 Use a Country or City database for GeoIP country rules."
+            );
+        }
+
         let mut geoip = self.geoip_reader.write().await;
         *geoip = Some(reader);
 
-        info!("GeoIP database loaded from {}", db_path);
+        let mut geoip_kind = self.geoip_kind.write().await;
+        *geoip_kind = kind;
+
         Ok(())
     }
 
@@ -180,9 +252,13 @@ impl RuleEngine {
 
     /// Lookup GeoIP country for an IP address
     ///
-    /// Note: GeoIP lookup requires a properly formatted GeoLite2 or GeoIP2 database.
-    /// This implementation uses the maxminddb 0.27 API which provides lookup returning
-    /// a LookupResult. The actual field access depends on the database type.
+    /// **Supported Database Types:**
+    /// - **GeoLite2-Country / GeoIP2-Country**: Returns ISO 3166-1 alpha-2 country codes
+    /// - **GeoLite2-City / GeoIP2-City**: Returns ISO country codes from city data
+    /// - **GeoLite2-ASN / GeoIP2-ISP**: Returns `None` (ASN has no country info)
+    ///
+    /// Returns uppercase ISO 3166-1 alpha-2 country codes (e.g., "US", "CN", "JP")
+    /// or `None` if the IP is not found or the database doesn't support country lookup.
     pub async fn lookup_geoip(&self, ip: &std::net::IpAddr) -> Option<String> {
         let reader = self.geoip_reader.read().await;
         let reader = match reader.as_ref() {
@@ -190,29 +266,60 @@ impl RuleEngine {
             None => return None,
         };
 
-        // Use maxminddb 0.27 API - lookup returns LookupResult
-        // For GeoLite2/GeoIP2 Country database, we decode as geoip2::Country
+        let kind = *self.geoip_kind.read().await;
+
         match reader.lookup(*ip) {
-            Ok(result) => {
-                // Decode the lookup result as a Country struct
-                match result.decode::<maxminddb::geoip2::Country>() {
-                    Ok(Some(country)) => {
-                        // Return the ISO country code (e.g., "US", "CN")
-                        country.country.iso_code.map(|code| code.to_uppercase())
-                    }
-                    Ok(None) => {
-                        // IP not found in database
-                        debug!("IP not found in GeoIP database");
-                        None
-                    }
-                    Err(e) => {
-                        debug!("Failed to decode GeoIP result: {:?}", e);
-                        None
+            Ok(result) => match kind {
+                GeoIpDatabaseKind::Country | GeoIpDatabaseKind::Unknown => {
+                    // Try Country struct first (works for Country databases)
+                    match result.decode::<maxminddb::geoip2::Country>() {
+                        Ok(Some(country)) => {
+                            country.country.iso_code.map(|code| code.to_uppercase())
+                        }
+                        Ok(None) => {
+                            debug!("IP not found in GeoIP database");
+                            None
+                        }
+                        Err(_) => {
+                            // Country decode failed, might be a City database
+                            // Try City struct
+                            match result.decode::<maxminddb::geoip2::City>() {
+                                Ok(Some(city)) => {
+                                    city.country.iso_code.map(|code| code.to_uppercase())
+                                }
+                                Ok(None) => {
+                                    debug!("IP not found in GeoIP database");
+                                    None
+                                }
+                                Err(e) => {
+                                    debug!("Failed to decode GeoIP City result: {:?}", e);
+                                    None
+                                }
+                            }
+                        }
                     }
                 }
-            }
+                GeoIpDatabaseKind::City => {
+                    // Use City struct directly
+                    match result.decode::<maxminddb::geoip2::City>() {
+                        Ok(Some(city)) => city.country.iso_code.map(|code| code.to_uppercase()),
+                        Ok(None) => {
+                            debug!("IP not found in GeoIP City database");
+                            None
+                        }
+                        Err(e) => {
+                            debug!("Failed to decode GeoIP City result: {:?}", e);
+                            None
+                        }
+                    }
+                }
+                GeoIpDatabaseKind::Asn => {
+                    // ASN database has no country info
+                    debug!("ASN database does not contain country information");
+                    None
+                }
+            },
             Err(e) => {
-                // Log at debug level - this is expected for non-GeoIP databases or invalid IPs
                 debug!("GeoIP lookup failed: {:?}", e);
                 None
             }

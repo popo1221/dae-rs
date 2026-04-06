@@ -2,7 +2,10 @@
 //!
 //! Core data structures for connection, node, rule, and protocol tracking.
 
-use std::time::SystemTime;
+pub use crate::tracking::constants::{
+    current_epoch_ms, event_type, ConnectionState, LatencySample, NodeStatus, Protocol, RuleAction,
+    RuleType,
+};
 
 /// Connection tracking key (5-tuple)
 #[derive(Clone, Copy, Debug, Default, Hash, PartialEq, Eq)]
@@ -124,20 +127,6 @@ impl ConnectionStatsEntry {
     }
 }
 
-/// Connection state enumeration
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-#[repr(u8)]
-pub enum ConnectionState {
-    /// New connection, not yet established
-    New = 0,
-    /// Connection is active and transferring data
-    Established = 1,
-    /// Connection is being closed gracefully
-    Closing = 2,
-    /// Connection has been closed
-    Closed = 3,
-}
-
 /// Node tracking entry
 #[derive(Clone, Copy, Debug, Default)]
 #[repr(C)]
@@ -230,18 +219,6 @@ impl NodeStatsEntry {
     }
 }
 
-/// Node status enumeration
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-#[repr(u8)]
-pub enum NodeStatus {
-    /// Node is healthy and accepting traffic
-    Up = 0,
-    /// Node is not responding
-    Down = 1,
-    /// Node is responding but high latency or error rate
-    Degraded = 2,
-}
-
 /// Rule tracking entry
 #[derive(Clone, Copy, Debug, Default)]
 #[repr(C)]
@@ -293,42 +270,6 @@ impl RuleStatsEntry {
     }
 }
 
-/// Rule action enumeration
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-#[repr(u8)]
-pub enum RuleAction {
-    /// Pass the packet (direct)
-    Pass = 0,
-    /// Proxy the packet
-    Proxy = 1,
-    /// Drop the packet
-    Drop = 2,
-    /// No matching rule, use default
-    Default = 3,
-    /// Direct connection (explicit direct)
-    Direct = 4,
-    /// Must direct (force bypass proxy)
-    MustDirect = 5,
-}
-
-/// Rule type enumeration
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-#[repr(u8)]
-pub enum RuleType {
-    /// Domain exact match
-    Domain = 0,
-    /// Domain suffix match
-    DomainSuffix = 1,
-    /// Domain keyword match
-    DomainKeyword = 2,
-    /// IP CIDR match
-    IpCidr = 3,
-    /// GeoIP country match
-    GeoIp = 4,
-    /// Process name match
-    Process = 5,
-}
-
 /// Protocol tracking entry
 #[derive(Clone, Copy, Debug, Default, serde::Serialize)]
 #[repr(C)]
@@ -365,30 +306,6 @@ impl ProtocolStatsEntry {
     pub fn record_connection_close(&mut self) {
         self.active_connections = self.active_connections.saturating_sub(1);
     }
-}
-
-/// Protocol type enumeration
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-#[repr(u8)]
-pub enum Protocol {
-    /// TCP protocol
-    Tcp = 6,
-    /// UDP protocol
-    Udp = 17,
-    /// ICMP protocol
-    Icmp = 1,
-    /// SOCKS5 protocol
-    Socks5 = 0x50,
-    /// HTTP protocol
-    Http = 0x51,
-    /// VLESS protocol
-    Vless = 0x52,
-    /// VMess protocol
-    Vmess = 0x53,
-    /// Trojan protocol
-    Trojan = 0x54,
-    /// Shadowsocks protocol
-    Shadowsocks = 0x55,
 }
 
 /// Protocol statistics map
@@ -449,18 +366,6 @@ impl TrackingEvent {
     }
 }
 
-/// Event type constants for TrackingEvent
-pub mod event_type {
-    /// Connection event type
-    pub const CONNECTION: u8 = 0;
-    /// Rule event type
-    pub const RULE: u8 = 1;
-    /// Node event type
-    pub const NODE: u8 = 2;
-    /// Stats event type
-    pub const STATS: u8 = 3;
-}
-
 /// Overall statistics (for global tracking)
 #[derive(Clone, Debug, Default)]
 pub struct OverallStats {
@@ -503,25 +408,6 @@ impl OverallStats {
             0.0
         }
     }
-}
-
-/// Latency sample for histogram calculation
-#[derive(Clone, Debug)]
-pub struct LatencySample {
-    /// Timestamp
-    pub timestamp: u64,
-    /// Latency in milliseconds
-    pub latency_ms: u32,
-    /// Node ID (if applicable)
-    pub node_id: Option<u32>,
-}
-
-/// Helper function to get current epoch in milliseconds
-fn current_epoch_ms() -> u64 {
-    SystemTime::now()
-        .duration_since(SystemTime::UNIX_EPOCH)
-        .map(|d| d.as_millis() as u64)
-        .unwrap_or(0)
 }
 
 /// Tracking metrics for Prometheus export
@@ -647,6 +533,7 @@ impl Default for TrackingMetrics {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::tracking::constants::{current_epoch_ms, Protocol, RuleAction, RuleType};
 
     #[test]
     fn test_connection_key() {
@@ -713,5 +600,245 @@ mod tests {
 
         assert!(output.contains("dae_packets_total"));
         assert!(output.contains("dae_connections_active"));
+    }
+
+    // ========================================================================
+    // RuleAction and RuleType Tests
+    // ========================================================================
+
+    #[test]
+    fn test_rule_action_values() {
+        assert_eq!(RuleAction::Pass as u8, 0);
+        assert_eq!(RuleAction::Proxy as u8, 1);
+        assert_eq!(RuleAction::Drop as u8, 2);
+        assert_eq!(RuleAction::Default as u8, 3);
+        assert_eq!(RuleAction::Direct as u8, 4);
+        assert_eq!(RuleAction::MustDirect as u8, 5);
+    }
+
+    #[test]
+    fn test_rule_type_values() {
+        assert_eq!(RuleType::Domain as u8, 0);
+        assert_eq!(RuleType::DomainSuffix as u8, 1);
+        assert_eq!(RuleType::DomainKeyword as u8, 2);
+        assert_eq!(RuleType::IpCidr as u8, 3);
+        assert_eq!(RuleType::GeoIp as u8, 4);
+        assert_eq!(RuleType::Process as u8, 5);
+    }
+
+    // ========================================================================
+    // Protocol Enum Tests
+    // ========================================================================
+
+    #[test]
+    fn test_protocol_values() {
+        assert_eq!(Protocol::Tcp as u8, 6);
+        assert_eq!(Protocol::Udp as u8, 17);
+        assert_eq!(Protocol::Icmp as u8, 1);
+        assert_eq!(Protocol::Socks5 as u8, 0x50);
+        assert_eq!(Protocol::Http as u8, 0x51);
+        assert_eq!(Protocol::Vless as u8, 0x52);
+        assert_eq!(Protocol::Vmess as u8, 0x53);
+        assert_eq!(Protocol::Trojan as u8, 0x54);
+        assert_eq!(Protocol::Shadowsocks as u8, 0x55);
+    }
+
+    #[test]
+    fn test_protocol_from_u8() {
+        // Test conversion from protocol number to Protocol enum
+        fn from_protocol(p: Protocol) -> u8 {
+            p as u8
+        }
+        assert_eq!(from_protocol(Protocol::Tcp), 6);
+        assert_eq!(from_protocol(Protocol::Udp), 17);
+    }
+
+    // ========================================================================
+    // ProtocolStatsEntry Tests
+    // ========================================================================
+
+    #[test]
+    fn test_protocol_stats_entry_new() {
+        let entry = ProtocolStatsEntry::new();
+        assert_eq!(entry.packets, 0);
+        assert_eq!(entry.bytes, 0);
+        assert_eq!(entry.connections, 0);
+        assert_eq!(entry.active_connections, 0);
+    }
+
+    #[test]
+    fn test_protocol_stats_entry_record_packet() {
+        let mut entry = ProtocolStatsEntry::new();
+        entry.record_packet(100);
+        entry.record_packet(200);
+        assert_eq!(entry.packets, 2);
+        assert_eq!(entry.bytes, 300);
+    }
+
+    #[test]
+    fn test_protocol_stats_entry_record_connection() {
+        let mut entry = ProtocolStatsEntry::new();
+        entry.record_connection();
+        entry.record_connection();
+        entry.record_connection();
+        assert_eq!(entry.connections, 3);
+        assert_eq!(entry.active_connections, 3);
+    }
+
+    #[test]
+    fn test_protocol_stats_entry_record_connection_close() {
+        let mut entry = ProtocolStatsEntry::new();
+        entry.record_connection();
+        entry.record_connection();
+        entry.record_connection();
+        entry.record_connection_close();
+        assert_eq!(entry.active_connections, 2);
+        // Closing more than open should not underflow
+        entry.record_connection_close();
+        entry.record_connection_close();
+        entry.record_connection_close();
+        assert_eq!(entry.active_connections, 0);
+    }
+
+    // ========================================================================
+    // ProtocolStats Tests
+    // ========================================================================
+
+    #[test]
+    fn test_protocol_stats_get_tcp() {
+        let stats = ProtocolStats::default();
+        let tcp_stats = stats.get(6); // TCP protocol number
+        assert_eq!(tcp_stats.packets, 0);
+        assert_eq!(tcp_stats.bytes, 0);
+    }
+
+    #[test]
+    fn test_protocol_stats_get_udp() {
+        let stats = ProtocolStats::default();
+        let udp_stats = stats.get(17); // UDP protocol number
+        assert_eq!(udp_stats.packets, 0);
+    }
+
+    #[test]
+    fn test_protocol_stats_get_mut() {
+        let mut stats = ProtocolStats::default();
+        stats.get_mut(6).record_packet(100);
+        stats.get_mut(6).record_packet(200);
+        assert_eq!(stats.tcp.packets, 2);
+        assert_eq!(stats.tcp.bytes, 300);
+    }
+
+    // ========================================================================
+    // Additional RuleStatsEntry Tests
+    // ========================================================================
+
+    #[test]
+    fn test_rule_stats_empty() {
+        let stats = RuleStatsEntry::new(1, RuleType::Domain as u8);
+        assert_eq!(stats.match_count, 0);
+        assert_eq!(stats.pass_count, 0);
+        assert_eq!(stats.proxy_count, 0);
+        assert_eq!(stats.drop_count, 0);
+        assert_eq!(stats.bytes_matched, 0);
+    }
+
+    #[test]
+    fn test_rule_stats_multiple_same_action() {
+        let mut stats = RuleStatsEntry::new(1, RuleType::DomainSuffix as u8);
+        stats.record_match(RuleAction::Proxy, 100);
+        stats.record_match(RuleAction::Proxy, 200);
+        stats.record_match(RuleAction::Proxy, 300);
+        assert_eq!(stats.match_count, 3);
+        assert_eq!(stats.proxy_count, 3);
+        assert_eq!(stats.bytes_matched, 600);
+    }
+
+    // ========================================================================
+    // Additional NodeStatsEntry Tests
+    // ========================================================================
+
+    #[test]
+    fn test_node_stats_latency_avg_empty() {
+        let stats = NodeStatsEntry::new();
+        // No requests recorded, average should be 0 or NaN
+        let avg = stats.latency_avg();
+        assert!(avg.is_nan() || avg == 0.0);
+    }
+
+    #[test]
+    fn test_node_stats_bytes_sent_received() {
+        let mut stats = NodeStatsEntry::new();
+        stats.record_request(50, true, 1000, 2000);
+        stats.record_request(100, true, 500, 1500);
+        // Note: bytes_sent and bytes_received are fields, not methods
+        assert_eq!(stats.bytes_sent, 1500);
+        assert_eq!(stats.bytes_received, 3500);
+    }
+
+    #[test]
+    fn test_node_stats_success_rate() {
+        let mut stats = NodeStatsEntry::new();
+        stats.record_request(50, true, 0, 0);
+        stats.record_request(50, true, 0, 0);
+        stats.record_request(50, false, 0, 0);
+        assert_eq!(stats.total_requests, 3);
+        assert_eq!(stats.successful_requests, 2);
+        assert_eq!(stats.failed_requests, 1);
+        assert!((stats.success_rate() - 0.667).abs() < 0.01);
+    }
+
+    // ========================================================================
+    // OverallStats Tests
+    // ========================================================================
+
+    #[test]
+    fn test_overall_stats_new() {
+        let stats = OverallStats::new();
+        assert_eq!(stats.connections_total, 0);
+        assert_eq!(stats.connections_active, 0);
+        assert_eq!(stats.packets_total, 0);
+        assert_eq!(stats.bytes_total, 0);
+    }
+
+    #[test]
+    fn test_overall_stats_fields() {
+        let mut stats = OverallStats::new();
+        stats.connections_total = 100;
+        stats.connections_active = 10;
+        stats.packets_total = 500;
+        stats.bytes_total = 1000;
+        stats.dropped_total = 5;
+        stats.routed_total = 400;
+        stats.unmatched_total = 95;
+
+        assert_eq!(stats.connections_total, 100);
+        assert_eq!(stats.connections_active, 10);
+        assert_eq!(stats.packets_total, 500);
+        assert_eq!(stats.bytes_total, 1000);
+        assert_eq!(stats.dropped_total, 5);
+        assert_eq!(stats.routed_total, 400);
+        assert_eq!(stats.unmatched_total, 95);
+    }
+
+    #[test]
+    fn test_overall_stats_packets_per_second() {
+        let stats = OverallStats::new();
+        assert_eq!(stats.packets_per_second(0), 0.0);
+        assert_eq!(stats.packets_per_second(10), 0.0);
+
+        let mut stats = OverallStats::new();
+        stats.packets_total = 100;
+        assert_eq!(stats.packets_per_second(10), 10.0);
+    }
+
+    #[test]
+    fn test_overall_stats_bytes_per_second() {
+        let stats = OverallStats::new();
+        assert_eq!(stats.bytes_per_second(0), 0.0);
+        assert_eq!(stats.bytes_per_second(5), 0.0);
+
+        let mut stats = OverallStats::new();
+        stats.bytes_total = 1024;
+        assert_eq!(stats.bytes_per_second(8), 128.0);
     }
 }

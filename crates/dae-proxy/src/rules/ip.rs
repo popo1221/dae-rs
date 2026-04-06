@@ -1,11 +1,13 @@
-//! IP rule module
+//! IP 规则模块
 //!
-//! Contains IP CIDR and GeoIP rule types and matching logic.
+//! 包含 IP CIDR 和 GeoIP 规则类型及匹配逻辑。
 
 use crate::rule_engine::PacketInfo;
 use std::net::IpAddr;
 
-/// An IP CIDR-based rule
+/// 基于 IP CIDR 的规则
+///
+/// 用于匹配 IP 地址范围的规则。
 #[derive(Debug, Clone)]
 pub struct IpCidrRule {
     /// Network prefix (IPv4 or IPv6)
@@ -14,12 +16,14 @@ pub struct IpCidrRule {
     pub is_exclude: bool,
 }
 
-/// IP network (IPv4 or IPv6)
+/// IP 网络（IPv4 或 IPv6）
+///
+/// 表示一个 IP 网络段。
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum IpNet {
-    /// IPv4 network
+    /// IPv4 网络
     V4(ipnet::Ipv4Net),
-    /// IPv6 network
+    /// IPv6 网络
     V6(ipnet::Ipv6Net),
 }
 
@@ -92,9 +96,13 @@ impl GeoIpRule {
     }
 
     /// Check if this rule matches the given country code
+    ///
+    /// The country parameter is expected to be already uppercase (as returned by lookup_geoip).
+    /// We use case-insensitive comparison for robustness.
     pub fn matches_country(&self, country: &str) -> bool {
-        let country_upper = country.to_uppercase();
-        let matches = country_upper == self.country_code;
+        // lookup_geoip returns uppercase country codes, and rule stores uppercase.
+        // Use eq_ignore_ascii_case for case-insensitive comparison without allocation.
+        let matches = country.eq_ignore_ascii_case(&self.country_code);
         if self.is_exclude {
             !matches
         } else {

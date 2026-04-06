@@ -1,18 +1,15 @@
-//! DNS Upstream and Source Loop Detection
+//! DNS 上游和源循环检测
 //!
-//! Automatically checks if a DNS upstream or source is also a client of us
-//! and reminds the user to add SIP (Source IP) rules.
+//! 自动检测 DNS 上游或源是否也是我们的客户端，提醒用户添加 SIP（源 IP）规则。
 //!
-//! This prevents DNS loops where:
-//! - Upstream DNS server is behind the same dae-rs instance
-//! - DNS queries bounce between dae-rs and upstream infinitely
+//! 防止 DNS 循环：
+//! - 上游 DNS 服务器位于同一个 dae-rs 实例之后
+//! - DNS 查询在 dae-rs 和上游之间无限循环
 //!
-//! # Detection Strategy
+//! # 检测策略
 //!
-//! 1. **Upstream Loop Detection**: Check if upstream DNS server IP is also
-//!    reachable through dae-rs (i.e., the upstream is a client)
-//! 2. **Source Loop Detection**: Check if DNS query source is also reachable
-//!    through dae-rs
+//! 1. **上游循环检测**: 检查上游 DNS 服务器 IP 是否也可通过 dae-rs 到达（即上游是客户端）
+//! 2. **源循环检测**: 检查 DNS 查询源是否也可通过 dae-rs 到达
 
 use std::collections::HashSet;
 use std::net::{IpAddr, Ipv4Addr};
@@ -21,7 +18,9 @@ use std::sync::Arc;
 use tokio::sync::RwLock;
 use tracing::{debug, info, warn};
 
-/// DNS loop detection result
+/// DNS 循环检测结果
+///
+/// 表示 DNS 循环检测的结果状态。
 #[derive(Debug, Clone)]
 pub enum LoopDetectionResult {
     /// No loop detected
@@ -52,7 +51,9 @@ impl std::fmt::Display for LoopDetectionResult {
     }
 }
 
-/// DNS loop detection configuration
+/// DNS 循环检测配置
+///
+/// 配置 DNS 循环检测的各项参数。
 #[derive(Debug, Clone)]
 pub struct LoopDetectionConfig {
     /// Enable upstream loop detection
@@ -80,7 +81,9 @@ impl Default for LoopDetectionConfig {
     }
 }
 
-/// DNS loop detector
+/// DNS 循环检测器
+///
+/// 检测并报告潜在的 DNS 循环问题。
 pub struct DnsLoopDetector {
     config: LoopDetectionConfig,
     /// Track detected loops to avoid repeated warnings

@@ -2,14 +2,16 @@
 
 use serde::Deserialize;
 use std::path::Path;
-use thiserror::Error;
 
 pub mod rules;
 pub mod subscription;
 pub mod tracking;
+pub mod types;
+
 pub use rules::{RuleConfig, RuleConfigItem, RuleGroupConfig};
 pub use subscription::SubscriptionConfig;
 pub use tracking::TrackingConfig;
+pub use types::{ConfigError, LogLevel, NodeType};
 
 /// Subscription entry for automatic node updates
 #[derive(Debug, Clone, Deserialize)]
@@ -36,86 +38,6 @@ pub struct SubscriptionEntry {
 
 fn default_subscription_interval() -> u64 {
     3600 // 1 hour
-}
-
-/// Configuration validation errors
-#[derive(Error, Debug)]
-pub enum ConfigError {
-    #[error("Missing required field: {0}")]
-    MissingField(String),
-    #[error("Invalid port number: {0} (must be 1-65535)")]
-    InvalidPort(u16),
-    #[error("Invalid address: {0}")]
-    InvalidAddress(String),
-    #[error("Invalid node configuration: {0}")]
-    InvalidNode(String),
-    #[error("Rule file not found: {0}")]
-    RuleFileNotFound(String),
-    #[error("Rule file parse error: {0}")]
-    RuleFileParseError(String),
-    #[error("Invalid subscription: {0}")]
-    InvalidSubscription(String),
-    #[error("Validation error: {0}")]
-    ValidationError(String),
-}
-
-/// Node type enumeration
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Deserialize)]
-#[serde(rename_all = "lowercase")]
-pub enum NodeType {
-    Shadowsocks,
-    Vless,
-    Vmess,
-    Trojan,
-}
-
-impl std::fmt::Display for NodeType {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            NodeType::Shadowsocks => write!(f, "shadowsocks"),
-            NodeType::Vless => write!(f, "vless"),
-            NodeType::Vmess => write!(f, "vmess"),
-            NodeType::Trojan => write!(f, "trojan"),
-        }
-    }
-}
-
-impl std::str::FromStr for NodeType {
-    type Err = String;
-    fn from_str(s: &str) -> Result<Self, Self::Err> {
-        match s.to_lowercase().as_str() {
-            "shadowsocks" | "ss" => Ok(NodeType::Shadowsocks),
-            "vless" => Ok(NodeType::Vless),
-            "vmess" => Ok(NodeType::Vmess),
-            "trojan" => Ok(NodeType::Trojan),
-            _ => Err(format!("Unknown node type: {s}")),
-        }
-    }
-}
-
-/// Log level enumeration
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Deserialize)]
-#[serde(rename_all = "lowercase")]
-#[derive(Default)]
-pub enum LogLevel {
-    Trace,
-    Debug,
-    #[default]
-    Info,
-    Warn,
-    Error,
-}
-
-impl std::fmt::Display for LogLevel {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            LogLevel::Trace => write!(f, "trace"),
-            LogLevel::Debug => write!(f, "debug"),
-            LogLevel::Info => write!(f, "info"),
-            LogLevel::Warn => write!(f, "warn"),
-            LogLevel::Error => write!(f, "error"),
-        }
-    }
 }
 
 /// Main configuration structure for dae-rs

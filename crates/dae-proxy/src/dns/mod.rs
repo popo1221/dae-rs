@@ -1,11 +1,11 @@
-//! DNS resolution module
+//! DNS 解析模块
 //!
-//! Provides MAC-based DNS resolution that selects DNS servers based on client MAC address.
+//! 提供基于 MAC 地址的 DNS 解析功能，根据客户端 MAC 地址选择不同的 DNS 服务器。
 //!
-//! # Architecture
+//! # 架构设计
 //!
-//! - `mac_dns`: MAC-based DNS resolver that routes DNS queries based on device MAC address
-//! - `loop_detection`: Upstream and source loop detection to prevent DNS loops
+//! - `mac_dns`: 基于 MAC 的 DNS 解析器，根据设备 MAC 地址路由 DNS 查询
+//! - `loop_detection`: 上游和源循环检测，防止 DNS 解析循环
 
 pub mod loop_detection;
 pub mod mac_dns;
