@@ -344,8 +344,8 @@ mod tests {
         let internal: SocketAddr = "192.168.1.100:12345".parse().unwrap();
 
         let external = nat.create_mapping(internal).unwrap();
-
-        assert!(external.port() <= 65535);
+        // port() returns u16 which is always valid (0-65535)
+        let _port = external.port();
     }
 
     #[test]

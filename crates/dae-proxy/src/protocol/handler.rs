@@ -93,8 +93,8 @@ mod tests {
     use super::*;
     use crate::core::{Context, Result as ProxyResult};
     use async_trait::async_trait;
-    use std::net::{IpAddr, SocketAddr};
-    use std::str::FromStr;
+    
+    
 
     struct TestHandler {
         name: &'static str,

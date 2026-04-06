@@ -214,7 +214,7 @@ mod tests {
     #[test]
     fn test_fnv1a_one_bit_change_avalanche() {
         // Test that a 1-bit change produces significantly different output
-        let mut d1 = [0u8; 8];
+        let d1 = [0u8; 8];
         let mut d2 = [0u8; 8];
         d2[3] = 1;
 
@@ -284,7 +284,7 @@ mod tests {
 
         let mut hasher2 = SipHasher::new();
         hasher2.write(data);
-        let h2 = hasher2.finish();
+        let _h2 = hasher2.finish();
 
         // Each hasher instance has its own random key, so outputs differ.
         // This is BY DESIGN (hash flooding protection).

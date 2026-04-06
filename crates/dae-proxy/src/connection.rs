@@ -288,7 +288,7 @@ mod tests {
     fn test_connection_is_expired_after_wait() {
         let src: SocketAddr = "192.168.1.100:8080".parse().unwrap();
         let dst: SocketAddr = "8.8.8.8:443".parse().unwrap();
-        let mut conn = Connection::new(src, dst, Protocol::Tcp, Duration::from_secs(30));
+        let conn = Connection::new(src, dst, Protocol::Tcp, Duration::from_secs(30));
 
         // Immediately after creation, should not be expired
         assert!(!conn.is_expired(Duration::from_secs(30)));

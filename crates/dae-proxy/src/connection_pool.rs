@@ -771,7 +771,7 @@ mod tests {
         let key2 = ConnectionKey::from_raw(0x7f000001, 0x7f000003, 10001, 80, 6);
 
         let (conn1, created1) = pool.get_or_create(key1).await;
-        let (conn2, created2) = pool.get_or_create(key2).await;
+        let (_conn2, created2) = pool.get_or_create(key2).await;
         let (conn3, created3) = pool.get_or_create(key1).await;
 
         assert!(created1);
