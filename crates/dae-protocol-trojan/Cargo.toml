@@ -15,6 +15,7 @@ tokio-tungstenite = "0.21"
 futures-util = "0.3"
 tungstenite = "0.21"
 dae-relay = { path = "../dae-relay" }
+dae-protocol-core = { path = "../dae-protocol-core" }
 
 [dev-dependencies]
 tokio-test = "0.4"

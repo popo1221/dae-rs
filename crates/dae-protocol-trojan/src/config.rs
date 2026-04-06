@@ -11,8 +11,7 @@
 
 use std::net::SocketAddr;
 use std::time::Duration;
-
-use super::types::HandlerConfig;
+use dae_protocol_core::HandlerConfig;
 
 /// Trojan TLS 传输层配置
 ///

@@ -5,46 +5,11 @@
 //!
 //! # 类型层次
 //! - `ProtocolType`: 标识支持的协议类型（目前仅有 Trojan）
-//! - `HandlerConfig`: 处理器配置 trait，所有配置类型需实现此 trait
 //! - `BidirectionalRelay`: 双向数据转发 trait
 
 use tokio::net::TcpStream;
 
-/// 协议类型枚举
-///
-/// 标识当前处理器实现的协议类型。
-/// 用于协议识别和路由决策。
-///
-/// # 变体
-/// - `Trojan`: Trojan 协议
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
-pub enum ProtocolType {
-    Trojan,
-}
-
-impl std::fmt::Display for ProtocolType {
-    /// 将协议类型格式化为字符串表示
-    ///
-    /// # 返回值
-    /// - `Trojan` -> `"trojan"`
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            ProtocolType::Trojan => write!(f, "trojan"),
-        }
-    }
-}
-
-/// 处理器配置 trait
-///
-/// 所有协议处理器的配置类型必须实现此 trait。
-/// 该 trait 要求实现类型满足 `Send + Sync + Debug`，
-/// 确保配置可以在多线程环境中安全共享。
-///
-/// # 设计目的
-/// - 统一不同协议处理器的配置接口
-/// - 允许运行时动态获取处理器配置
-/// - 支持配置的热更新（通过 Arc<dyn HandlerConfig>）
-pub trait HandlerConfig: Send + Sync + std::fmt::Debug {}
+pub use dae_protocol_core::{HandlerConfig, ProtocolType};
 
 /// 双向数据转发 trait
 ///
