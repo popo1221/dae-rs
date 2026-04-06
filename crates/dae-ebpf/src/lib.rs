@@ -283,6 +283,7 @@ impl EbpfContext {
 
     /// Check if running as root
     fn is_root() -> bool {
+        // SAFETY: geteuid is a pure read-only syscall that is always safe.
         unsafe { libc::geteuid() == 0 }
     }
 

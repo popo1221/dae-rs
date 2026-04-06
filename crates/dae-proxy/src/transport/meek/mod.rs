@@ -1,7 +1,7 @@
 //! Meek transport module
 
 mod consts;
-mod meek;
+mod meek_impl;
 
 pub use consts::MeekTactic;
-pub use meek::{MeekConfig, MeekSession, MeekTransport};
+pub use meek_impl::{MeekConfig, MeekSession, MeekTransport};

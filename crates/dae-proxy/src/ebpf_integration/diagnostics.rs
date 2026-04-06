@@ -64,6 +64,7 @@ impl EbpfSystemConfig {
 
     /// Check if we have admin capabilities
     fn check_admin_cap() -> bool {
+        // SAFETY: geteuid is a pure read-only syscall that is always safe.
         let uid = unsafe { libc::geteuid() };
         uid == 0
     }
@@ -75,6 +76,7 @@ impl EbpfSystemConfig {
             rlim_max: 0,
         };
 
+        // SAFETY: getrlimit is a safe syscall; we pass a valid pointer to a zeroed rlimit.
         if unsafe { libc::getrlimit(libc::RLIMIT_MEMLOCK, &mut rlim) } == 0 {
             rlim.rlim_cur as i64
         } else {
