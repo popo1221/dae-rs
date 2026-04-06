@@ -433,8 +433,8 @@ mod tests {
 
     #[tokio::test]
     async fn test_http2_preface_sending() {
-        let config = GrpcConfig::default();
-        let transport = GrpcTransport::with_config(config);
+        let _config = GrpcConfig::default();
+        let _transport = GrpcTransport::with_config(_config);
 
         // We can't easily test the full dial without a server
         // But we can verify the preface format

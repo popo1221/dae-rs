@@ -115,11 +115,7 @@ mod tests {
         }
     }
 
-    fn create_test_context() -> Context {
-        let source = SocketAddr::from((IpAddr::from_str("127.0.0.1").unwrap(), 8080));
-        let dest = SocketAddr::from((IpAddr::from_str("192.168.1.1").unwrap(), 80));
-        Context::new(source, dest)
-    }
+
 
     #[test]
     fn test_registry_new() {

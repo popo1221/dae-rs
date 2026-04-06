@@ -607,9 +607,9 @@ mod tests {
         state.set_running(true).await;
         assert!(state.is_running().await);
 
-        // Wait a bit and check uptime (u64 is always >= 0, so use >= 0)
+        // Wait a bit and check uptime is being tracked
         tokio::time::sleep(std::time::Duration::from_millis(10)).await;
-        assert!(state.uptime_secs() >= 0);
+        assert!(state.uptime_secs());
     }
 
     #[test]

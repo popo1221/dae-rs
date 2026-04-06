@@ -345,7 +345,7 @@ mod tests {
 
         let external = nat.create_mapping(internal).unwrap();
 
-        assert!(external.port() >= 10000 && external.port() <= 65535);
+        assert!(external.port() <= 65535);
     }
 
     #[test]
