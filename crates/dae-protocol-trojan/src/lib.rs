@@ -32,6 +32,7 @@ pub mod protocol;
 pub mod server;
 pub mod trojan_go;
 pub mod types;
+pub mod udp;
 
 // 重新导出公共类型供外部使用
 pub use config::{TrojanClientConfig, TrojanServerConfig, TrojanTlsConfig};

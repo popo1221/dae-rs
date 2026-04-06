@@ -5,13 +5,17 @@
 //!
 //! The control socket is typically at /var/run/dae/control.sock
 
+use crate::control_metrics::{get_bytes_received_total, get_bytes_sent_total, get_overall_from_metrics};
+use crate::control_types::{
+    ConfigState, ControlCommand, ControlResponse, LegacyOverallStats, NodeTestResult, ProxyStats,
+    ProxyStatus,
+};
 use crate::metrics::{
     inc_node_latency_test, ACTIVE_TCP_CONNECTIONS_GAUGE, ACTIVE_UDP_CONNECTIONS_GAUGE,
-    BYTES_RECEIVED_COUNTER, BYTES_SENT_COUNTER, CONNECTION_COUNTER,
+    CONNECTION_COUNTER,
 };
 use crate::tracking::store::SharedTrackingStore;
 use crate::tracking::types::ConnectionState;
-use serde::{Deserialize, Serialize};
 use std::path::Path;
 use std::sync::Arc;
 use std::time::SystemTime;
@@ -19,81 +23,6 @@ use tokio::io::{AsyncBufReadExt, AsyncReadExt, AsyncWriteExt, BufStream};
 use tokio::net::{UnixListener, UnixStream};
 use tokio::sync::RwLock;
 use tracing::{error, info, warn};
-
-/// Control command types
-#[derive(Debug, Clone)]
-pub enum ControlCommand {
-    /// Get proxy status
-    Status,
-    /// Reload configuration (hot reload)
-    Reload,
-    /// Get statistics
-    Stats,
-    /// Shutdown the proxy gracefully
-    Shutdown,
-    /// Test connectivity to a specific node
-    TestNode(String),
-    /// Get version information
-    Version,
-    /// Get help
-    Help,
-}
-
-/// Control response types
-#[derive(Debug, Clone)]
-pub enum ControlResponse {
-    /// Success response with data
-    Ok(String),
-    /// Error response
-    Error(String),
-    /// Statistics response
-    Stats(ProxyStats),
-    /// Status response
-    Status(ProxyStatus),
-    /// Test result response
-    TestResult(NodeTestResult),
-    /// Version response
-    Version(String),
-}
-
-/// Proxy running status
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct ProxyStatus {
-    pub running: bool,
-    pub uptime_secs: u64,
-    pub tcp_connections: usize,
-    pub udp_sessions: usize,
-    pub rules_loaded: bool,
-    pub rule_count: usize,
-    pub nodes_configured: usize,
-    // Extended stats
-    pub total_connections: u64,
-    pub total_bytes_in: u64,
-    pub total_bytes_out: u64,
-}
-
-/// Proxy statistics
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct ProxyStats {
-    pub total_connections: u64,
-    pub total_bytes_in: u64,
-    pub total_bytes_out: u64,
-    pub active_tcp_connections: usize,
-    pub active_udp_sessions: usize,
-    pub rules_hit: u64,
-    pub nodes_tested: usize,
-    pub rule_count: usize,
-    pub node_count: usize,
-}
-
-/// Node test result
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct NodeTestResult {
-    pub node_name: String,
-    pub success: bool,
-    pub latency_ms: Option<u64>,
-    pub error: Option<String>,
-}
 
 /// Shared control state
 pub struct ControlState {

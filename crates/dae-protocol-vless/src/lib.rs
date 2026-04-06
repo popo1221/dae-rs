@@ -34,6 +34,7 @@ pub mod errors;
 pub mod handler;
 pub mod protocol;
 pub mod server;
+pub mod tls;
 
 // 协议类型
 pub use protocol::{

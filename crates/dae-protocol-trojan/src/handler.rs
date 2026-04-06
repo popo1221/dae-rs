@@ -32,6 +32,7 @@ use super::config::{TrojanClientConfig, TrojanServerConfig};
 use super::errors::TrojanError;
 use super::protocol::{TrojanCommand, TrojanTargetAddress, TROJAN_CRLF};
 use super::types::relay_bidirectional;
+use super::udp::UdpFrameBuilder;
 use dae_protocol_core::{Handler, ProtocolType};
 
 /// Trojan 协议处理器
@@ -433,15 +434,14 @@ impl TrojanHandler {
         remote_udp: UdpSocket,
         target_info: &str,
     ) -> Result<(), TrojanError> {
-        const MAX_UDP_FRAME_SIZE: usize = 65535;
+        use super::udp::{MAX_UDP_FRAME_SIZE, UDP_HEADER_SIZE};
         let remote_addr = target_info.to_string();
 
         info!("Starting Trojan UDP relay: {} via UDP socket", remote_addr);
 
         loop {
             // 从 TCP 读取 UDP 帧头
-            // 最小头部长度: cmd(1) + uuid(16) + ver(1) + port(2) + atyp(1) = 21 字节
-            let mut header_buf = [0u8; 21];
+            let mut header_buf = [0u8; UDP_HEADER_SIZE];
             match tokio::time::timeout(self.config.udp_timeout, client.read_exact(&mut header_buf))
                 .await
             {
@@ -456,11 +456,13 @@ impl TrojanHandler {
                 }
             };
 
-            let cmd = header_buf[0];
-            // uuid 位于 header_buf[1..17]（16 字节）
+            let (cmd, uuid, port, atyp) = match UdpFrameBuilder::parse_header(&header_buf) {
+                Some(v) => v,
+                None => continue,
+            };
+
             let ver = header_buf[17];
-            let target_port = u16::from_be_bytes([header_buf[18], header_buf[19]]);
-            let atyp = header_buf[20];
+            let target_port = u16::from_be_bytes(port);
 
             // 验证版本号
             if ver != 0x01 {
@@ -571,37 +573,8 @@ impl TrojanHandler {
                     {
                         Ok(Ok(m)) if m > 0 => {
                             // 构建响应帧并通过 TCP 发送回客户端
-                            // 响应帧: [0x01][uuid(16)][0x01][port(2)][atyp(1)][addr][payload]
-                            let mut response_frame = Vec::with_capacity(21 + m);
-                            response_frame.push(0x01); // cmd = UDP
-                            response_frame.extend_from_slice(&header_buf[1..17]); // uuid
-                            response_frame.push(0x01); // ver
-                            response_frame.extend_from_slice(&header_buf[18..20]); // port
-                            response_frame.push(atyp); // 地址类型
-
-                            // 重新添加目标地址
-                            match atyp {
-                                0x01 => {
-                                    let ip = target_addr.parse::<IpAddr>().unwrap();
-                                    if let IpAddr::V4(v4) = ip {
-                                        response_frame.extend_from_slice(&v4.octets());
-                                    }
-                                }
-                                0x02 => {
-                                    let domain = &target_addr;
-                                    response_frame.push(domain.len() as u8);
-                                    response_frame.extend_from_slice(domain.as_bytes());
-                                }
-                                0x03 => {
-                                    let ip = target_addr.parse::<IpAddr>().unwrap();
-                                    if let IpAddr::V6(v6) = ip {
-                                        response_frame.extend_from_slice(&v6.octets());
-                                    }
-                                }
-                                _ => {}
-                            }
-
-                            response_frame.extend_from_slice(&response_buf[..m]);
+                            let builder = UdpFrameBuilder::new(0x01, uuid, port, atyp);
+                            let response_frame = builder.build_response(&target_addr, &response_buf[..m]);
 
                             if let Err(e) = client.write_all(&response_frame).await {
                                 debug!("Failed to send UDP response to client: {}", e);
@@ -610,12 +583,8 @@ impl TrojanHandler {
                         _ => {
                             // 超时或错误 - 发送 PING 保持连接
                             debug!("No UDP response, sending PING");
-                            let mut ping_frame = Vec::new();
-                            ping_frame.push(0x03); // cmd = PING
-                            ping_frame.extend_from_slice(&header_buf[1..17]); // uuid
-                            ping_frame.push(0x01); // ver
-                            ping_frame.extend_from_slice(&header_buf[18..20]); // port
-                            ping_frame.push(atyp);
+                            let builder = UdpFrameBuilder::new(0x03, uuid, port, atyp);
+                            let ping_frame = builder.build_pong();
 
                             if let Err(e) = client.write_all(&ping_frame).await {
                                 debug!("Failed to send PING: {}", e);
@@ -633,12 +602,8 @@ impl TrojanHandler {
                     // PING - 客户端检查连接是否存活
                     debug!("Trojan UDP: PING received");
                     // 发送 PONG 响应
-                    let mut pong_frame = Vec::new();
-                    pong_frame.push(0x03); // cmd = PING（Trojan 中 PONG 与 PING 相同）
-                    pong_frame.extend_from_slice(&header_buf[1..17]); // uuid
-                    pong_frame.push(0x01); // ver
-                    pong_frame.extend_from_slice(&header_buf[18..20]); // port
-                    pong_frame.push(atyp);
+                    let builder = UdpFrameBuilder::new(0x03, uuid, port, atyp);
+                    let pong_frame = builder.build_pong();
 
                     if let Err(e) = client.write_all(&pong_frame).await {
                         debug!("Failed to send PONG: {}", e);

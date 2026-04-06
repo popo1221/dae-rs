@@ -2,7 +2,10 @@
 //!
 //! Core data structures for connection, node, rule, and protocol tracking.
 
-use std::time::SystemTime;
+pub use crate::tracking::constants::{
+    ConnectionState, LatencySample, NodeStatus, Protocol, RuleAction, RuleType,
+    current_epoch_ms, event_type,
+};
 
 /// Connection tracking key (5-tuple)
 #[derive(Clone, Copy, Debug, Default, Hash, PartialEq, Eq)]
@@ -124,20 +127,6 @@ impl ConnectionStatsEntry {
     }
 }
 
-/// Connection state enumeration
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-#[repr(u8)]
-pub enum ConnectionState {
-    /// New connection, not yet established
-    New = 0,
-    /// Connection is active and transferring data
-    Established = 1,
-    /// Connection is being closed gracefully
-    Closing = 2,
-    /// Connection has been closed
-    Closed = 3,
-}
-
 /// Node tracking entry
 #[derive(Clone, Copy, Debug, Default)]
 #[repr(C)]
@@ -230,18 +219,6 @@ impl NodeStatsEntry {
     }
 }
 
-/// Node status enumeration
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-#[repr(u8)]
-pub enum NodeStatus {
-    /// Node is healthy and accepting traffic
-    Up = 0,
-    /// Node is not responding
-    Down = 1,
-    /// Node is responding but high latency or error rate
-    Degraded = 2,
-}
-
 /// Rule tracking entry
 #[derive(Clone, Copy, Debug, Default)]
 #[repr(C)]
@@ -293,42 +270,6 @@ impl RuleStatsEntry {
     }
 }
 
-/// Rule action enumeration
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-#[repr(u8)]
-pub enum RuleAction {
-    /// Pass the packet (direct)
-    Pass = 0,
-    /// Proxy the packet
-    Proxy = 1,
-    /// Drop the packet
-    Drop = 2,
-    /// No matching rule, use default
-    Default = 3,
-    /// Direct connection (explicit direct)
-    Direct = 4,
-    /// Must direct (force bypass proxy)
-    MustDirect = 5,
-}
-
-/// Rule type enumeration
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-#[repr(u8)]
-pub enum RuleType {
-    /// Domain exact match
-    Domain = 0,
-    /// Domain suffix match
-    DomainSuffix = 1,
-    /// Domain keyword match
-    DomainKeyword = 2,
-    /// IP CIDR match
-    IpCidr = 3,
-    /// GeoIP country match
-    GeoIp = 4,
-    /// Process name match
-    Process = 5,
-}
-
 /// Protocol tracking entry
 #[derive(Clone, Copy, Debug, Default, serde::Serialize)]
 #[repr(C)]
@@ -365,30 +306,6 @@ impl ProtocolStatsEntry {
     pub fn record_connection_close(&mut self) {
         self.active_connections = self.active_connections.saturating_sub(1);
     }
-}
-
-/// Protocol type enumeration
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-#[repr(u8)]
-pub enum Protocol {
-    /// TCP protocol
-    Tcp = 6,
-    /// UDP protocol
-    Udp = 17,
-    /// ICMP protocol
-    Icmp = 1,
-    /// SOCKS5 protocol
-    Socks5 = 0x50,
-    /// HTTP protocol
-    Http = 0x51,
-    /// VLESS protocol
-    Vless = 0x52,
-    /// VMess protocol
-    Vmess = 0x53,
-    /// Trojan protocol
-    Trojan = 0x54,
-    /// Shadowsocks protocol
-    Shadowsocks = 0x55,
 }
 
 /// Protocol statistics map
@@ -449,18 +366,6 @@ impl TrackingEvent {
     }
 }
 
-/// Event type constants for TrackingEvent
-pub mod event_type {
-    /// Connection event type
-    pub const CONNECTION: u8 = 0;
-    /// Rule event type
-    pub const RULE: u8 = 1;
-    /// Node event type
-    pub const NODE: u8 = 2;
-    /// Stats event type
-    pub const STATS: u8 = 3;
-}
-
 /// Overall statistics (for global tracking)
 #[derive(Clone, Debug, Default)]
 pub struct OverallStats {
@@ -503,25 +408,6 @@ impl OverallStats {
             0.0
         }
     }
-}
-
-/// Latency sample for histogram calculation
-#[derive(Clone, Debug)]
-pub struct LatencySample {
-    /// Timestamp
-    pub timestamp: u64,
-    /// Latency in milliseconds
-    pub latency_ms: u32,
-    /// Node ID (if applicable)
-    pub node_id: Option<u32>,
-}
-
-/// Helper function to get current epoch in milliseconds
-fn current_epoch_ms() -> u64 {
-    SystemTime::now()
-        .duration_since(SystemTime::UNIX_EPOCH)
-        .map(|d| d.as_millis() as u64)
-        .unwrap_or(0)
 }
 
 /// Tracking metrics for Prometheus export
@@ -647,6 +533,9 @@ impl Default for TrackingMetrics {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::tracking::constants::{
+        ConnectionState, NodeStatus, Protocol, RuleAction, RuleType, current_epoch_ms,
+    };
 
     #[test]
     fn test_connection_key() {
@@ -820,7 +709,7 @@ mod tests {
     #[test]
     fn test_protocol_stats_get_tcp() {
         let stats = ProtocolStats::default();
-        let tcp_stats = stats.get(6);  // TCP protocol number
+        let tcp_stats = stats.get(6); // TCP protocol number
         assert_eq!(tcp_stats.packets, 0);
         assert_eq!(tcp_stats.bytes, 0);
     }
@@ -828,7 +717,7 @@ mod tests {
     #[test]
     fn test_protocol_stats_get_udp() {
         let stats = ProtocolStats::default();
-        let udp_stats = stats.get(17);  // UDP protocol number
+        let udp_stats = stats.get(17); // UDP protocol number
         assert_eq!(udp_stats.packets, 0);
     }
 
