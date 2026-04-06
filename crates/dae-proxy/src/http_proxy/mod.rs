@@ -18,6 +18,8 @@ use tokio::io::{AsyncBufReadExt, AsyncWriteExt};
 use tokio::net::TcpStream;
 use tracing::{debug, error, info, warn};
 
+use async_trait::async_trait;
+use crate::protocol::{Handler, HandlerConfig, ProtocolType};
 use crate::protocol::relay::relay_bidirectional;
 
 /// HTTP proxy constants
@@ -51,6 +53,8 @@ impl Default for HttpProxyHandlerConfig {
         }
     }
 }
+
+impl HandlerConfig for HttpProxyHandlerConfig {}
 
 /// HTTP proxy handler
 pub struct HttpProxyHandler {
@@ -208,6 +212,23 @@ impl HttpProxyHandler {
     /// Relay data between client and remote
     async fn relay(&self, client: TcpStream, remote: TcpStream) -> std::io::Result<()> {
         relay_bidirectional(client, remote).await
+    }
+}
+
+#[async_trait]
+impl Handler for HttpProxyHandler {
+    type Config = HttpProxyHandlerConfig;
+
+    fn name(&self) -> &'static str {
+        "http_proxy"
+    }
+
+    fn protocol(&self) -> ProtocolType {
+        ProtocolType::Http
+    }
+
+    fn config(&self) -> &Self::Config {
+        &self.config
     }
 }
 

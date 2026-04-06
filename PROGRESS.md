@@ -17,6 +17,7 @@ Review dae-rs after Phase 1-3 fixes. Verify changes and find remaining issues.
 - [ ] ralph-fix-hysteria: hysteria2 dead code
 - [ ] ralph-fix-doc: dae-proxy doc indent
 - [x] ralph-fix-socks5-handler: SOCKS5 implement unified Handler trait ✅
+- [x] ralph-fix-http-handler: HTTP proxy implement unified Handler trait ✅
 - [x] ralph-fix-safety: SAFETY comments in dae-tc/src/packet.rs ✅
 
 ## Review Findings Summary
