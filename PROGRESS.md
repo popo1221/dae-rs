@@ -16,6 +16,7 @@ Review dae-rs after Phase 1-3 fixes. Verify changes and find remaining issues.
 - [ ] ralph-fix-tuic: tuic unused import + dead field
 - [ ] ralph-fix-hysteria: hysteria2 dead code
 - [ ] ralph-fix-doc: dae-proxy doc indent
+- [x] ralph-fix-safety: SAFETY comments in dae-tc/src/packet.rs ✅
 
 ## Review Findings Summary
 
