@@ -74,9 +74,9 @@ mod constants;
 mod maps;
 mod packet;
 
+use crate::constants::{ethertype, ip_proto};
 use maps::idx;
 use packet::*;
-use crate::constants::{ethertype, ip_proto};
 
 /// 全局配置 Map
 ///

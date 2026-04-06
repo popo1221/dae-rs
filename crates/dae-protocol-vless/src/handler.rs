@@ -472,10 +472,13 @@ impl VlessHandler {
         }
 
         // 计算共享密钥
-        let server_point_array: [u8; 32] = server_public_key
-            .as_slice()
-            .try_into()
-            .map_err(|_| VlessError::Io(std::io::Error::new(ErrorKind::InvalidInput, "Invalid public key")))?;
+        let server_point_array: [u8; 32] =
+            server_public_key.as_slice().try_into().map_err(|_| {
+                VlessError::Io(std::io::Error::new(
+                    ErrorKind::InvalidInput,
+                    "Invalid public key",
+                ))
+            })?;
         let server_point = curve25519_dalek::MontgomeryPoint(server_point_array);
         let shared_point = server_point * scalar;
         let shared_secret: [u8; 32] = shared_point.to_bytes();
@@ -493,15 +496,25 @@ impl VlessHandler {
 
         // 构建伪装 TLS ClientHello
         let destination = &reality_config.destination;
-        let client_hello =
-            build_reality_client_hello(&client_public, &request, destination)?;
+        let client_hello = build_reality_client_hello(&client_public, &request, destination)?;
 
         // 连接到 VLESS 服务器
         let remote_addr = format!("{}:{}", self.config.server.addr, self.config.server.port);
-        let mut remote = tokio::time::timeout(self.config.tcp_timeout, TcpStream::connect(&remote_addr))
-            .await
-            .map_err(|_| VlessError::Io(std::io::Error::new(ErrorKind::TimedOut, "connection timed out")))?
-            .map_err(|_| VlessError::Io(std::io::Error::new(ErrorKind::TimedOut, "connection timed out")))?;
+        let mut remote =
+            tokio::time::timeout(self.config.tcp_timeout, TcpStream::connect(&remote_addr))
+                .await
+                .map_err(|_| {
+                    VlessError::Io(std::io::Error::new(
+                        ErrorKind::TimedOut,
+                        "connection timed out",
+                    ))
+                })?
+                .map_err(|_| {
+                    VlessError::Io(std::io::Error::new(
+                        ErrorKind::TimedOut,
+                        "connection timed out",
+                    ))
+                })?;
 
         remote.write_all(&client_hello).await?;
         remote.flush().await?;
@@ -512,8 +525,12 @@ impl VlessHandler {
         let mut server_response = vec![0u8; 8192];
         let n = tokio::time::timeout(self.config.tcp_timeout, remote.read(&mut server_response))
             .await
-            .map_err(|_| VlessError::Io(std::io::Error::new(ErrorKind::TimedOut, "read timed out")))?
-            .map_err(|_| VlessError::Io(std::io::Error::new(ErrorKind::TimedOut, "read timed out")))?;
+            .map_err(|_| {
+                VlessError::Io(std::io::Error::new(ErrorKind::TimedOut, "read timed out"))
+            })?
+            .map_err(|_| {
+                VlessError::Io(std::io::Error::new(ErrorKind::TimedOut, "read timed out"))
+            })?;
 
         if n == 0 {
             return Err(VlessError::Io(std::io::Error::new(
@@ -577,7 +594,10 @@ impl VlessHandler {
                     )));
                 }
                 let domain = String::from_utf8(buf[6..6 + domain_len].to_vec()).map_err(|_| {
-                    VlessError::Io(std::io::Error::new(std::io::ErrorKind::InvalidData, "invalid domain"))
+                    VlessError::Io(std::io::Error::new(
+                        std::io::ErrorKind::InvalidData,
+                        "invalid domain",
+                    ))
                 })?;
                 let port = u16::from_be_bytes([buf[6 + domain_len], buf[6 + domain_len + 1]]);
                 Ok(VlessTargetAddress::Domain(domain, port))
@@ -628,6 +648,8 @@ impl Handler for VlessHandler {
     }
 
     async fn handle(self: Arc<Self>, stream: TcpStream) -> std::io::Result<()> {
-        self.handle_vless(stream).await.map_err(std::io::Error::from)
+        self.handle_vless(stream)
+            .await
+            .map_err(std::io::Error::from)
     }
 }

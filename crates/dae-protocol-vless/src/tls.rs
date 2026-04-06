@@ -215,10 +215,7 @@ fn add_psk_modes_extension(buffer: &mut Vec<u8>) -> Result<(), VlessError> {
 }
 
 /// 添加 Reality key_share 扩展
-fn add_reality_key_share(
-    buffer: &mut Vec<u8>,
-    client_public: &[u8; 32],
-) -> Result<(), VlessError> {
+fn add_reality_key_share(buffer: &mut Vec<u8>, client_public: &[u8; 32]) -> Result<(), VlessError> {
     // Extension type: key_share
     buffer.push((TLS_EXT_KEY_SHARE >> 8) as u8);
     buffer.push((TLS_EXT_KEY_SHARE & 0xff) as u8);

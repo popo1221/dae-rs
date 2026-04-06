@@ -36,8 +36,8 @@ pub mod udp;
 
 // 重新导出公共类型供外部使用
 pub use config::{TrojanClientConfig, TrojanServerConfig, TrojanTlsConfig};
-pub use handler::TrojanHandler;
 pub use errors::TrojanError;
+pub use handler::TrojanHandler;
 pub use protocol::{TrojanAddressType, TrojanCommand, TrojanTargetAddress};
 pub use server::TrojanServer;
 pub use trojan_go::{TrojanGoMode, TrojanGoWsConfig, TrojanGoWsHandler, TrojanGoWsStream};

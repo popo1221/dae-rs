@@ -9,18 +9,18 @@
 //! - 心跳 (Heartbeat)
 //! - UDP 数据包 (UdpPacket)
 
+pub mod client;
 pub mod codec;
 pub mod consts;
 pub mod server;
-pub mod client;
 pub mod tuic_impl;
 
 // Re-exports for convenience
+pub use client::{TuicClient, TuicClientSession};
 pub use codec::TuicCodec;
 pub use consts::{
-    Context, ProxyResult, TuicCommand, TuicCommandType, TuicError, TUIC_VERSION,
-    TuicAuthRequest, TuicConnectRequest, TuicHeartbeatRequest,
+    Context, ProxyResult, TuicAuthRequest, TuicCommand, TuicCommandType, TuicConnectRequest,
+    TuicError, TuicHeartbeatRequest, TUIC_VERSION,
 };
 pub use server::{TuicServer, TuicSession};
-pub use client::{TuicClient, TuicClientSession};
 pub use tuic_impl::{TuicConfig, TuicHandler};

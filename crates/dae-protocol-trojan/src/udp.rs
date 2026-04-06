@@ -160,8 +160,13 @@ pub fn build_target_addr(atyp: u8, ip_bytes: &[u8], domain: Option<&str>) -> Str
         0x01 => {
             // IPv4
             if ip_bytes.len() >= 4 {
-                IpAddr::V4(Ipv4Addr::new(ip_bytes[0], ip_bytes[1], ip_bytes[2], ip_bytes[3]))
-                    .to_string()
+                IpAddr::V4(Ipv4Addr::new(
+                    ip_bytes[0],
+                    ip_bytes[1],
+                    ip_bytes[2],
+                    ip_bytes[3],
+                ))
+                .to_string()
             } else {
                 String::new()
             }
@@ -184,8 +189,14 @@ pub fn build_target_addr(atyp: u8, ip_bytes: &[u8], domain: Option<&str>) -> Str
                     u16::from_be_bytes([ip_bytes[14], ip_bytes[15]]),
                 ];
                 IpAddr::V6(Ipv6Addr::new(
-                    segments[0], segments[1], segments[2], segments[3],
-                    segments[4], segments[5], segments[6], segments[7],
+                    segments[0],
+                    segments[1],
+                    segments[2],
+                    segments[3],
+                    segments[4],
+                    segments[5],
+                    segments[6],
+                    segments[7],
                 ))
                 .to_string()
             } else {
@@ -217,14 +228,17 @@ mod tests {
     fn test_parse_header() {
         let header = [
             0x01, // cmd
-            1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, // uuid (16 bytes)
+            1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16,   // uuid (16 bytes)
             0x01, // ver
             0x1F, 0x90, // port (8080)
             0x01, // atyp
         ];
         let (cmd, uuid, port, atyp) = UdpFrameBuilder::parse_header(&header).unwrap();
         assert_eq!(cmd, 0x01);
-        assert_eq!(uuid, [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16]);
+        assert_eq!(
+            uuid,
+            [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16]
+        );
         assert_eq!(port, [0x1F, 0x90]);
         assert_eq!(atyp, 0x01);
     }

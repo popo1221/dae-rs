@@ -252,10 +252,12 @@ impl TrojanHandler {
                 let domain_len = len_buf[0] as usize;
                 let mut domain_buf = vec![0u8; domain_len];
                 client.read_exact(&mut domain_buf).await?;
-                let domain = String::from_utf8(domain_buf).map_err(|_| TrojanError::Io(std::io::Error::new(
+                let domain = String::from_utf8(domain_buf).map_err(|_| {
+                    TrojanError::Io(std::io::Error::new(
                         std::io::ErrorKind::InvalidData,
                         "invalid domain in Trojan header",
-                    )))?;
+                    ))
+                })?;
                 TrojanTargetAddress::Domain(domain, 0) // 端口后续读取
             }
             0x03 => {
@@ -488,12 +490,12 @@ impl TrojanHandler {
                             let domain_len = len_buf[0] as usize;
                             let mut domain_buf = vec![0u8; domain_len];
                             client.read_exact(&mut domain_buf).await?;
-                            String::from_utf8(domain_buf).map_err(|_| TrojanError::Io(
-                                std::io::Error::new(
+                            String::from_utf8(domain_buf).map_err(|_| {
+                                TrojanError::Io(std::io::Error::new(
                                     std::io::ErrorKind::InvalidData,
                                     "invalid domain in Trojan UDP header",
-                                ),
-                            ))?
+                                ))
+                            })?
                         }
                         0x03 => {
                             // IPv6 - 16 字节
@@ -574,7 +576,8 @@ impl TrojanHandler {
                         Ok(Ok(m)) if m > 0 => {
                             // 构建响应帧并通过 TCP 发送回客户端
                             let builder = UdpFrameBuilder::new(0x01, uuid, port, atyp);
-                            let response_frame = builder.build_response(&target_addr, &response_buf[..m]);
+                            let response_frame =
+                                builder.build_response(&target_addr, &response_buf[..m]);
 
                             if let Err(e) = client.write_all(&response_frame).await {
                                 debug!("Failed to send UDP response to client: {}", e);

@@ -74,7 +74,9 @@ pub mod uri;
 
 pub use clash::{parse_clash_yaml, ClashProxy, ClashSubscription};
 pub use encoding::{parse_base64_subscription, parse_uri_list};
-pub use singbox::{parse_singbox_json, singbox_outbound_to_uri, SingBoxOutbound, SingBoxSubscription};
+pub use singbox::{
+    parse_singbox_json, singbox_outbound_to_uri, SingBoxOutbound, SingBoxSubscription,
+};
 pub use sip008::{parse_sip008_subscription, Sip008Server, Sip008Subscription};
 pub use uri::{uri_to_node_config, uris_to_node_configs, ProxyProtocol};
 

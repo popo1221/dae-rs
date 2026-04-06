@@ -9,8 +9,8 @@
 use base64::Engine;
 use serde::Deserialize;
 
-use super::{NodeConfig, SubscriptionError};
 pub use super::NodeType;
+use super::{NodeConfig, SubscriptionError};
 
 /// Proxy protocol types
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
