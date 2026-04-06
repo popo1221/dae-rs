@@ -84,7 +84,7 @@ mod tests {
             VmessTargetAddress::Ipv4(ip) => {
                 assert_eq!(ip, IpAddr::V4(Ipv4Addr::new(192, 168, 1, 1)));
             }
-            _ => panic!("Expected IPv4"),
+            _ => unreachable!(),
         }
         assert_eq!(port, 8080);
     }
@@ -105,7 +105,7 @@ mod tests {
             VmessTargetAddress::Domain(domain, _) => {
                 assert_eq!(domain, "example.com");
             }
-            _ => panic!("Expected Domain"),
+            _ => unreachable!(),
         }
         assert_eq!(port, 80);
     }
@@ -149,7 +149,7 @@ mod tests {
                     assert_eq!(ipv6.segments()[0], 0x2001);
                 }
             }
-            _ => panic!("Expected Ipv6"),
+            _ => unreachable!(),
         }
         assert_eq!(port, 80);
     }
@@ -221,7 +221,7 @@ mod tests {
                 assert_eq!(d1, d2);
                 assert_eq!(p1, p2);
             }
-            _ => panic!("Clone mismatch"),
+            _ => unreachable!(),
         }
     }
 
@@ -521,7 +521,7 @@ mod tests {
             (VmessTargetAddress::Ipv4(ip1), VmessTargetAddress::Ipv4(ip2)) => {
                 assert_eq!(ip1, ip2);
             }
-            _ => panic!("Type mismatch in roundtrip"),
+            _ => unreachable!(),
         }
         assert_eq!(port, 443);
     }
@@ -542,7 +542,7 @@ mod tests {
                 assert_eq!(d1, d2);
                 assert_eq!(p1, p2);
             }
-            _ => panic!("Type mismatch in roundtrip"),
+            _ => unreachable!(),
         }
         assert_eq!(port, 8443);
     }

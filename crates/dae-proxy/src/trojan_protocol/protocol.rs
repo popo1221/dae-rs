@@ -161,7 +161,7 @@ mod tests {
             TrojanTargetAddress::Ipv4(ip) => {
                 assert_eq!(ip, IpAddr::V4(Ipv4Addr::new(192, 168, 1, 1)));
             }
-            _ => panic!("Expected IPv4"),
+            _ => unreachable!(),
         }
         assert_eq!(port, 8080);
     }
@@ -182,7 +182,7 @@ mod tests {
             TrojanTargetAddress::Domain(domain, _) => {
                 assert_eq!(domain, "example.com");
             }
-            _ => panic!("Expected Domain"),
+            _ => unreachable!(),
         }
         assert_eq!(port, 80);
     }

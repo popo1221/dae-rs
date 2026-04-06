@@ -411,7 +411,7 @@ mod tests {
                 assert_eq!(ip, IpAddr::V4(Ipv4Addr::new(192, 168, 1, 1)));
                 assert_eq!(port, 8080);
             }
-            _ => panic!("Expected Ipv4"),
+            _ => unreachable!(),
         }
         assert_eq!(len, 7);
     }
@@ -431,7 +431,7 @@ mod tests {
                 assert_eq!(domain, "example.com");
                 assert_eq!(port, 80);
             }
-            _ => panic!("Expected Domain"),
+            _ => unreachable!(),
         }
         assert_eq!(len, 15); // 1 + 1 + 11 + 2
     }
@@ -452,7 +452,7 @@ mod tests {
                 );
                 assert_eq!(port, 80);
             }
-            _ => panic!("Expected Ipv6"),
+            _ => unreachable!(),
         }
         assert_eq!(len, 19);
     }
@@ -498,7 +498,7 @@ mod tests {
                 assert_eq!(domain, "example.com");
                 assert_eq!(port, 443);
             }
-            _ => panic!("Expected Domain"),
+            _ => unreachable!(),
         }
     }
 
