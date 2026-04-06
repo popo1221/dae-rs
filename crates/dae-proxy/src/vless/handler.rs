@@ -20,6 +20,10 @@ use crate::vless::protocol::{
     VlessAddressType, VlessCommand, VLESS_HEADER_MIN_SIZE, VLESS_VERSION,
 };
 use crate::vless::relay::relay_data;
+use crate::vless::tls::{
+    build_reality_client_hello,
+    MAX_UDP_SIZE, MIN_UDP_HEADER_SIZE,
+};
 
 /// VLESS handler that implements the Handler trait
 pub struct VlessHandler {
@@ -176,7 +180,6 @@ impl VlessHandler {
     /// This is the entry point when VLESS server listens on a UDP port
     /// and receives VLESS UDP packets directly from clients.
     pub async fn handle_udp(self: Arc<Self>, client: Arc<UdpSocket>) -> std::io::Result<()> {
-        const MAX_UDP_SIZE: usize = 65535;
         let mut buf = vec![0u8; MAX_UDP_SIZE];
 
         let local_addr = client.local_addr().unwrap_or_else(|e| {
@@ -191,10 +194,7 @@ impl VlessHandler {
         loop {
             let (n, client_addr) = client.recv_from(&mut buf).await?;
 
-            // Minimum header size: v1(1) + uuid(16) + ver(1) + cmd(1) + port(4) + atyp(1) + iv(16) = 40
-            const MIN_HEADER_SIZE: usize = 40;
-
-            if n < MIN_HEADER_SIZE {
+            if n < MIN_UDP_HEADER_SIZE {
                 debug!(
                     "VLESS UDP: packet too small from {}: {} bytes",
                     client_addr, n
@@ -487,7 +487,7 @@ impl VlessHandler {
         // Step 4: Build TLS ClientHello with Reality chrome
         let destination = &reality_config.destination;
         let client_hello =
-            self.build_reality_client_hello(&client_public, &request, destination)?;
+            build_reality_client_hello(&client_public, &request, destination)?;
 
         // Step 5: Connect to server and send ClientHello
         let remote_addr = format!("{}:{}", self.config.server.addr, self.config.server.port);
@@ -523,258 +523,6 @@ impl VlessHandler {
         // A full implementation would parse the server's response to get
         // the real destination address from the server's ServerHello
         relay_data(client, remote).await
-    }
-
-    /// Build a TLS ClientHello with Reality chrome extension
-    fn build_reality_client_hello(
-        &self,
-        client_public: &[u8; 32],
-        request: &[u8; 48],
-        destination: &str,
-    ) -> std::io::Result<Vec<u8>> {
-        let mut client_hello = Vec::new();
-
-        // TLS Record Layer: Handshake (0x16)
-        client_hello.push(0x16);
-
-        // TLS Version TLS 1.3 (0x0303)
-        client_hello.push(0x03);
-        client_hello.push(0x03);
-
-        // Handshake payload placeholder
-        let payload_start = client_hello.len();
-        client_hello.push(0x00); // length placeholder
-        client_hello.push(0x00);
-        client_hello.push(0x00);
-
-        // Handshake type: ClientHello (0x01)
-        client_hello.push(0x01);
-
-        // Handshake length (placeholder, will update later)
-        let handshake_len_pos = client_hello.len();
-        client_hello.push(0x00);
-        client_hello.push(0x00);
-        client_hello.push(0x00);
-
-        // ClientVersion TLS 1.3 (0x0303)
-        client_hello.push(0x03);
-        client_hello.push(0x03);
-
-        // Random (32 bytes)
-        let random: [u8; 32] = rand::random();
-        client_hello.extend_from_slice(&random);
-
-        // Session ID (empty)
-        client_hello.push(0x00);
-
-        // Cipher suites - TLS 1.3 suites
-        let cipher_suites: Vec<u16> = vec![
-            0x1301, // TLS_AES_128_GCM_SHA256
-            0x1302, // TLS_AES_256_GCM_SHA384
-            0x1303, // TLS_CHACHA20_POLY1305_SHA256
-        ];
-        client_hello.push((cipher_suites.len() * 2) as u8);
-        for cs in cipher_suites {
-            client_hello.push((cs >> 8) as u8);
-            client_hello.push((cs & 0xff) as u8);
-        }
-
-        // Compression methods (null only)
-        client_hello.push(0x01);
-        client_hello.push(0x00);
-
-        // Extensions length placeholder
-        let extensions_start = client_hello.len();
-        client_hello.push(0x00);
-        client_hello.push(0x00);
-
-        // Add SNI extension (server_name)
-        self.add_sni_extension(&mut client_hello, destination)?;
-
-        // Add ALPN extension
-        self.add_alpn_extension(&mut client_hello)?;
-
-        // Add supported_versions extension (TLS 1.3)
-        self.add_supported_versions_extension(&mut client_hello)?;
-
-        // Add psk_key_exchange_modes extension
-        self.add_psk_modes_extension(&mut client_hello)?;
-
-        // Add key_share extension with Reality chrome
-        self.add_reality_key_share(&mut client_hello, client_public, request)?;
-
-        // Update extensions length
-        let ext_len = client_hello.len() - extensions_start - 2;
-        client_hello[extensions_start] = (ext_len >> 8) as u8;
-        client_hello[extensions_start + 1] = (ext_len & 0xff) as u8;
-
-        // Update handshake length
-        let handshake_len = client_hello.len() - handshake_len_pos - 3;
-        client_hello[handshake_len_pos] = (handshake_len >> 16) as u8;
-        client_hello[handshake_len_pos + 1] = (handshake_len >> 8) as u8;
-        client_hello[handshake_len_pos + 2] = (handshake_len & 0xff) as u8;
-
-        // Update record layer length
-        let record_len = client_hello.len() - payload_start - 3 + 4; // +4 for record header
-        client_hello[payload_start] = (record_len >> 8) as u8;
-        client_hello[payload_start + 1] = (record_len & 0xff) as u8;
-        client_hello[payload_start + 2] = (record_len & 0xff) as u8;
-
-        Ok(client_hello)
-    }
-
-    fn add_sni_extension(&self, buffer: &mut Vec<u8>, destination: &str) -> std::io::Result<()> {
-        // Extension type: server_name (0x0000)
-        buffer.push(0x00);
-        buffer.push(0x00);
-
-        // Extension data length
-        let len_pos = buffer.len();
-        buffer.push(0x00);
-        buffer.push(0x00);
-
-        // ServerNameList length
-        buffer.push(0x00);
-
-        // ServerName type: host_name (0x00)
-        buffer.push(0x00);
-
-        // ServerName length
-        let name_bytes = destination.as_bytes();
-        buffer.push((name_bytes.len() >> 8) as u8);
-        buffer.push((name_bytes.len() & 0xff) as u8);
-
-        // ServerName
-        buffer.extend_from_slice(name_bytes);
-
-        // Update extension length
-        let ext_data_len = buffer.len() - len_pos - 2;
-        buffer[len_pos] = (ext_data_len >> 8) as u8;
-        buffer[len_pos + 1] = (ext_data_len & 0xff) as u8;
-
-        Ok(())
-    }
-
-    fn add_alpn_extension(&self, buffer: &mut Vec<u8>) -> std::io::Result<()> {
-        // Extension type: application_layer_protocol_negotiation (0x0010)
-        buffer.push(0x00);
-        buffer.push(0x10);
-
-        // Extension data length
-        let len_pos = buffer.len();
-        buffer.push(0x00);
-        buffer.push(0x00);
-
-        // Protocol name list length
-        let list_start = buffer.len();
-        buffer.push(0x00);
-        buffer.push(0x00);
-
-        let alpn_list = ["h2", "http/1.1"];
-        for alpn in &alpn_list {
-            buffer.push(alpn.len() as u8);
-            buffer.extend_from_slice(alpn.as_bytes());
-        }
-
-        // Update list length
-        let list_len = buffer.len() - list_start - 2;
-        buffer[list_start] = (list_len >> 8) as u8;
-        buffer[list_start + 1] = (list_len & 0xff) as u8;
-
-        // Update extension length
-        let ext_data_len = buffer.len() - len_pos - 2;
-        buffer[len_pos] = (ext_data_len >> 8) as u8;
-        buffer[len_pos + 1] = (ext_data_len & 0xff) as u8;
-
-        Ok(())
-    }
-
-    fn add_supported_versions_extension(&self, buffer: &mut Vec<u8>) -> std::io::Result<()> {
-        // Extension type: supported_versions (0x002b)
-        buffer.push(0x00);
-        buffer.push(0x2b);
-
-        // Extension data length
-        buffer.push(0x02);
-
-        // Client: supported version TLS 1.3
-        buffer.push(0x03);
-        buffer.push(0x03);
-
-        Ok(())
-    }
-
-    fn add_psk_modes_extension(&self, buffer: &mut Vec<u8>) -> std::io::Result<()> {
-        // Extension type: psk_key_exchange_modes (0x002d)
-        buffer.push(0x00);
-        buffer.push(0x2d);
-
-        // Extension data length
-        buffer.push(0x02);
-
-        // PSK modes: psk_dhe_ke (0x01)
-        buffer.push(0x01);
-        buffer.push(0x01);
-
-        Ok(())
-    }
-
-    fn add_reality_key_share(
-        &self,
-        buffer: &mut Vec<u8>,
-        client_public: &[u8; 32],
-        _request: &[u8; 48],
-    ) -> std::io::Result<()> {
-        // Extension type: key_share (0x0033)
-        buffer.push(0x00);
-        buffer.push(0x33);
-
-        // Extension data length (placeholder)
-        let len_pos = buffer.len();
-        buffer.push(0x00);
-        buffer.push(0x00);
-
-        // Key share entry length
-        let entry_len_pos = buffer.len();
-        buffer.push(0x00);
-        buffer.push(0x00);
-
-        // Key share entry:
-        // - 2 bytes: named group (x25519 = 0x001d)
-        buffer.push(0x00);
-        buffer.push(0x1d);
-
-        // - 1 byte: key exchange length (32 bytes)
-        buffer.push(0x20);
-
-        // - 32 bytes: key exchange value (client public)
-        buffer.extend_from_slice(client_public);
-
-        // Update key share entry length
-        let entry_len = buffer.len() - entry_len_pos - 2;
-        buffer[entry_len_pos] = (entry_len >> 8) as u8;
-        buffer[entry_len_pos + 1] = (entry_len & 0xff) as u8;
-
-        // Update extension length
-        let ext_data_len = buffer.len() - len_pos - 2;
-        buffer[len_pos] = (ext_data_len >> 8) as u8;
-        buffer[len_pos + 1] = (ext_data_len & 0xff) as u8;
-
-        // Add secondary key share for Reality request
-        // This is the "chrome" payload that contains the VLESS request
-        //
-        // Reality uses a special format:
-        // - First extension: key_share with X25519 public key
-        // - The "chrome" is encoded in a subsequent handshake message or
-        //   as part of the key derivation
-        //
-        // For VLESS Reality Vision, the request (48 bytes) is sent
-        // as the first bytes after the key exchange
-        //
-        // Note: The actual Reality implementation may encode the request
-        // differently. This is a simplified implementation.
-
-        Ok(())
     }
 
     /// Parse target address from VLESS header

@@ -33,6 +33,7 @@ pub mod handler;
 pub mod protocol;
 pub mod relay;
 pub mod server;
+pub mod tls;
 
 // Re-export commonly used types
 pub use config::{VlessClientConfig, VlessRealityConfig, VlessServerConfig, VlessTlsConfig};

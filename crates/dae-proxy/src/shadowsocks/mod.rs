@@ -31,3 +31,4 @@ pub mod protocol;
 pub mod relay;
 pub mod server;
 pub mod ssr;
+pub mod ssr_types;

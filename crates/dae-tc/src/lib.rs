@@ -70,11 +70,13 @@ use dae_ebpf_common::{
     action, state, ConfigEntry, DnsMapEntry, RoutingEntry, SessionEntry, SessionKey, StatsEntry,
 };
 
+mod constants;
 mod maps;
 mod packet;
 
 use maps::idx;
 use packet::*;
+use crate::constants::{ethertype, ip_proto};
 
 /// 全局配置 Map
 ///
