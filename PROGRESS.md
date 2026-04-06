@@ -12,6 +12,7 @@ Review dae-rs after Phase 1-3 fixes. Verify changes and find remaining issues.
 ## Fix Tasks (from review)
 
 - [x] ralph-fix-lazy: dae-api LazyLock MSRV issue ✅
+- [x] ralph-fix-trivy: Trivy exit-code '0' → '1' ✅
 - [ ] ralph-fix-tuic: tuic unused import + dead field
 - [ ] ralph-fix-hysteria: hysteria2 dead code
 - [ ] ralph-fix-doc: dae-proxy doc indent
