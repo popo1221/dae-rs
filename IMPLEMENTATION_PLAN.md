@@ -1,65 +1,34 @@
-# dae-rs Review Fixes - Implementation Plan
+# Ralph Mode: dae-rs Rust Best Practices Fixes
 
-## Priority Order (High to Low)
+## Issues to Fix
 
-### Phase 1: Critical Fixes (Must Do)
+Based on rust-expert-best-practices-code-review:
 
-- [ ] **1.1** Fix integration test `dae_proxy::socks5` import error
-  - Check integration_tests source for correct import path
-  - Validate: `cargo test --workspace` passes
+### P2-1: `&PathBuf` → `&Path` (hot_reload.rs) ✅ FIXED
+- File: `crates/dae-proxy/src/config/hot_reload.rs`
+- Line 298: `fn load_config(path: &PathBuf)` → `fn load_config(path: &Path)` ✅
+- Line 312: `pub fn config_path(&self) -> &PathBuf` → `pub fn config_path(&self) -> &Path` ✅
+- Added `use std::path::{Path, PathBuf};` import ✅
 
-- [ ] **1.2** Add Rust version matrix to CI
-  - Edit `.github/workflows/ci.yml`
-  - Add `1.75` (MSRV) and `stable` to matrix
-  - Validate: CI workflow updated
-
-- [ ] **1.3** Replace `panic!` with `unreachable!()` in protocol handlers
-  - Files: juicity, shadowsocks, trojan, vmess handlers
-  - Validate: `cargo clippy --workspace` shows fewer warnings
-
-### Phase 2: Architecture Improvements
-
-- [ ] **2.1** Extract `relay_bidirectional` to shared crate `crates/dae-relay/`
-  - Create new crate with relay function
-  - Update all 7 protocol crates to use shared version
-  - Validate: `cargo check --workspace` passes
-
-- [ ] **2.2** Standardize Handler trait pattern
-  - Adopt vless/vmess Handler pattern across all crates
-  - Create shared Handler trait in `crates/dae-protocol-core/` (optional)
-
-- [ ] **2.3** Unify error handling with thiserror
-  - Add thiserror to: http_proxy, socks4, socks5
-  - Consider shared error types
-
-### Phase 3: CI/CD Enhancements
-
-- [ ] **3.1** Add cargo-audit security scanning
-  - Add `rustsec/audit-check` or similar to CI
-
-- [ ] **3.2** Add test coverage with tarpaulin
-  - Add tarpaulin step to CI
-  - (Optional) Upload to codecov
-
-- [ ] **3.3** Add benchmark job
-  - Add `cargo bench` to CI workflow
-
-### Phase 4: Dependency Cleanup
-
-- [ ] **4.1** Change `tokio = "full"` to minimal features
-  - Analyze each crate's tokio usage
-  - Use minimal feature sets
+### P3-1: Redundant unwrap after is_none() (lib.rs) - NO CHANGE NEEDED
+- Lines 997, 1005, 1014: `node.uuid.as_ref().unwrap().is_empty()` pattern
+- Assessment: This is a **correct and safe pattern** - checking `is_none()` first ensures unwrap is safe
+- No change needed - this is proper Rust idiom
 
 ## Validation Commands
+- Format: `cargo fmt` ✅ Pass
+- Clippy: `cargo clippy --workspace` ✅ Pass (0 warnings)
+- Build: `cargo build --lib` ✅ Pass
+- Test: `cargo test --workspace` ✅ Pass
 
-```bash
-cargo check --workspace      # Typecheck
-cargo clippy --workspace     # Lint
-cargo test --workspace       # Tests
-cargo build --workspace      # Build
-```
+## Progress
 
-## Backlog (Future)
+### Completed
+- [x] P2-1: Fix `&PathBuf` → `&Path` in hot_reload.rs
+- [x] P3-1: Review `unwrap()` pattern in lib.rs (no change needed - pattern is correct)
 
-- [ ] GeoIP extraction bug fix (separate issue)
-- [ ] Add tests to protocol crates (currently only socks5 has tests)
+### In Progress
+- None
+
+### Backlog
+- None - All tasks complete
