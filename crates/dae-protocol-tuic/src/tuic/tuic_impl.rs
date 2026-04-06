@@ -15,9 +15,12 @@ use std::collections::HashMap;
 use std::net::SocketAddr;
 use std::sync::Arc;
 
+use async_trait::async_trait;
 use tokio::net::{TcpListener, TcpStream};
 use tokio::sync::RwLock;
 use tracing::{debug, error, info, warn};
+
+use dae_protocol_core::{Handler, HandlerConfig, ProtocolType};
 
 /// 上下文类型（占位符）
 ///
@@ -673,6 +676,32 @@ impl TuicHandler {
         Ok(())
     }
 }
+
+/// 实现 Handler trait for TuicHandler
+#[async_trait]
+impl Handler for TuicHandler {
+    type Config = TuicConfig;
+
+    fn name(&self) -> &'static str {
+        "tuic"
+    }
+
+    fn protocol(&self) -> ProtocolType {
+        ProtocolType::Tuic
+    }
+
+    fn config(&self) -> &Self::Config {
+        &self.config
+    }
+
+    async fn handle(self: Arc<Self>, _stream: TcpStream) -> std::io::Result<()> {
+        // TUIC uses QUIC, not raw TCP
+        Ok(())
+    }
+}
+
+/// TuicConfig 实现 HandlerConfig trait
+impl HandlerConfig for TuicConfig {}
 
 #[cfg(test)]
 mod tests {
