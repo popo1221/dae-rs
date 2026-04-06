@@ -58,6 +58,17 @@
 //! - `vless://uuid@server:port`
 //! - `trojan://password@server:port`
 
+// NOTE: This module is intentionally kept as a single file due to complex
+// interdependencies. The stub files below indicate planned future extraction
+// but are not yet implemented. See subscription_REFACTORING_PLAN.md for details.
+//
+// Planned modules (not yet implemented):
+// mod sip008;    // SIP008 format parsing
+// mod clash;     // Clash YAML parsing
+// mod singbox;   // Sing-Box JSON parsing
+// mod uri;       // URI parsing (ss://, vmess://, vless://, trojan://)
+// mod encoding;  // Base64 encoding/decoding
+
 use base64::Engine;
 use serde::{Deserialize, Serialize};
 use std::time::Duration;
