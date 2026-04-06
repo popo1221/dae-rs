@@ -28,6 +28,9 @@
 | ralph-fix-docs | Fix doc warnings | 🔄 |
 
 ## Progress
-- [ ] panic! → unreachable!() (15+ locations)
-- [ ] DNS failure handling
-- [ ] Doc warnings
+- [x] panic! → unreachable!() (15 locations) - `ec6688a`
+- [x] DNS failure handling - `ec3cf96`
+- [x] Doc warnings - `aad6634`
+
+## Verification
+- ✅ `cargo clippy --all` → 0 errors
