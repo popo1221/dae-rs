@@ -2,8 +2,8 @@
 //!
 //! Helper functions for retrieving metrics from Prometheus counters.
 
-use crate::metrics::{BYTES_RECEIVED_COUNTER, BYTES_SENT_COUNTER, CONNECTION_COUNTER};
 use crate::control_types::LegacyOverallStats;
+use crate::metrics::{BYTES_RECEIVED_COUNTER, BYTES_SENT_COUNTER, CONNECTION_COUNTER};
 
 /// Get overall stats from Prometheus metrics (fallback when no tracking store)
 pub fn get_overall_from_metrics() -> LegacyOverallStats {

@@ -19,10 +19,10 @@ mod constants;
 use super::Transport;
 use async_trait::async_trait;
 use bytes::{BufMut, Bytes, BytesMut};
-use constants::headers as hdr;
 use constants::frame_flag as ff;
 use constants::frame_type as ft;
-use constants::settings as settings;
+use constants::headers as hdr;
+use constants::settings;
 use std::fmt::Debug;
 use std::io::{Error as IoError, ErrorKind, Result as IoResult};
 use std::time::Duration;
@@ -158,7 +158,11 @@ impl GrpcTransport {
         header_block.extend_from_slice(hdr::METHOD);
 
         // :scheme
-        header_block.extend_from_slice(if config.tls { hdr::SCHEME_HTTPS } else { hdr::SCHEME_HTTP });
+        header_block.extend_from_slice(if config.tls {
+            hdr::SCHEME_HTTPS
+        } else {
+            hdr::SCHEME_HTTP
+        });
 
         // :path
         header_block.extend_from_slice(hdr::PATH);
@@ -236,15 +240,15 @@ impl GrpcTransport {
     /// Send HTTP/2 connection preface and initial settings
     async fn send_http2_preface<S: AsyncWriteExt + Unpin>(&self, stream: &mut S) -> IoResult<()> {
         // HTTP/2 connection preface
-        stream
-            .write_all(constants::HTTP2_PREFACE)
-            .await?;
+        stream.write_all(constants::HTTP2_PREFACE).await?;
 
         // SETTINGS frame (empty, with ACK)
         stream.write_all(&Self::build_settings_frame()).await?;
 
         // WINDOW_UPDATE for connection
-        stream.write_all(&Self::build_window_update(settings::CONNECTION_WINDOW_SIZE)).await?;
+        stream
+            .write_all(&Self::build_window_update(settings::CONNECTION_WINDOW_SIZE))
+            .await?;
 
         stream.flush().await?;
         Ok(())

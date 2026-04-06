@@ -5,10 +5,10 @@
 //!
 //! The control socket is typically at /var/run/dae/control.sock
 
-use crate::control_metrics::{get_bytes_received_total, get_bytes_sent_total, get_overall_from_metrics};
-use crate::control_types::{
-    ConfigState, ControlResponse, NodeTestResult, ProxyStats, ProxyStatus,
+use crate::control_metrics::{
+    get_bytes_received_total, get_bytes_sent_total, get_overall_from_metrics,
 };
+use crate::control_types::{ConfigState, ControlResponse, NodeTestResult, ProxyStats, ProxyStatus};
 use crate::metrics::{
     inc_node_latency_test, ACTIVE_TCP_CONNECTIONS_GAUGE, ACTIVE_UDP_CONNECTIONS_GAUGE,
     CONNECTION_COUNTER,

@@ -3,12 +3,12 @@
 //! This module provides comprehensive tracking data structures for
 //! connection-level, node-level, rule-level, and protocol-level statistics.
 
+#[allow(ambiguous_glob_reexports)]
+pub use crate::tracking::constants::*;
 /// Re-exported tracking types from submodules
 #[allow(ambiguous_glob_reexports)]
 pub use crate::tracking::maps::*;
 pub use crate::tracking::store::*;
-#[allow(ambiguous_glob_reexports)]
-pub use crate::tracking::constants::*;
 #[allow(ambiguous_glob_reexports)]
 pub use crate::tracking::types::*;
 

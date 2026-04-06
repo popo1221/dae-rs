@@ -34,9 +34,7 @@ pub use dae_protocol_vless as vless;
 pub use dae_protocol_vmess as vmess;
 
 // Control plane types (local module)
-pub use crate::control::{
-    connect_and_get_status, connect_and_send, ControlServer, ControlState,
-};
+pub use crate::control::{connect_and_get_status, connect_and_send, ControlServer, ControlState};
 pub use crate::control_types::{
     ControlCommand, ControlResponse, NodeTestResult, ProxyStats, ProxyStatus,
 };

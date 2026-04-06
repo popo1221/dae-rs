@@ -19,7 +19,6 @@
 //! # 模块结构
 //! - [`simple_handler`] - 已废弃，提供不含 Debug bound 的简单 Handler
 //! - [`unified_handler`] - 规范 Handler trait，功能完整
-//! - 协议实现: http, shadowsocks, socks5, vless
 
 use crate::core::{Context, Result as ProxyResult};
 use async_trait::async_trait;
@@ -137,12 +136,8 @@ pub use simple_handler::{
     HandlerStats as SimpleHandlerStats, HandlerStatsExt as SimpleHandlerStatsExt,
 };
 
-// Protocol submodules for future expansion
-pub mod http;
+// Protocol submodules
 pub mod relay;
-pub mod shadowsocks;
-pub mod socks5;
-pub mod vless;
 
 #[cfg(test)]
 mod tests {

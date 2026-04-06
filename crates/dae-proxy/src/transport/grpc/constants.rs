@@ -46,23 +46,33 @@ pub mod headers {
         0x83, 0x84, 0x07, b':', b'm', b'e', b't', b'h', b'o', b'd', 0x04, b'P', b'O', b'S', b'T',
     ];
     /// :scheme = https (indexed, never indexed name)
-    pub const SCHEME_HTTPS: &[u8] = &[0x85, 0x8e, 0x07, b':', b's', b'c', b'h', b'e', b'm', b'e', 0x05, b'h', b't', b't', b'p', b's'];
+    pub const SCHEME_HTTPS: &[u8] = &[
+        0x85, 0x8e, 0x07, b':', b's', b'c', b'h', b'e', b'm', b'e', 0x05, b'h', b't', b't', b'p',
+        b's',
+    ];
     /// :scheme = http (indexed, never indexed name)
-    pub const SCHEME_HTTP: &[u8] = &[0x85, 0x8e, 0x07, b':', b's', b'c', b'h', b'e', b'm', b'e', 0x04, b'h', b't', b't', b'p'];
+    pub const SCHEME_HTTP: &[u8] = &[
+        0x85, 0x8e, 0x07, b':', b's', b'c', b'h', b'e', b'm', b'e', 0x04, b'h', b't', b't', b'p',
+    ];
     /// :path header (indexed, never indexed name)
     pub const PATH: &[u8] = &[0x85, 0x8e, 0x05, b':', b'p', b'a', b't', b'h'];
     /// :authority header (indexed, never indexed name)
-    pub const AUTHORITY: &[u8] = &[0x85, 0x8e, 0x0a, b':', b'a', b'u', b't', b'h', b'o', b'r', b'i', b't', b'y'];
+    pub const AUTHORITY: &[u8] = &[
+        0x85, 0x8e, 0x0a, b':', b'a', b'u', b't', b'h', b'o', b'r', b'i', b't', b'y',
+    ];
     /// content-type = application/grpc (indexed, never indexed name)
     pub const CONTENT_TYPE: &[u8] = &[
         0x87, 0x92, 0x0c, b'c', b'o', b'n', b't', b'e', b'n', b't', b'-', b't', b'y', b'p', b'e',
-        0x10, b'a', b'p', b'p', b'l', b'i', b'c', b'a', b't', b'i', b'o', b'n', b'/', b'g', b'r', b'p', b'c',
+        0x10, b'a', b'p', b'p', b'l', b'i', b'c', b'a', b't', b'i', b'o', b'n', b'/', b'g', b'r',
+        b'p', b'c',
     ];
     /// te = trailers (indexed, never indexed name)
-    pub const TE: &[u8] = &[0x82, 0x87, 0x02, b't', b'e', 0x07, b't', b'r', b'a', b'i', b'l', b'e', b'r', b's'];
+    pub const TE: &[u8] = &[
+        0x82, 0x87, 0x02, b't', b'e', 0x07, b't', b'r', b'a', b'i', b'l', b'e', b'r', b's',
+    ];
     /// user-agent = dae-rs/grpc (indexed, never indexed name)
     pub const USER_AGENT: &[u8] = &[
-        0x83, 0x89, 0x0a, b'u', b's', b'e', b'r', b'-', b'a', b'g', b'e', b'n', b't',
-        0x08, b'd', b'a', b'e', b'-', b'r', b's', b'/', b'g', b'r', b'p', b'c',
+        0x83, 0x89, 0x0a, b'u', b's', b'e', b'r', b'-', b'a', b'g', b'e', b'n', b't', 0x08, b'd',
+        b'a', b'e', b'-', b'r', b's', b'/', b'g', b'r', b'p', b'c',
     ];
 }

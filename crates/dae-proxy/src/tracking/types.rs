@@ -3,8 +3,8 @@
 //! Core data structures for connection, node, rule, and protocol tracking.
 
 pub use crate::tracking::constants::{
-    ConnectionState, LatencySample, NodeStatus, Protocol, RuleAction, RuleType,
-    current_epoch_ms, event_type,
+    current_epoch_ms, event_type, ConnectionState, LatencySample, NodeStatus, Protocol, RuleAction,
+    RuleType,
 };
 
 /// Connection tracking key (5-tuple)
@@ -533,9 +533,7 @@ impl Default for TrackingMetrics {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::tracking::constants::{
-        Protocol, RuleAction, RuleType, current_epoch_ms,
-    };
+    use crate::tracking::constants::{current_epoch_ms, Protocol, RuleAction, RuleType};
 
     #[test]
     fn test_connection_key() {
