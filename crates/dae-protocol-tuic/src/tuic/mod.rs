@@ -8,17 +8,19 @@
 //! - 断开连接 (Disconnect)
 //! - 心跳 (Heartbeat)
 //! - UDP 数据包 (UdpPacket)
-//!
-//! # 子模块
-//!
-//! - `codec`: TUIC 协议消息的编解码器
-//! - `tuic_impl`: TUIC 协议核心实现
 
 pub mod codec;
+pub mod consts;
+pub mod server;
+pub mod client;
 pub mod tuic_impl;
 
 // Re-exports for convenience
 pub use codec::TuicCodec;
-pub use tuic_impl::{
-    TuicClient, TuicCommand, TuicCommandType, TuicConfig, TuicError, TuicHandler, TuicServer,
+pub use consts::{
+    Context, ProxyResult, TuicCommand, TuicCommandType, TuicError, TUIC_VERSION,
+    TuicAuthRequest, TuicConnectRequest, TuicHeartbeatRequest,
 };
+pub use server::{TuicServer, TuicSession};
+pub use client::{TuicClient, TuicClientSession};
+pub use tuic_impl::{TuicConfig, TuicHandler};

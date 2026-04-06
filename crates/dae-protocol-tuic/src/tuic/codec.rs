@@ -19,7 +19,7 @@
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use tracing::debug;
 
-use super::tuic_impl::{
+use super::consts::{
     TuicAuthRequest, TuicCommand, TuicCommandType, TuicConnectRequest, TuicError,
     TuicHeartbeatRequest, TUIC_VERSION,
 };
@@ -395,7 +395,7 @@ impl TuicCodec {
                 let parts: Vec<u8> = request
                     .host
                     .split('.')
-                    .filter_map(|s| s.parse().ok())
+                    .filter_map(|s| s.parse::<u8>().ok())
                     .collect();
                 if parts.len() != 4 {
                     return Err(TuicError::InvalidProtocol("Invalid IPv4".to_string()));
