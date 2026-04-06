@@ -14,9 +14,15 @@
 //! - Message framing: 1-byte length prefix (MSB=1 indicates compressed)
 //! - :path header contains service and method
 
+mod constants;
+
 use super::Transport;
 use async_trait::async_trait;
 use bytes::{BufMut, Bytes, BytesMut};
+use constants::headers as hdr;
+use constants::frame_flag as ff;
+use constants::frame_type as ft;
+use constants::settings as settings;
 use std::fmt::Debug;
 use std::io::{Error as IoError, ErrorKind, Result as IoResult};
 use std::time::Duration;
@@ -129,10 +135,10 @@ impl GrpcTransport {
         buf.put_u8(0);
         buf.put_u8(0);
         buf.put_u8(0);
-        // Type: SETTINGS (0x4)
-        buf.put_u8(0x4);
-        // Flags: ACK (0x1)
-        buf.put_u8(0x1);
+        // Type: SETTINGS
+        buf.put_u8(ft::SETTINGS);
+        // Flags: ACK
+        buf.put_u8(ff::ACK);
         // Stream ID: 0
         buf.put_u32(0);
         Bytes::from(buf)
@@ -145,54 +151,34 @@ impl GrpcTransport {
         // Build pseudo-headers (must come before regular headers)
         let host = &config.host;
         let path = config.path();
-        let _scheme = if config.tls { "https" } else { "http" };
-
-        // Calculate the header block size
-        // :method: POST
-        // :scheme: https/http
-        // :path: /service/method
-        // :authority: host:port
-        // content-type: application/grpc
-        // te: trailers
-        // user-agent: dae-rs
 
         let mut header_block = Vec::new();
 
         // :method = POST
-        header_block.extend_from_slice(b"\x83\x84\x07:method");
-        header_block.push(0); // never indexed
-        header_block.extend_from_slice(b"\x04POST");
+        header_block.extend_from_slice(hdr::METHOD);
 
         // :scheme
-        header_block.extend_from_slice(b"\x85\x8e\x07:scheme");
-        header_block.push(0);
-        header_block.extend_from_slice(if config.tls { b"https" } else { b"http" });
+        header_block.extend_from_slice(if config.tls { hdr::SCHEME_HTTPS } else { hdr::SCHEME_HTTP });
 
         // :path
-        header_block.extend_from_slice(b"\x85\x8e\x05:path");
-        header_block.push(0);
+        header_block.extend_from_slice(hdr::PATH);
+        header_block.push(0); // never indexed
         header_block.extend_from_slice(path.as_bytes());
 
         // :authority (host:port)
-        header_block.extend_from_slice(b"\x85\x8e\x0a:authority");
+        header_block.extend_from_slice(hdr::AUTHORITY);
         header_block.push(0);
         let authority = format!("{}:{}", host, config.port);
         header_block.extend_from_slice(authority.as_bytes());
 
         // content-type = application/grpc
-        header_block.extend_from_slice(b"\x87\x92\x0ccontent-type");
-        header_block.push(0);
-        header_block.extend_from_slice(b"application/grpc");
+        header_block.extend_from_slice(hdr::CONTENT_TYPE);
 
         // te = trailers
-        header_block.extend_from_slice(b"\x82\x87\x02te");
-        header_block.push(0);
-        header_block.extend_from_slice(b"trailers");
+        header_block.extend_from_slice(hdr::TE);
 
         // user-agent
-        header_block.extend_from_slice(b"\x83\x89\nuser-agent");
-        header_block.push(0);
-        header_block.extend_from_slice(b"dae-rs/grpc");
+        header_block.extend_from_slice(hdr::USER_AGENT);
 
         // Headers frame
         let length = header_block.len();
@@ -201,8 +187,8 @@ impl GrpcTransport {
         frame.put_u8(((length >> 16) & 0xFF) as u8);
         frame.put_u8(((length >> 8) & 0xFF) as u8);
         frame.put_u8((length & 0xFF) as u8);
-        frame.put_u8(0x1); // HEADERS
-        frame.put_u8(0x4 | 0x1); // END_HEADERS | END_STREAM (no body)
+        frame.put_u8(ft::HEADERS);
+        frame.put_u8(ff::END_HEADERS | ff::END_STREAM);
         frame.put_u32(stream_id | 0x80000000); // Reserved bit set
         frame.put(&*header_block);
 
@@ -225,8 +211,8 @@ impl GrpcTransport {
         buf.put_u8(((length >> 16) & 0xFF) as u8);
         buf.put_u8(((length >> 8) & 0xFF) as u8);
         buf.put_u8((length & 0xFF) as u8);
-        buf.put_u8(0x0); // DATA
-        let flags = if is_last { 0x1 } else { 0x0 }; // END_STREAM
+        buf.put_u8(ft::DATA);
+        let flags = if is_last { ff::END_STREAM } else { ff::NONE };
         buf.put_u8(flags);
         buf.put_u32(stream_id | 0x80000000); // Reserved bit set
         buf.put(&*grpc_payload);
@@ -240,8 +226,8 @@ impl GrpcTransport {
         buf.put_u8(0);
         buf.put_u8(0);
         buf.put_u8(4); // Length: 4
-        buf.put_u8(0x9); // WINDOW_UPDATE
-        buf.put_u8(0x0); // Flags
+        buf.put_u8(ft::WINDOW_UPDATE);
+        buf.put_u8(ff::NONE);
         buf.put_u32(0); // Stream ID: 0 (connection level)
         buf.put_u32(frame_size | 0x80000000); // Increment (reserved bit set)
         Bytes::from(buf)
@@ -249,16 +235,16 @@ impl GrpcTransport {
 
     /// Send HTTP/2 connection preface and initial settings
     async fn send_http2_preface<S: AsyncWriteExt + Unpin>(&self, stream: &mut S) -> IoResult<()> {
-        // HTTP/2 connection preface: "PRI * HTTP/2.0\r\n\r\nSM\r\n\r\n"
+        // HTTP/2 connection preface
         stream
-            .write_all(b"PRI * HTTP/2.0\r\n\r\nSM\r\n\r\n")
+            .write_all(constants::HTTP2_PREFACE)
             .await?;
 
-        // SETTINGS frame (empty, with ACK flag)
+        // SETTINGS frame (empty, with ACK)
         stream.write_all(&Self::build_settings_frame()).await?;
 
         // WINDOW_UPDATE for connection
-        stream.write_all(&Self::build_window_update(65535)).await?;
+        stream.write_all(&Self::build_window_update(settings::CONNECTION_WINDOW_SIZE)).await?;
 
         stream.flush().await?;
         Ok(())
@@ -298,7 +284,7 @@ impl GrpcTransport {
         // Modify flags to ACK (0x1)
         let mut ack_bytes = ack_frame.as_ref().to_vec();
         if ack_bytes.len() > 5 {
-            ack_bytes[4] = 0x1;
+            ack_bytes[4] = ff::ACK;
         }
         writer.write_all(&ack_bytes).await?;
         writer.flush().await?;
@@ -438,7 +424,7 @@ mod tests {
 
         // We can't easily test the full dial without a server
         // But we can verify the preface format
-        let preface = b"PRI * HTTP/2.0\r\n\r\nSM\r\n\r\n";
+        let preface = constants::HTTP2_PREFACE;
         assert_eq!(preface.len(), 24);
     }
 
@@ -447,8 +433,8 @@ mod tests {
         let frame = GrpcTransport::build_settings_frame();
         // SETTINGS frame with ACK: length=0, type=0x4, flags=0x1, stream=0
         assert_eq!(frame.len(), 9);
-        assert_eq!(frame[3], 0x4); // SETTINGS
-        assert_eq!(frame[4], 0x1); // ACK
+        assert_eq!(frame[3], constants::frame_type::SETTINGS); // SETTINGS
+        assert_eq!(frame[4], constants::frame_flag::ACK);
         assert_eq!(frame[5], 0);
         assert_eq!(frame[6], 0);
         assert_eq!(frame[7], 0);
@@ -464,8 +450,8 @@ mod tests {
         assert!(frame.len() >= 9 + 5);
 
         // Check HTTP/2 DATA frame type
-        assert_eq!(frame[3], 0x0); // DATA
-        assert_eq!(frame[4], 0x1); // END_STREAM
+        assert_eq!(frame[3], constants::frame_type::DATA); // DATA
+        assert_eq!(frame[4], constants::frame_flag::END_STREAM);
     }
 
     #[test]
@@ -529,7 +515,7 @@ mod tests {
         let frame = GrpcTransport::build_data_frame(1, data, false);
 
         // Without END_STREAM flag, flags byte should be 0
-        assert_eq!(frame[4], 0x0); // No END_STREAM
+        assert_eq!(frame[4], constants::frame_flag::NONE); // No END_STREAM
     }
 
     #[test]
@@ -539,7 +525,7 @@ mod tests {
 
         // Even empty data should have HTTP/2 frame overhead
         assert!(frame.len() >= 9);
-        assert_eq!(frame[3], 0x0); // DATA frame type
+        assert_eq!(frame[3], constants::frame_type::DATA); // DATA frame type
     }
 
     #[test]
@@ -548,8 +534,8 @@ mod tests {
 
         // WINDOW_UPDATE frame: length=4, type=9, flags=0, stream=0, increment=65535
         assert_eq!(frame.len(), 13);
-        assert_eq!(frame[3], 0x9); // WINDOW_UPDATE
-        assert_eq!(frame[4], 0x0); // No flags
+        assert_eq!(frame[3], constants::frame_type::WINDOW_UPDATE);
+        assert_eq!(frame[4], constants::frame_flag::NONE); // No flags
     }
 
     #[test]

@@ -18,9 +18,11 @@
 
 mod codec;
 mod juicity;
+mod types;
 
-pub use codec::{JuicityAddress, JuicityCodec, JuicityCommand, JuicityFrame};
+pub use codec::JuicityCodec;
 pub use juicity::{
     CongestionControl, JuicityClient, JuicityConfig, JuicityConnection, JuicityError,
     JuicityHandler, JuicityServer,
 };
+pub use types::{JuicityAddress, JuicityCommand, JuicityFrame};

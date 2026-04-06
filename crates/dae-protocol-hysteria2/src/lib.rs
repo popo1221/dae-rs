@@ -18,11 +18,13 @@
 //! - `Hysteria2Handler`: 协议处理器
 //! - `Hysteria2Server`: 服务器实现
 
+mod errors;
 mod hysteria2;
 #[cfg(feature = "quic")]
 mod quic;
 
-pub use hysteria2::{Hysteria2Config, Hysteria2Error, Hysteria2Handler, Hysteria2Server};
+pub use errors::Hysteria2Error;
+pub use hysteria2::{Hysteria2Config, Hysteria2Handler, Hysteria2Server};
 
 // QUIC module exports removed - not yet implemented
 // TODO: Implement QUIC transport using quinn when ready

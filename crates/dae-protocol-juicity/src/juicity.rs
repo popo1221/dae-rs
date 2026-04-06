@@ -17,7 +17,8 @@ use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use tokio::net::{TcpStream, UdpSocket};
 use tracing::{debug, info, warn};
 
-use super::codec::{JuicityAddress, JuicityCodec, JuicityCommand, JuicityFrame};
+use super::types::{JuicityAddress, JuicityCommand, JuicityFrame};
+use super::codec::JuicityCodec;
 use dae_protocol_core::{Handler, HandlerConfig, ProtocolType};
 
 /// Juicity 错误类型

@@ -6,8 +6,11 @@
 //! - 密码认证
 //! - UDP 数据报中继
 
+mod errors;
+
 #[allow(clippy::module_inception)]
 pub mod hysteria2;
 pub mod quic;
 
-pub use hysteria2::{Hysteria2Config, Hysteria2Error, Hysteria2Handler, Hysteria2Server};
+pub use errors::Hysteria2Error;
+pub use hysteria2::{Hysteria2Config, Hysteria2Handler, Hysteria2Server};

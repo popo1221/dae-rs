@@ -5,7 +5,8 @@
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use tracing::{debug, error};
 
-use super::{TuicCommand, TuicCommandType, TuicConnectRequest, TuicError, TuicHeartbeatRequest};
+use super::consts::{TuicCommandType, TuicError, TUIC_VERSION};
+use super::{TuicCommand, TuicConnectRequest, TuicHeartbeatRequest};
 
 /// TUIC protocol codec for reading and writing TUIC messages
 pub struct TuicCodec;
@@ -44,10 +45,10 @@ impl TuicCodec {
         reader.read_exact(&mut version_buf).await?;
         let version = version_buf[0];
 
-        if version != super::TUIC_VERSION {
+        if version != TUIC_VERSION {
             return Err(TuicError::InvalidProtocol(format!(
                 "Unsupported TUIC version: expected 0x{:02x}, got 0x{:02x}",
-                super::TUIC_VERSION,
+                TUIC_VERSION,
                 version
             )));
         }
