@@ -19,12 +19,14 @@
 use std::net::{IpAddr, Ipv4Addr, Ipv6Addr};
 use std::sync::Arc;
 
+use async_trait::async_trait;
 use tokio::io::AsyncReadExt;
 use tokio::net::{TcpStream, UdpSocket};
 use tracing::{debug, error, info};
 
 use super::config::SsClientConfig;
 use super::protocol::TargetAddress;
+use dae_protocol_core::{Handler, HandlerConfig, ProtocolType};
 
 /// Shadowsocks 处理器，实现 ss-local 侧的数据处理
 ///
@@ -281,3 +283,28 @@ impl ShadowsocksHandler {
         }
     }
 }
+
+/// 实现 Handler trait for ShadowsocksHandler
+#[async_trait]
+impl Handler for ShadowsocksHandler {
+    type Config = SsClientConfig;
+
+    fn name(&self) -> &'static str {
+        "shadowsocks"
+    }
+
+    fn protocol(&self) -> ProtocolType {
+        ProtocolType::Shadowsocks
+    }
+
+    fn config(&self) -> &Self::Config {
+        &self.config
+    }
+
+    async fn handle(self: Arc<Self>, stream: TcpStream) -> std::io::Result<()> {
+        self.handle(stream).await
+    }
+}
+
+/// SsClientConfig 实现 HandlerConfig trait
+impl HandlerConfig for SsClientConfig {}
