@@ -5,7 +5,7 @@ edition = "2021"
 description = "SOCKS4/SOCKS4a protocol handler for dae-rs"
 
 [dependencies]
-tokio = { version = "1", features = ["full"] }
+tokio = { version = "1", features = ["io-util", "net", "rt", "macros"] }
 tracing = "0.1"
 async-trait = "0.1"
 thiserror = "1"
