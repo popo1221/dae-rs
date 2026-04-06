@@ -11,6 +11,9 @@ use std::sync::Arc;
 use tokio::net::{TcpListener, TcpStream};
 use tracing::{debug, error, info};
 
+use async_trait::async_trait;
+use crate::protocol::{Handler, HandlerConfig, ProtocolType};
+
 pub mod address;
 pub mod auth;
 pub mod commands;
@@ -93,6 +96,8 @@ impl Default for Socks5HandlerConfig {
     }
 }
 
+impl HandlerConfig for Socks5HandlerConfig {}
+
 /// SOCKS5 connection handler
 pub struct Socks5Handler {
     config: Socks5HandlerConfig,
@@ -143,6 +148,23 @@ impl Socks5Handler {
         // Phase 3: Request processing
         let cmd_handler = commands::CommandHandler::new(self.config.tcp_timeout_secs);
         cmd_handler.handle_request(client).await
+    }
+}
+
+#[async_trait]
+impl Handler for Socks5Handler {
+    type Config = Socks5HandlerConfig;
+
+    fn name(&self) -> &'static str {
+        "socks5"
+    }
+
+    fn protocol(&self) -> ProtocolType {
+        ProtocolType::Socks5
+    }
+
+    fn config(&self) -> &Self::Config {
+        &self.config
     }
 }
 

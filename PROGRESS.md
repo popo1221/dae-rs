@@ -16,6 +16,7 @@ Review dae-rs after Phase 1-3 fixes. Verify changes and find remaining issues.
 - [ ] ralph-fix-tuic: tuic unused import + dead field
 - [ ] ralph-fix-hysteria: hysteria2 dead code
 - [ ] ralph-fix-doc: dae-proxy doc indent
+- [x] ralph-fix-socks5-handler: SOCKS5 implement unified Handler trait ✅
 - [x] ralph-fix-safety: SAFETY comments in dae-tc/src/packet.rs ✅
 
 ## Review Findings Summary
@@ -40,3 +41,21 @@ Review dae-rs after Phase 1-3 fixes. Verify changes and find remaining issues.
 cargo check --workspace  # ✅ passes
 cargo test --workspace  # ✅ passes (Round 1 complete)
 ```
+
+---
+
+## dae-rs Issue #8: panic! → unreachable!()
+
+**Status:** NO-OP (already correct)
+
+**Investigation Date:** 2026-04-06 08:25 GMT+8
+
+**Findings:**
+- All `panic!` calls in protocol crates are inside `#[test]` functions
+- This is correct Rust idiom - test assertions use `panic!`
+- Total: 23 panic! calls across juicity, shadowsocks, trojan, vmess
+- 0 production code panic! calls require replacement
+
+**Conclusion:**
+No changes needed. The prior investigation was correct: `panic!` in test code is not a defect.
+
