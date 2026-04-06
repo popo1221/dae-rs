@@ -1,34 +1,74 @@
-# Ralph Mode: dae-rs Rust Best Practices Fixes
+# Ralph Mode: dae-rs Module Refactoring
 
-## Issues to Fix
+## Task ID
+task-1775460664785-129a3u
 
-Based on rust-expert-best-practices-code-review:
+## Objective
+Split oversized modules/files into smaller, focused submodules.
 
-### P2-1: `&PathBuf` → `&Path` (hot_reload.rs) ✅ FIXED
-- File: `crates/dae-proxy/src/config/hot_reload.rs`
-- Line 298: `fn load_config(path: &PathBuf)` → `fn load_config(path: &Path)` ✅
-- Line 312: `pub fn config_path(&self) -> &PathBuf` → `pub fn config_path(&self) -> &Path` ✅
-- Added `use std::path::{Path, PathBuf};` import ✅
+## Progress Overview
 
-### P3-1: Redundant unwrap after is_none() (lib.rs) - NO CHANGE NEEDED
-- Lines 997, 1005, 1014: `node.uuid.as_ref().unwrap().is_empty()` pattern
-- Assessment: This is a **correct and safe pattern** - checking `is_none()` first ensures unwrap is safe
-- No change needed - this is proper Rust idiom
+| Phase | Description | Status |
+|-------|-------------|--------|
+| Phase 1 | Optional QUIC (quinn) compilation | ✅ Complete (PR #101) |
+| Phase 2 | socks4.rs split into 4 modules | ✅ Complete (PR #102) |
+| Phase 3 | Continue module splitting | 🔄 In Progress |
 
-## Validation Commands
-- Format: `cargo fmt` ✅ Pass
-- Clippy: `cargo clippy --workspace` ✅ Pass (0 warnings)
-- Build: `cargo build --lib` ✅ Pass
-- Test: `cargo test --workspace` ✅ Pass
+## Analysis Completed
 
-## Progress
+### ✅ ebpf_integration/mod.rs (1530 lines)
+Already split into:
+- `mod.rs`, `checks.rs`, `config.rs`, `diagnostics.rs`, `maps.rs`, `metrics.rs`
 
-### Completed
-- [x] P2-1: Fix `&PathBuf` → `&Path` in hot_reload.rs
-- [x] P3-1: Review `unwrap()` pattern in lib.rs (no change needed - pattern is correct)
+### ⚠️ subscription.rs (2285 lines)
+**Status:** Complex interdependencies - postponed for later phase
 
-### In Progress
-- None
+**Issue:** Functions like `parse_sip008_subscription` call `uri_to_node_config` which calls other functions. Splitting requires:
+1. Moving shared types first
+2. Then moving functions with their dependencies
+3. Careful dependency tracking
 
-### Backlog
-- None - All tasks complete
+### ⚠️ connection_pool.rs (853 lines)
+**Status:** Mostly tests (432 lines = 50% of file)
+
+**Structure:**
+- `CompactIp` impl block: ~73 lines
+- `ConnectionKey` struct + impl: ~80 lines
+- `ConnectionPool` struct + impl: ~212 lines
+- `new_connection_pool` fn: ~12 lines
+- `tests`: ~432 lines
+
+**Note:** Splitting this file would mostly just move tests around.
+
+## Findings
+
+### Clippy Status
+```
+cargo clippy ✅ 0 warnings
+```
+
+### TODO/FIXME Items Found
+1. `full_cone.rs`: 4 ignored tests (TODO: investigate async/blocking hang)
+2. `hysteria2/lib.rs`: QUIC transport TODO (larger feature)
+
+## Next Steps
+
+Given the analysis, recommended next actions:
+
+1. **Quick Win:** Fix ignored tests in full_cone.rs (investigate hang)
+2. **Medium Effort:** Split connection_pool.rs (CompactIp → compact.rs, keep ConnectionPool + tests)
+3. **Long Term:** subscription.rs refactor (requires careful dependency mapping)
+
+## Validation
+
+```
+cargo check ✅ (0 errors)
+cargo test ✅ (all pass)
+cargo clippy ✅ (0 warnings)
+```
+
+## Session Summary
+- Started: 2026-04-06T07:31:00
+- Completed: Analysis phase
+- Progress: 20%
+- Outcome: Deferred complex splits; identified simpler opportunities

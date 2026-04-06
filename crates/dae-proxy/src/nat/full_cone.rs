@@ -142,8 +142,33 @@ impl FullConeNat {
             ));
         }
 
-        // Allocate external port
-        let external_port = self.allocate_port()?;
+        // Allocate external port - inline to avoid deadlock (allocate_port needs reverse_mappings.read()
+        // while we already hold reverse_mappings.write())
+        let mut next_port = self.next_port.write().unwrap();
+        let start = self.config.port_range_start;
+        let end = self.config.port_range_end;
+        let external_port = loop {
+            let port = *next_port;
+            let external = SocketAddr::new(self.config.external_ip, port);
+
+            // Check if port is in use (we already hold reverse_mappings.write())
+            if !reverse_mappings.contains_key(&external) {
+                // Found available port
+                *next_port = if port >= end { start } else { port + 1 };
+                break port;
+            }
+
+            // Move to next port
+            *next_port = if port >= end { start } else { port + 1 };
+
+            // Check if we've tried all ports
+            if *next_port == start {
+                return Err(std::io::Error::new(
+                    std::io::ErrorKind::AddrInUse,
+                    "NAT: no available ports",
+                ));
+            }
+        };
 
         // Create external address
         let external = SocketAddr::new(self.config.external_ip, external_port);
@@ -174,35 +199,6 @@ impl FullConeNat {
         Ok(external)
     }
 
-    /// Allocate an external port
-    fn allocate_port(&self) -> std::io::Result<u16> {
-        let mut next_port = self.next_port.write().unwrap();
-        let start = self.config.port_range_start;
-        let end = self.config.port_range_end;
-
-        // Try to find an available port
-        for _ in 0..(end - start) {
-            let port = *next_port;
-            let external = SocketAddr::new(self.config.external_ip, port);
-
-            // Check if port is in use
-            let reverse = self.reverse_mappings.read().unwrap();
-            if !reverse.contains_key(&external) {
-                // Found available port
-                *next_port = if port >= end { start } else { port + 1 };
-                return Ok(port);
-            }
-
-            // Move to next port
-            *next_port = if port >= end { start } else { port + 1 };
-        }
-
-        Err(std::io::Error::new(
-            std::io::ErrorKind::AddrInUse,
-            "NAT: no available ports",
-        ))
-    }
-
     /// Find the internal endpoint for an external address
     /// Returns None if no mapping exists
     pub fn find_internal(&self, external: SocketAddr) -> Option<SocketAddr> {
@@ -218,9 +214,10 @@ impl FullConeNat {
 
     /// Check if an incoming packet from remote is allowed
     pub fn is_incoming_allowed(&self, external: SocketAddr, _remote: SocketAddr) -> bool {
-        let mappings = self.mappings.read().unwrap();
-        // Find mapping by external address
-        mappings.contains_key(&external)
+        // Use reverse_mappings to check if we have a mapping for this external address
+        // Full-Cone: any incoming is allowed if a mapping exists
+        let reverse = self.reverse_mappings.read().unwrap();
+        reverse.contains_key(&external)
     }
 
     /// Remove a mapping
@@ -338,7 +335,6 @@ mod tests {
     }
 
     #[test]
-    #[ignore] // TODO: hangs in CI environment - investigate async/blocking issue
     fn test_create_mapping() {
         let nat = FullConeNat::with_default_config();
         let internal: SocketAddr = "192.168.1.100:12345".parse().unwrap();
@@ -349,7 +345,6 @@ mod tests {
     }
 
     #[test]
-    #[ignore] // TODO: hangs in CI environment - investigate async/blocking issue
     fn test_find_internal() {
         let nat = FullConeNat::with_default_config();
         let internal: SocketAddr = "192.168.1.100:12345".parse().unwrap();
@@ -361,7 +356,6 @@ mod tests {
     }
 
     #[test]
-    #[ignore] // TODO: hangs in CI environment - investigate async/blocking issue
     fn test_remove_mapping() {
         let nat = FullConeNat::with_default_config();
         let internal: SocketAddr = "192.168.1.100:12345".parse().unwrap();
@@ -374,7 +368,6 @@ mod tests {
     }
 
     #[test]
-    #[ignore] // TODO: hangs in CI environment - investigate async/blocking issue
     fn test_is_incoming_allowed() {
         let nat = FullConeNat::with_default_config();
         let internal: SocketAddr = "192.168.1.100:12345".parse().unwrap();
