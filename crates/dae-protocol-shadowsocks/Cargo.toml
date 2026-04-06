@@ -5,7 +5,7 @@ edition = "2021"
 description = "Shadowsocks protocol handler for dae-rs"
 
 [dependencies]
-tokio = { version = "1", features = ["full"] }
+tokio = { version = "1", features = ["rt", "sync", "time", "macros"] }
 tracing = "0.1"
 aes-gcm = "0.10"
 hkdf = "0.10"
