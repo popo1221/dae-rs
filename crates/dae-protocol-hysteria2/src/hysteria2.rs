@@ -256,36 +256,6 @@ impl Hysteria2Address {
         }
     }
 
-    /// 将地址编码为字节数组
-    ///
-    /// # 返回值
-    ///
-    /// 返回编码后的字节数组。
-    /// 编码格式与 `parse` 方法兼容。
-    pub fn encode(&self) -> Vec<u8> {
-        let mut buf = Vec::new();
-        match self {
-            Hysteria2Address::Ip(IpAddr::V4(ip)) => {
-                buf.push(0x01);
-                buf.extend_from_slice(&ip.octets());
-                // Port will be appended by caller
-            }
-            Hysteria2Address::Ip(IpAddr::V6(ip)) => {
-                buf.push(0x03);
-                for segment in ip.segments() {
-                    buf.extend_from_slice(&segment.to_be_bytes());
-                }
-                // Port will be appended by caller
-            }
-            Hysteria2Address::Domain(domain, _) => {
-                buf.push(0x02);
-                buf.push(domain.len() as u8);
-                buf.extend_from_slice(domain.as_bytes());
-                // Port will be appended by caller
-            }
-        }
-        buf
-    }
 }
 
 /// Hysteria2 客户端 Hello 消息
