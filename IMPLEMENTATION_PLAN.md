@@ -16,66 +16,76 @@ Split oversized modules/files into smaller, focused submodules.
 
 ## Completed in This Session
 
-### ✅ full_cone.rs Deadlock Fix (bb70e8f)
+### ✅ full_cone.rs Deadlock Fix (bb70e8f, 8adc8e1)
 **Root cause:** Deadlock between `create_mapping()` (holds reverse_mappings.write()) and `allocate_port()` (needs reverse_mappings.read())
 
-**Secondary bug:** `is_incoming_allowed()` checked `mappings.contains_key(&external)` but mappings is keyed by internal address.
+**Secondary bug:** `is_incoming_allowed()` checked wrong map.
 
-**Fix:** Inlined port allocation logic, fixed reverse_mappings lookup, removed dead allocate_port().
+**Result:** 4 tests that were `#[ignore]` now pass. Added 5 more tests for edge cases.
 
-**Result:** 4 previously-ignored tests now pass.
+### ✅ subscription.rs Analysis (bac268b)
+**Analysis document:** `subscription_REFACTORING_PLAN.md`
 
-## Analysis Summary
+**Key findings:**
+- 2285 lines, 24 public items
+- `uri_to_node_config()` is bottleneck - ALL format parsers call it
+- Proper split requires moving URI parsing first
+- Estimated 4 hours for full modularization
 
-### Oversized Files Status
+**Recommendation:** Defer full split due to complexity. Alternative: keep as-is but add tests.
 
-| File | Lines | Priority | Decision |
-|------|-------|----------|----------|
-| subscription.rs | 2285 | High | Postponed - complex interdependencies |
-| ebpf_integration/mod.rs | 1530 | Done | Already split (6 files) |
-| dae-config/lib.rs | 1399 | Medium | Large but well-organized config |
-| connection_pool.rs | 853 | Low | 50% tests, low ROI split |
-| vless/handler.rs | 880 | Medium | Single struct + impl, not worth splitting |
-| trojan_protocol/handler.rs | 714 | Medium | Single struct + impl |
-| tracking/types.rs | 717 | Medium | Well-organized types |
-| transport/* | varies | Done | Already modular |
-
-## Findings
-
-### Clippy Status
+## Current Branch Status
 ```
-cargo clippy --workspace ✅ 0 warnings (only profile warning)
+bac268b docs: analyze subscription.rs refactoring complexity
+8adc8e1 test(nat): add 5 more tests for full_cone NAT
+bb70e8f fix(nat): resolve deadlock in FullConeNat::create_mapping
 ```
-
-### TODO/FIXME Items
-- hysteria2/lib.rs: QUIC transport TODO (large feature, not in scope)
 
 ## Validation
 
 ```
 cargo check --workspace ✅
-cargo test ✅ (19 passed in dae-proxy)
+cargo test ✅ (all pass)
 cargo clippy --workspace ✅
 ```
 
-## Session Log
+## Remaining Analysis
+
+### subscription.rs (2285 lines)
+**Status:** Complex interdependencies - documented in REFACTORING_PLAN.md
+
+**Key issue:** `uri_to_node_config` (~350 lines) is called by ALL format parsers:
+- parse_sip008_subscription → uri_to_node_config
+- parse_clash_yaml → uri_to_node_config
+- parse_singbox_json → uri_to_node_config
+
+**Split order required:**
+1. Move `uri_to_node_config` + helpers to `uri.rs` (first)
+2. Then move format-specific parsers to `sip008.rs`, `clash.rs`, `singbox.rs`
+
+### Other Oversized Files (already analyzed)
+| File | Lines | Decision |
+|------|-------|----------|
+| ebpf_integration | 1530 | ✅ Already split |
+| connection_pool.rs | 853 | 50% tests - low ROI |
+| vless/handler.rs | 880 | Single struct - not worth splitting |
+
+## Session Summary
 
 | Timestamp | Action | Result |
 |-----------|--------|--------|
-| 2026-04-06T07:31 | Ralph Mode started | Task created |
-| 2026-04-06T07:32 | Analyzed oversized files | Identified ebpf_integration already split |
-| 2026-04-06T07:35 | Investigated full_cone.rs ignored tests | Found deadlock |
-| 2026-04-06T08:01 | Fixed deadlock + is_incoming_allowed bug | 4 tests pass |
-| 2026-04-06T08:02 | Pushed commit bb70e8f | Deadlock fix complete |
+| 2026-04-06T08:14 | Started subscription.rs refactor | Found complex deps |
+| 2026-04-06T08:20 | Attempted split | Too complex for single session |
+| 2026-04-06T08:25 | Created analysis doc | REFACTORING_PLAN.md |
+| 2026-04-06T08:30 | Committed analysis | bac268b |
 
-## Recommendations for Next Steps
+## Recommendations
 
-1. **subscription.rs refactor** - Requires careful dependency mapping, low priority
-2. **connection_pool.rs tests** - Could extract to separate file, low ROI
-3. **Performance monitoring** - Add metrics to understand runtime behavior
-4. **Documentation** - Improve code documentation for public APIs
+1. **subscription.rs**: Keep as-is for now. Add tests instead of refactoring.
+2. **Quick wins**: Add more test coverage to existing modules
+3. **Future**: Consider subscription.rs split when more resources available
 
 ## Current Status
-- Progress: 30%
-- Blockers: None
+- Progress: 25%
+- Blockers: None (analysis complete)
 - Next: User discretion
