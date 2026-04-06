@@ -16,6 +16,7 @@ Review dae-rs after Phase 1-3 fixes. Verify changes and find remaining issues.
 - [x] ralph-fix-subscription: remove dead code ParsedProxyUri (29 lines) ✅
 - [x] ralph-fix-control: add 9 tests for control.rs (3→12) ✅
 - [x] ralph-fix-logging: add 4 tests for logging.rs (16→20) ✅
+- [x] ralph-fix-protocol_dispatcher: add 5 tests (13→18) ✅
 - [ ] ralph-fix-tuic: tuic unused import + dead field
 - [ ] ralph-fix-hysteria: hysteria2 dead code
 - [ ] ralph-fix-doc: dae-proxy doc indent

@@ -76,7 +76,7 @@ cargo clippy --workspace ✅
 | connection_pool.rs | 853 | 35 tests | ✅ Good coverage |
 | control.rs | 630 | 12 tests ✅ | Add more tests |
 | logging.rs | 590 | 20 tests ✅ | Add more tests |
-| protocol_dispatcher.rs | 372 | 13 tests | Add more tests |
+| protocol_dispatcher.rs | 372 | 18 tests ✅ | Add more tests |
 
 ## Session Summary
 
@@ -91,8 +91,9 @@ cargo clippy --workspace ✅
 | 2026-04-06T17:49 | Cleaned dead code | Removed ParsedProxyUri (29 lines) |
 | 2026-04-06T17:51 | Added control.rs tests | 9 new tests (3→12) |
 | 2026-04-06T17:53 | Added logging.rs tests | 4 new tests (16→20) |
+| 2026-04-06T17:56 | Added protocol_dispatcher tests | 5 new tests (13→18) |
 
 ## Current Status
-- Progress: 55%
+- Progress: 65%
 - Blockers: None
 - Recommendation: Focus on test coverage, not refactoring
