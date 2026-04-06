@@ -27,60 +27,7 @@ use crate::protocol::{
     VlessAddressType, VlessCommand, VLESS_HEADER_MIN_SIZE, VLESS_VERSION,
 };
 use crate::relay_data;
-
-/// 协议类型枚举
-///
-/// 标识处理器实现的协议类型。
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum ProtocolType {
-    Vless,
-}
-
-impl ProtocolType {
-    /// 获取协议的字符串表示
-    pub fn as_str(&self) -> &'static str {
-        match self {
-            ProtocolType::Vless => "vless",
-        }
-    }
-}
-
-/// 处理器配置 trait
-///
-/// 所有协议处理器的配置类型必须实现此 trait。
-/// 要求: Send + Sync + Debug（确保线程安全和可调试）。
-pub trait HandlerConfig: Send + Sync + std::fmt::Debug {}
-
-/// 统一处理器 trait
-///
-/// 为所有协议处理器定义的统一接口。
-///
-/// # 类型参数
-/// - `Config`: 处理器配置类型，必须实现 `HandlerConfig`
-///
-/// # 方法
-/// - `name()`: 返回处理器名称
-/// - `protocol()`: 返回协议类型
-/// - `config()`: 返回配置引用
-/// - `handle()`: 处理 TCP 连接
-#[async_trait]
-pub trait Handler: Send + Sync {
-    type Config: HandlerConfig;
-
-    fn name(&self) -> &'static str;
-    fn protocol(&self) -> ProtocolType;
-    fn config(&self) -> &Self::Config;
-
-    /// 处理 TCP 连接
-    ///
-    /// # 参数
-    /// - `self: Arc<Self>`: 处理器实例的原子引用计数指针
-    /// - `stream`: 客户端 TCP 连接
-    async fn handle(self: Arc<Self>, stream: TcpStream) -> std::io::Result<()>;
-}
-
-/// 为 VlessClientConfig 实现 HandlerConfig trait
-impl HandlerConfig for VlessClientConfig {}
+use dae_protocol_core::{Handler, ProtocolType};
 
 /// VLESS 协议处理器
 ///

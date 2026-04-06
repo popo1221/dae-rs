@@ -8,6 +8,7 @@
 
 use std::net::SocketAddr;
 use std::time::Duration;
+use dae_protocol_core::HandlerConfig;
 
 /// VLESS 服务器配置
 ///
@@ -193,3 +194,6 @@ impl Default for VlessClientConfig {
         }
     }
 }
+
+/// VlessClientConfig 实现 HandlerConfig trait
+impl HandlerConfig for VlessClientConfig {}
