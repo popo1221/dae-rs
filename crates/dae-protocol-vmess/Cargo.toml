@@ -14,6 +14,7 @@ hmac = "0.12"
 sha2 = "0.10"
 serde = { version = "1", features = ["derive"] }
 dae-relay = { path = "../dae-relay" }
+dae-protocol-core = { path = "../dae-protocol-core" }
 
 [dev-dependencies]
 tokio-test = "0.4"

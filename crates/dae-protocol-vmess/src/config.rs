@@ -6,6 +6,7 @@ use std::net::{IpAddr, Ipv4Addr, Ipv6Addr, SocketAddr};
 use std::time::Duration;
 
 use super::protocol::VmessServerConfig;
+use dae_protocol_core::HandlerConfig;
 
 /// VMess 客户端配置
 ///
@@ -167,3 +168,6 @@ impl VmessTargetAddress {
         }
     }
 }
+
+/// VmessClientConfig 实现 HandlerConfig trait
+impl HandlerConfig for VmessClientConfig {}

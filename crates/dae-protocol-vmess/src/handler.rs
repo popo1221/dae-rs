@@ -24,42 +24,7 @@ use tokio::net::{TcpStream, UdpSocket};
 use tracing::{debug, error, info, warn};
 
 use super::config::{VmessClientConfig, VmessTargetAddress};
-
-/// 协议类型枚举
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum ProtocolType {
-    Vmess,
-}
-
-impl ProtocolType {
-    /// 获取协议的字符串表示
-    pub fn as_str(&self) -> &'static str {
-        match self {
-            ProtocolType::Vmess => "vmess",
-        }
-    }
-}
-
-/// 处理器配置 trait
-pub trait HandlerConfig: Send + Sync + std::fmt::Debug {}
-
-/// 统一处理器 trait
-///
-/// 为所有协议处理器定义的统一接口。
-#[async_trait]
-pub trait Handler: Send + Sync {
-    type Config: HandlerConfig;
-
-    fn name(&self) -> &'static str;
-    fn protocol(&self) -> ProtocolType;
-    fn config(&self) -> &Self::Config;
-
-    /// 处理 TCP 连接
-    async fn handle(self: Arc<Self>, stream: TcpStream) -> std::io::Result<()>;
-}
-
-/// 为 VmessClientConfig 实现 HandlerConfig trait
-impl HandlerConfig for VmessClientConfig {}
+use dae_protocol_core::{Handler, ProtocolType};
 
 /// VMess 协议处理器
 ///
