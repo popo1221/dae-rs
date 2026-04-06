@@ -25,6 +25,7 @@ use tokio::net::{TcpStream, UdpSocket};
 use tracing::{debug, error, info};
 
 use super::config::SsClientConfig;
+use super::errors::ShadowsocksError;
 use super::protocol::TargetAddress;
 use dae_protocol_core::{Handler, HandlerConfig, ProtocolType};
 
@@ -102,7 +103,7 @@ impl ShadowsocksHandler {
     /// - 连接超时：返回 `TimedOut` 错误
     /// - 地址解析失败：返回 `InvalidData` 错误
     /// - 服务器连接失败：返回对应的 IO 错误
-    pub async fn handle(self: Arc<Self>, mut client: TcpStream) -> std::io::Result<()> {
+    pub async fn handle(self: Arc<Self>, mut client: TcpStream) -> Result<(), ShadowsocksError> {
         let client_addr = client.peer_addr()?;
 
         // Read the Shadowsocks AEAD header
@@ -131,10 +132,10 @@ impl ShadowsocksHandler {
                 // If parsing fails, assume this is encrypted and we need the key
                 // For a full implementation, decryption would happen here
                 error!("Failed to parse Shadowsocks target address");
-                return Err(std::io::Error::new(
+                return Err(ShadowsocksError::Io(std::io::Error::new(
                     std::io::ErrorKind::InvalidData,
                     "invalid Shadowsocks AEAD payload",
-                ));
+                )));
             }
         };
 
@@ -150,13 +151,13 @@ impl ShadowsocksHandler {
         let remote = match tokio::time::timeout(timeout, TcpStream::connect(&remote_addr)).await {
             Ok(Ok(s)) => s,
             Ok(Err(e)) => {
-                return Err(e);
+                return Err(ShadowsocksError::Io(e));
             }
             Err(_) => {
-                return Err(std::io::Error::new(
+                return Err(ShadowsocksError::Io(std::io::Error::new(
                     std::io::ErrorKind::TimedOut,
                     "connection to Shadowsocks server timed out",
-                ));
+                )));
             }
         };
 
@@ -167,8 +168,8 @@ impl ShadowsocksHandler {
     }
 
     /// Relay data between client and Shadowsocks server
-    async fn relay(&self, client: TcpStream, remote: TcpStream) -> std::io::Result<()> {
-        dae_relay::relay_bidirectional(client, remote).await
+    async fn relay(&self, client: TcpStream, remote: TcpStream) -> Result<(), ShadowsocksError> {
+        Ok(dae_relay::relay_bidirectional(client, remote).await?)
     }
 
     /// 处理 UDP 流量
@@ -302,7 +303,7 @@ impl Handler for ShadowsocksHandler {
     }
 
     async fn handle(self: Arc<Self>, stream: TcpStream) -> std::io::Result<()> {
-        self.handle(stream).await
+        self.handle(stream).await.map_err(std::io::Error::from)
     }
 }
 

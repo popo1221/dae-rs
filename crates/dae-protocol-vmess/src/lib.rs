@@ -32,6 +32,7 @@
 //! ```
 
 pub mod config;
+pub mod errors;
 pub mod handler;
 pub mod protocol;
 pub mod server;
@@ -41,6 +42,9 @@ pub use config::{VmessClientConfig, VmessTargetAddress};
 pub use handler::VmessHandler;
 pub use protocol::{VmessAddressType, VmessCommand, VmessSecurity, VmessServerConfig};
 pub use server::VmessServer;
+
+// 错误类型
+pub use errors::VmessError;
 
 // 协议常量
 pub use protocol::{VMESS_AEAD_VERSION, VMESS_VERSION};

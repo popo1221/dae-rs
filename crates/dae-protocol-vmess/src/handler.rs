@@ -24,6 +24,7 @@ use tokio::net::{TcpStream, UdpSocket};
 use tracing::{debug, error, info, warn};
 
 use super::config::{VmessClientConfig, VmessTargetAddress};
+use crate::VmessError;
 use dae_protocol_core::{Handler, ProtocolType};
 
 /// VMess 协议处理器
@@ -211,7 +212,7 @@ impl VmessHandler {
     ///
     /// # 头部格式
     /// 加密部分包含：address type + address + port + ...
-    pub async fn handle(self: Arc<Self>, mut client: TcpStream) -> std::io::Result<()> {
+    pub async fn handle(self: Arc<Self>, mut client: TcpStream) -> Result<(), VmessError> {
         let client_addr = client.peer_addr()?;
 
         // 读取长度前缀（4 字节，大端序）
@@ -225,10 +226,10 @@ impl VmessHandler {
                 "VMess TCP: {} header_len {} too large",
                 client_addr, header_len
             );
-            return Err(std::io::Error::new(
+            return Err(VmessError::Io(std::io::Error::new(
                 std::io::ErrorKind::InvalidData,
                 "VMess header too large",
-            ));
+            )));
         }
 
         // 读取加密的头部
@@ -248,10 +249,10 @@ impl VmessHandler {
                     "VMess TCP: {} header decryption failed: {} — dropping connection",
                     client_addr, e
                 );
-                return Err(std::io::Error::new(
+                return Err(VmessError::Io(std::io::Error::new(
                     std::io::ErrorKind::InvalidData,
                     format!("VMess header decryption failed: {}", e),
-                ));
+                )));
             }
         };
 
@@ -295,10 +296,10 @@ impl VmessHandler {
                                 "VMess TCP: {} fallback parsing at pos {} also failed.",
                                 client_addr, pos
                             );
-                            return Err(std::io::Error::new(
+                            return Err(VmessError::Io(std::io::Error::new(
                                 std::io::ErrorKind::InvalidData,
                                 "invalid VMess decrypted header",
-                            ));
+                            )));
                         }
                     } else {
                         error!(
@@ -307,10 +308,10 @@ impl VmessHandler {
                             client_addr,
                             decrypted_header.len()
                         );
-                        return Err(std::io::Error::new(
+                        return Err(VmessError::Io(std::io::Error::new(
                             std::io::ErrorKind::InvalidData,
                             "no address in VMess header",
-                        ));
+                        )));
                     }
                 }
             };
@@ -326,19 +327,19 @@ impl VmessHandler {
 
         let remote = match tokio::time::timeout(timeout, TcpStream::connect(&remote_addr)).await {
             Ok(Ok(s)) => s,
-            Ok(Err(e)) => return Err(e),
+            Ok(Err(e)) => return Err(VmessError::Io(e)),
             Err(_) => {
-                return Err(std::io::Error::new(
+                return Err(VmessError::Io(std::io::Error::new(
                     std::io::ErrorKind::TimedOut,
                     "connection to VMess server timed out",
-                ));
+                )));
             }
         };
 
         debug!("Connected to VMess server {}", remote_addr);
 
         // 在客户端和服务器之间转发数据
-        dae_relay::relay_bidirectional(client, remote).await
+        Ok(dae_relay::relay_bidirectional(client, remote).await?)
     }
 
     /// 处理 UDP 流量
@@ -414,6 +415,6 @@ impl Handler for VmessHandler {
     }
 
     async fn handle(self: Arc<Self>, stream: TcpStream) -> std::io::Result<()> {
-        self.handle(stream).await
+        self.handle(stream).await.map_err(std::io::Error::from)
     }
 }

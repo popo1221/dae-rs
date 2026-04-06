@@ -31,6 +31,7 @@
 
 pub mod aead;
 pub mod config;
+pub mod errors;
 pub mod handler;
 pub mod plugin;
 pub mod protocol;
@@ -40,6 +41,7 @@ pub mod ssr;
 // Re-export all public types from submodules
 pub use config::{SsClientConfig, SsServerConfig};
 pub use handler::ShadowsocksHandler;
+pub use errors::ShadowsocksError;
 pub use plugin::{
     ObfsConfig, ObfsHttp, ObfsMode, ObfsStream, ObfsTls, V2rayConfig, V2rayMode, V2rayPlugin,
     V2rayStream,

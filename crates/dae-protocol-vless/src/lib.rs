@@ -30,6 +30,7 @@
 
 pub mod config;
 pub mod crypto;
+pub mod errors;
 pub mod handler;
 pub mod protocol;
 pub mod server;
@@ -45,6 +46,9 @@ pub use config::{VlessClientConfig, VlessRealityConfig, VlessServerConfig, Vless
 
 // 处理器
 pub use handler::VlessHandler;
+
+// 错误类型
+pub use errors::VlessError;
 
 // 服务器
 pub use server::VlessServer;

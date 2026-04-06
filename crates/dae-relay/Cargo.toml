@@ -5,4 +5,4 @@ edition = "2021"
 description = "Shared relay utilities for dae-rs protocol handlers"
 
 [dependencies]
-tokio = { version = "1", features = ["io-util"] }
+tokio = { version = "1", features = ["io-util", "net", "rt", "macros"] }

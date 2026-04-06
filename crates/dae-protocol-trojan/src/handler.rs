@@ -29,6 +29,7 @@ use tokio::net::{TcpStream, UdpSocket};
 use tracing::{debug, error, info};
 
 use super::config::{TrojanClientConfig, TrojanServerConfig};
+use super::errors::TrojanError;
 use super::protocol::{TrojanCommand, TrojanTargetAddress, TROJAN_CRLF};
 use super::types::relay_bidirectional;
 use dae_protocol_core::{Handler, ProtocolType};
@@ -184,7 +185,7 @@ impl TrojanHandler {
     /// # 错误处理
     /// - 密码错误、CRLF 不匹配、未知命令等都会关闭连接
     /// - 连接后端超时会在日志中记录并返回错误
-    pub async fn handle(self: Arc<Self>, mut client: TcpStream) -> std::io::Result<()> {
+    pub async fn handle(self: Arc<Self>, mut client: TcpStream) -> Result<(), TrojanError> {
         let client_addr = client.peer_addr()?;
 
         // Trojan 协议格式:
@@ -202,10 +203,10 @@ impl TrojanHandler {
         client.read_exact(&mut crlf_buf).await?;
         if crlf_buf != TROJAN_CRLF {
             error!("Invalid Trojan header: missing CRLF after password");
-            return Err(std::io::Error::new(
+            return Err(TrojanError::Io(std::io::Error::new(
                 std::io::ErrorKind::InvalidData,
                 "invalid Trojan header",
-            ));
+            )));
         }
 
         // 读取命令字节
@@ -218,10 +219,10 @@ impl TrojanHandler {
             0x02 => TrojanCommand::UdpAssociate,
             _ => {
                 error!("Unknown Trojan command: {}", command);
-                return Err(std::io::Error::new(
+                return Err(TrojanError::Io(std::io::Error::new(
                     std::io::ErrorKind::InvalidData,
                     "unknown Trojan command",
-                ));
+                )));
             }
         };
 
@@ -250,12 +251,10 @@ impl TrojanHandler {
                 let domain_len = len_buf[0] as usize;
                 let mut domain_buf = vec![0u8; domain_len];
                 client.read_exact(&mut domain_buf).await?;
-                let domain = String::from_utf8(domain_buf).map_err(|_| {
-                    std::io::Error::new(
+                let domain = String::from_utf8(domain_buf).map_err(|_| TrojanError::Io(std::io::Error::new(
                         std::io::ErrorKind::InvalidData,
                         "invalid domain in Trojan header",
-                    )
-                })?;
+                    )))?;
                 TrojanTargetAddress::Domain(domain, 0) // 端口后续读取
             }
             0x03 => {
@@ -274,10 +273,10 @@ impl TrojanHandler {
                 )))
             }
             _ => {
-                return Err(std::io::Error::new(
+                return Err(TrojanError::Io(std::io::Error::new(
                     std::io::ErrorKind::InvalidData,
                     "invalid address type in Trojan header",
-                ));
+                )));
             }
         };
 
@@ -290,10 +289,10 @@ impl TrojanHandler {
         let mut crlf_buf = [0u8; 2];
         client.read_exact(&mut crlf_buf).await?;
         if crlf_buf != TROJAN_CRLF {
-            return Err(std::io::Error::new(
+            return Err(TrojanError::Io(std::io::Error::new(
                 std::io::ErrorKind::InvalidData,
                 "invalid Trojan header: missing CRLF after address",
-            ));
+            )));
         }
 
         match cmd {
@@ -326,17 +325,17 @@ impl TrojanHandler {
                                 "Failed to connect to Trojan backend {}:{}: {}",
                                 backend.addr, backend.port, e
                             );
-                            return Err(e);
+                            return Err(TrojanError::Io(e));
                         }
                         Err(_) => {
                             error!(
                                 "Timeout connecting to Trojan backend {}:{}",
                                 backend.addr, backend.port
                             );
-                            return Err(std::io::Error::new(
+                            return Err(TrojanError::Io(std::io::Error::new(
                                 std::io::ErrorKind::TimedOut,
                                 "connection to Trojan server timed out",
-                            ));
+                            )));
                         }
                     };
 
@@ -376,20 +375,20 @@ impl TrojanHandler {
                     Ok(Ok(socket)) => socket,
                     Ok(Err(e)) => {
                         error!("Failed to bind UDP socket: {}", e);
-                        return Err(e);
+                        return Err(TrojanError::Io(e));
                     }
                     Err(_) => {
                         error!("Timeout binding UDP socket");
-                        return Err(std::io::Error::new(
+                        return Err(TrojanError::Io(std::io::Error::new(
                             std::io::ErrorKind::TimedOut,
                             "UDP socket bind timed out",
-                        ));
+                        )));
                     }
                 };
 
                 if let Err(e) = remote_udp.connect(&backend_addr).await {
                     error!("Failed to connect UDP to backend {}: {}", backend_addr, e);
-                    return Err(e);
+                    return Err(TrojanError::Io(e));
                 }
 
                 debug!("Connected UDP socket to backend {}", backend_addr);
@@ -408,8 +407,8 @@ impl TrojanHandler {
     /// # 参数
     /// - `client`: 客户端 TCP 流
     /// - `remote`: 远程服务器 TCP 流
-    async fn relay(&self, client: TcpStream, remote: TcpStream) -> std::io::Result<()> {
-        relay_bidirectional(client, remote).await
+    async fn relay(&self, client: TcpStream, remote: TcpStream) -> Result<(), TrojanError> {
+        Ok(relay_bidirectional(client, remote).await?)
     }
 
     /// 通过 TCP 传输的 Trojan UDP 帧协议，在客户端（TCP）和远程（UDP socket）之间转发 UDP 数据包
@@ -433,7 +432,7 @@ impl TrojanHandler {
         mut client: TcpStream,
         remote_udp: UdpSocket,
         target_info: &str,
-    ) -> std::io::Result<()> {
+    ) -> Result<(), TrojanError> {
         const MAX_UDP_FRAME_SIZE: usize = 65535;
         let remote_addr = target_info.to_string();
 
@@ -487,12 +486,12 @@ impl TrojanHandler {
                             let domain_len = len_buf[0] as usize;
                             let mut domain_buf = vec![0u8; domain_len];
                             client.read_exact(&mut domain_buf).await?;
-                            String::from_utf8(domain_buf).map_err(|_| {
+                            String::from_utf8(domain_buf).map_err(|_| TrojanError::Io(
                                 std::io::Error::new(
                                     std::io::ErrorKind::InvalidData,
                                     "invalid domain in Trojan UDP header",
-                                )
-                            })?
+                                ),
+                            ))?
                         }
                         0x03 => {
                             // IPv6 - 16 字节
@@ -730,7 +729,7 @@ impl Handler for TrojanHandler {
     }
 
     async fn handle(self: Arc<Self>, stream: TcpStream) -> std::io::Result<()> {
-        self.handle(stream).await
+        self.handle(stream).await.map_err(std::io::Error::from)
     }
 }
 

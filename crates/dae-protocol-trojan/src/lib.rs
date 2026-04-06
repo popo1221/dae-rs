@@ -26,6 +26,7 @@
 //! ```
 
 pub mod config;
+pub mod errors;
 pub mod handler;
 pub mod protocol;
 pub mod server;
@@ -35,6 +36,7 @@ pub mod types;
 // 重新导出公共类型供外部使用
 pub use config::{TrojanClientConfig, TrojanServerConfig, TrojanTlsConfig};
 pub use handler::TrojanHandler;
+pub use errors::TrojanError;
 pub use protocol::{TrojanAddressType, TrojanCommand, TrojanTargetAddress};
 pub use server::TrojanServer;
 pub use trojan_go::{TrojanGoMode, TrojanGoWsConfig, TrojanGoWsHandler, TrojanGoWsStream};
