@@ -12,11 +12,13 @@ use std::net::{IpAddr, Ipv4Addr, SocketAddr};
 use std::sync::Arc;
 use std::time::Duration;
 
+use async_trait::async_trait;
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use tokio::net::{TcpStream, UdpSocket};
 use tracing::{debug, info, warn};
 
 use super::codec::{JuicityAddress, JuicityCodec, JuicityCommand, JuicityFrame};
+use dae_protocol_core::{Handler, HandlerConfig, ProtocolType};
 
 /// Juicity 错误类型
 ///
@@ -580,6 +582,32 @@ impl JuicityConnection {
         Ok(())
     }
 }
+
+/// 实现 Handler trait for JuicityHandler
+#[async_trait]
+impl Handler for JuicityHandler {
+    type Config = JuicityConfig;
+
+    fn name(&self) -> &'static str {
+        "juicity"
+    }
+
+    fn protocol(&self) -> ProtocolType {
+        ProtocolType::Juicity
+    }
+
+    fn config(&self) -> &Self::Config {
+        &self.config
+    }
+
+    async fn handle(self: Arc<Self>, _stream: TcpStream) -> std::io::Result<()> {
+        // Juicity uses UDP primarily
+        Ok(())
+    }
+}
+
+/// JuicityConfig 实现 HandlerConfig trait
+impl HandlerConfig for JuicityConfig {}
 
 #[cfg(test)]
 mod tests {
