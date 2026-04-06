@@ -3,7 +3,7 @@
 //! 实现 simple-obfs 协议，用于 Shadowsocks 流量的混淆。
 //! simple-obfs 使 Shadowsocks 流量看起来像普通的 HTTP 或 TLS 流量。
 //!
-//! 协议规范：https://github.com/shadowsocks/simple-obfs
+//! 协议规范：<https://github.com/shadowsocks/simple-obfs>
 //!
 //! # 混淆类型
 //!

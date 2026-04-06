@@ -8,7 +8,7 @@
 //! 2. 密码格式：SSR 的密码需要以协议名作为前缀
 //! 3. 握手流程：SSR 的握手过程更复杂，需要多次交互
 //!
-//! 协议规范：https://github.com/shadowsocksr/shadowsocks-rss
+//! 协议规范：<https://github.com/shadowsocksr/shadowsocks-rss>
 
 use std::time::Duration;
 

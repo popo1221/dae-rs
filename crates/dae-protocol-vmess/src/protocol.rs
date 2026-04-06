@@ -68,6 +68,7 @@ pub enum VmessSecurity {
 impl std::fmt::Display for VmessSecurity {
     /// 格式化安全类型为字符串
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        #[allow(deprecated)]
         match self {
             VmessSecurity::Aes128Cfb => write!(f, "aes-128-cfb"),
             VmessSecurity::Aes128Gcm => write!(f, "aes-128-gcm"),
@@ -98,6 +99,7 @@ impl VmessSecurity {
     /// - `Some(VmessSecurity)`: 解析成功
     /// - `None`: 不支持的安全类型
     pub fn from_str(s: &str) -> Option<Self> {
+        #[allow(deprecated)]
         match s.to_lowercase().as_str() {
             "aes-128-cfb" | "aes128cfb" => Some(VmessSecurity::Aes128Cfb),
             "aes-128-gcm" | "aes128gcm" => Some(VmessSecurity::Aes128Gcm),

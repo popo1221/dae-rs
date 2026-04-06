@@ -12,8 +12,10 @@
 //! # AEAD 加密
 //!
 //! AEAD（Authenticated Encryption with Associated Data）模式提供加密和认证：
+//!
 //! - 加密 payload
 //! - 生成认证标签防止篡改
+//!
 //! 支持的算法：chacha20-ietf-poly1305, aes-256-gcm, aes-128-gcm
 
 use std::net::{IpAddr, Ipv4Addr, Ipv6Addr};
