@@ -221,6 +221,11 @@ impl VlanHdr {
         let data = ctx.data();
         let data_end = ctx.data_end();
 
+        // SAFETY: The pointer is derived from `ctx.data()` which points to valid packet data.
+        // We perform bounds checking after the cast to ensure the entire VlanHdr fits within
+        // the packet bounds (data_end). The offset is validated against data_end, and the
+        // resulting pointer is only used if the bounds check passes. This is safe because
+        // we never dereference the pointer without first verifying it stays within packet bounds.
         let ptr = unsafe { (data as *const u8).add(eth_offset) as *const VlanHdr };
         if ptr as usize + core::mem::size_of::<VlanHdr>() > data_end {
             return None;
@@ -320,6 +325,10 @@ impl IpHdr {
         let data = ctx.data();
         let data_end = ctx.data_end();
 
+        // SAFETY: The pointer is derived from `ctx.data()` which points to valid packet data.
+        // The offset is bounded by the caller (eth_offset is either 14 or 18 based on VLAN presence),
+        // and we additionally validate the entire IpHdr fits within data_end after the cast.
+        // This is safe because we never dereference the pointer without verifying bounds first.
         let ptr = unsafe { (data as *const u8).add(eth_offset) as *const IpHdr };
         if ptr as usize + core::mem::size_of::<IpHdr>() > data_end {
             return None;
@@ -460,6 +469,11 @@ impl TcpHdr {
         let data_end = ctx.data_end();
 
         let offset = ip_offset + ip_hdr_len as usize;
+        // SAFETY: The pointer is derived from `ctx.data()` which points to valid packet data.
+        // The offset is computed from validated ip_offset and ip_hdr_len (from IP header),
+        // and bounds checking after the cast ensures the entire TcpHdr fits within data_end.
+        // This is safe because pointer arithmetic does not dereference, and bounds are checked
+        // before the pointer is used.
         let ptr = unsafe { (data as *const u8).add(offset) as *const TcpHdr };
         if ptr as usize + core::mem::size_of::<TcpHdr>() > data_end {
             return None;
@@ -553,6 +567,10 @@ impl UdpHdr {
         let data_end = ctx.data_end();
 
         let offset = ip_offset + ip_hdr_len as usize;
+        // SAFETY: The pointer is derived from `ctx.data()` which points to valid packet data.
+        // The offset is computed from validated ip_offset and ip_hdr_len, and the subsequent
+        // bounds check ensures the entire UdpHdr (8 bytes) fits within the packet buffer.
+        // This is safe because we never dereference without verifying bounds.
         let ptr = unsafe { (data as *const u8).add(offset) as *const UdpHdr };
         if ptr as usize + core::mem::size_of::<UdpHdr>() > data_end {
             return None;
@@ -619,6 +637,10 @@ impl IcmpHdr {
         let data_end = ctx.data_end();
 
         let offset = ip_offset + ip_hdr_len as usize;
+        // SAFETY: The pointer is derived from `ctx.data()` which points to valid packet data.
+        // The offset is computed from validated ip_offset and ip_hdr_len, and bounds checking
+        // after the cast ensures the entire IcmpHdr fits within the packet. This is safe
+        // because pointer arithmetic does not dereference, and bounds are verified before use.
         let ptr = unsafe { (data as *const u8).add(offset) as *const IcmpHdr };
         if ptr as usize + core::mem::size_of::<IcmpHdr>() > data_end {
             return None;

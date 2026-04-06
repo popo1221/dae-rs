@@ -12,8 +12,9 @@ use axum::{
 use futures::{SinkExt, StreamExt};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
-use std::sync::Arc;
+use std::sync::OnceLock;
 use tokio::sync::{broadcast, RwLock};
+use std::sync::Arc;
 use tower_http::cors::{Any, CorsLayer};
 use tracing::{error, info, warn};
 
@@ -156,12 +157,11 @@ impl Default for DashboardState {
 }
 
 /// Global dashboard state instance
-static DASHBOARD_STATE: once_cell::sync::Lazy<DashboardState> =
-    once_cell::sync::Lazy::new(DashboardState::new);
+static DASHBOARD_STATE: OnceLock<DashboardState> = OnceLock::new();
 
 /// Get a clone of the global dashboard state
 pub fn get_dashboard_state() -> &'static DashboardState {
-    &DASHBOARD_STATE
+    DASHBOARD_STATE.get_or_init(DashboardState::new)
 }
 
 /// Create a shared reference to dashboard state
