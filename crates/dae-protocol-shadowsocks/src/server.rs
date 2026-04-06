@@ -29,8 +29,8 @@ use super::handler::ShadowsocksHandler;
 ///
 /// # 创建方式
 ///
-/// - [`ShadowsocksServer::new`]: 使用默认配置创建服务器
-/// - [`ShadowsocksServer::with_config`]: 使用自定义配置创建服务器
+/// - [`Self::new`]: 使用默认配置创建服务器
+/// - [`Self::with_config`]: 使用自定义配置创建服务器
 ///
 /// # 启动服务器
 ///

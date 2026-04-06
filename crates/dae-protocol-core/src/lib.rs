@@ -74,7 +74,7 @@ pub trait HandlerConfig: Send + Sync + std::fmt::Debug {}
 ///
 /// - **Simple**: One method to handle connections
 /// - **Stream-centric**: Works directly with TcpStream
-/// - **Arc<Self> pattern**: Enables shared ownership during async operations
+/// - **Arc\<Self> pattern**: Enables shared ownership during async operations
 /// - **Type-safe**: Generic Config associated type
 #[async_trait]
 pub trait Handler: Send + Sync {
@@ -101,7 +101,7 @@ pub trait Handler: Send + Sync {
     /// 5. Relay traffic bidirectionally
     ///
     /// # Arguments
-    /// * `self` - Arc<Self> enabling shared ownership during async operations
+    /// * `self` - Arc\<Self> enabling shared ownership during async operations
     /// * `stream` - The TCP stream for the incoming connection
     async fn handle(self: Arc<Self>, stream: TcpStream) -> std::io::Result<()>;
 

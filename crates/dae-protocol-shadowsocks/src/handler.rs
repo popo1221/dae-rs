@@ -35,7 +35,7 @@ use dae_protocol_core::{Handler, HandlerConfig, ProtocolType};
 ///
 /// # 使用方式
 ///
-/// 通常不直接创建，而是通过 [`ShadowsocksServer`] 内部使用：
+/// 通常不直接创建，而是通过 [`super::server::ShadowsocksServer`] 内部使用：
 ///
 /// ```ignore
 /// let handler = Arc::new(ShadowsocksHandler::new(config));
