@@ -11,11 +11,11 @@ Refactor all dae-rs files >500 lines until no large files remain.
 | File | Lines | Status | Action |
 |------|-------|--------|--------|
 | subscription/mod.rs | 2267 | Analyzed | ❌ Skip (too coupled) |
-| ebpf_integration/mod.rs | 1530 | TODO | Split handles to submodules |
-| config/src/lib.rs | 1399 | TODO | Extract types to types.rs |
-| tracking/types.rs | 957 | TODO | Consider merge with tracking.rs |
-| vless/handler.rs | 880 | TODO | Extract handle_udp to udp_handler.rs |
-| connection_pool.rs | 853 | Analyzed | ❌ Skip (ConnectionKey dep) |
+| ebpf_integration/mod.rs | 1481 | ✅ Done | Extracted errors.rs (51 lines) |
+| config/src/lib.rs | 1321 | ✅ Done | Extracted types.rs (105 lines) |
+| tracking/types.rs | 957 | ❌ Skip | Complex type dependencies |
+| vless/handler.rs | 880 | ❌ Skip | Complex async handling |
+| connection_pool.rs | 853 | ❌ Skip | ConnectionKey has external deps |
 | handler.rs (dae-protocol-vless) | 840 | TODO | Review structure |
 | handler.rs (dae-protocol-trojan) | 818 | TODO | Review structure |
 | tuic_impl.rs | 784 | TODO | Review structure |
