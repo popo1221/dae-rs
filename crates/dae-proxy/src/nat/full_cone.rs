@@ -378,4 +378,62 @@ mod tests {
         // Full-Cone: any incoming is allowed
         assert!(nat.is_incoming_allowed(external, remote));
     }
+
+    #[test]
+    fn test_is_incoming_allowed_no_mapping() {
+        let nat = FullConeNat::with_default_config();
+        let remote: SocketAddr = "8.8.8.8:53".parse().unwrap();
+        let non_existent: SocketAddr = "1.2.3.4:12345".parse().unwrap();
+
+        // No mapping exists, should not be allowed
+        assert!(!nat.is_incoming_allowed(non_existent, remote));
+    }
+
+    #[test]
+    fn test_mapping_reuse() {
+        let nat = FullConeNat::with_default_config();
+        let internal: SocketAddr = "192.168.1.100:12345".parse().unwrap();
+
+        // Create first mapping
+        let external1 = nat.create_mapping(internal).unwrap();
+
+        // Create second mapping for same internal - should reuse
+        let external2 = nat.create_mapping(internal).unwrap();
+
+        // Should return the same external address
+        assert_eq!(external1, external2);
+    }
+
+    #[test]
+    fn test_find_internal_no_mapping() {
+        let nat = FullConeNat::with_default_config();
+        let non_existent: SocketAddr = "1.2.3.4:12345".parse().unwrap();
+
+        // No mapping exists
+        assert_eq!(nat.find_internal(non_existent), None);
+    }
+
+    #[test]
+    fn test_remove_mapping_not_found() {
+        let nat = FullConeNat::with_default_config();
+        let internal: SocketAddr = "192.168.1.100:12345".parse().unwrap();
+
+        // Try to remove non-existent mapping
+        let removed = nat.remove_mapping(internal);
+        assert!(removed.is_none());
+    }
+
+    #[test]
+    fn test_nat_mapping_is_expired() {
+        let nat = FullConeNat::with_default_config();
+        let internal: SocketAddr = "192.168.1.100:12345".parse().unwrap();
+
+        let external = nat.create_mapping(internal).unwrap();
+        let mapping = nat.get_mapping(internal).unwrap();
+
+        // Fresh mapping should not be expired
+        assert!(!mapping.is_expired());
+        assert_eq!(mapping.internal, internal);
+        assert_eq!(mapping.external, external);
+    }
 }
