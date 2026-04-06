@@ -369,4 +369,45 @@ mod tests {
             DetectedProtocol::HttpOther
         );
     }
+
+    #[test]
+    fn test_detect_http_trace() {
+        assert_eq!(
+            DetectedProtocol::detect(b"TRACE / HTTP/1.1"),
+            DetectedProtocol::HttpOther
+        );
+    }
+
+    #[test]
+    fn test_detected_protocol_debug() {
+        let proto = DetectedProtocol::Socks5;
+        let debug_str = format!("{:?}", proto);
+        assert!(debug_str.contains("Socks5"));
+
+        let proto2 = DetectedProtocol::HttpConnect;
+        let debug_str2 = format!("{:?}", proto2);
+        assert!(debug_str2.contains("HttpConnect"));
+    }
+
+    #[test]
+    fn test_detected_protocol_equality() {
+        assert_eq!(DetectedProtocol::Socks5, DetectedProtocol::Socks5);
+        assert_eq!(DetectedProtocol::HttpConnect, DetectedProtocol::HttpConnect);
+        assert_ne!(DetectedProtocol::Socks5, DetectedProtocol::HttpConnect);
+        assert_ne!(DetectedProtocol::HttpOther, DetectedProtocol::Unknown);
+    }
+
+    #[test]
+    fn test_detect_http_connect_case_sensitive() {
+        // Protocol detection should be case-sensitive for first byte
+        // 0x05 is SOCKS5, not ASCII letter
+        assert_eq!(DetectedProtocol::detect(&[0x05]), DetectedProtocol::Socks5);
+    }
+
+    #[test]
+    fn test_detect_socks5_with_longer_data() {
+        // SOCKS5 should be detected regardless of additional bytes
+        let data = [0x05, 0x02, 0x00, 0x01, 0xC0, 0xA8, 0x01, 0x64, 0x1B, 0x58];
+        assert_eq!(DetectedProtocol::detect(&data), DetectedProtocol::Socks5);
+    }
 }

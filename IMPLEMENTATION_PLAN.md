@@ -73,9 +73,9 @@ cargo clippy --workspace ✅
 
 | File | Lines | Tests | Action |
 |------|-------|-------|--------|
-| connection_pool.rs | 853 | ~50% | Add more tests |
-| control.rs | 630 | 1 test | Add more tests |
-| logging.rs | 590 | 16 tests | Add more tests |
+| connection_pool.rs | 853 | 35 tests | ✅ Good coverage |
+| control.rs | 630 | 12 tests ✅ | Add more tests |
+| logging.rs | 590 | 20 tests ✅ | Add more tests |
 | protocol_dispatcher.rs | 372 | 13 tests | Add more tests |
 
 ## Session Summary
@@ -89,8 +89,10 @@ cargo clippy --workspace ✅
 | 2026-04-06T08:40 | Added tracking tests | 17 new tests |
 | 2026-04-06T17:35 | Final recommendation | Do NOT split subscription.rs |
 | 2026-04-06T17:49 | Cleaned dead code | Removed ParsedProxyUri (29 lines) |
+| 2026-04-06T17:51 | Added control.rs tests | 9 new tests (3→12) |
+| 2026-04-06T17:53 | Added logging.rs tests | 4 new tests (16→20) |
 
 ## Current Status
-- Progress: 45%
+- Progress: 55%
 - Blockers: None
 - Recommendation: Focus on test coverage, not refactoring
