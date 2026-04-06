@@ -22,6 +22,7 @@ members = [
     "crates/dae-protocol-tuic",
     "crates/dae-protocol-vless",
     "crates/dae-protocol-vmess",
+    "crates/dae-protocol-core",
     "benches",
 ]
 

@@ -15,6 +15,7 @@ sha2 = "0.10"
 curve25519-dalek = { version = "4", features = ["rand_core"] }
 serde = { version = "1", features = ["derive"] }
 dae-relay = { path = "../dae-relay" }
+dae-protocol-core = { path = "../dae-protocol-core" }
 
 [dev-dependencies]
 tokio-test = "0.4"

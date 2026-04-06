@@ -1,0 +1,9 @@
+[package]
+name = "dae-protocol-core"
+version = "0.1.0"
+edition = "2021"
+description = "Core protocol traits for dae-rs"
+
+[dependencies]
+async-trait = "0.1"
+tokio = { version = "1", features = ["net"] }
