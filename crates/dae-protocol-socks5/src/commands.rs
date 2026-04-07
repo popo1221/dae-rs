@@ -329,20 +329,25 @@ impl CommandHandler {
     /// |RSV (2)|FRAG (1)|ATYP (1)|DST.ADDR     |DST.PORT (2)|DATA        |
     /// |  0x0000  |   n   |  1    | Variable   |     2      | Variable   |
     /// ```
-    async fn udp_relay_loop(udp_socket: Arc<UdpSocket>, udp_timeout_secs: u64, _udp_rcvbuf: Option<usize>) {
+    async fn udp_relay_loop(
+        udp_socket: Arc<UdpSocket>,
+        udp_timeout_secs: u64,
+        _udp_rcvbuf: Option<usize>,
+    ) {
         const MAX_UDP_SIZE: usize = 65535;
         let mut buf = vec![0u8; MAX_UDP_SIZE];
         let timeout = std::time::Duration::from_secs(udp_timeout_secs);
 
         loop {
             // Receive datagram from client
-            let (n, src_addr) = match tokio::time::timeout(timeout, udp_socket.recv_from(&mut buf)).await {
-                Ok(Ok(result)) => result,
-                Ok(Err(_)) | Err(_) => {
-                    // Timeout or error, continue to next iteration
-                    continue;
-                }
-            };
+            let (n, src_addr) =
+                match tokio::time::timeout(timeout, udp_socket.recv_from(&mut buf)).await {
+                    Ok(Ok(result)) => result,
+                    Ok(Err(_)) | Err(_) => {
+                        // Timeout or error, continue to next iteration
+                        continue;
+                    }
+                };
 
             if n < 10 {
                 // Minimum: RSV(2) + FRAG(1) + ATYP(1) + ADDR(1) + PORT(2) + DATA(1) = 7
