@@ -220,22 +220,38 @@ impl ProtocolDispatcher {
             store.update_connection(tracking_key, create_stats_entry(ConnectionState::Established));
         }
 
-        let result = match protocol {
+        let relay_stats = match protocol {
             DetectedProtocol::Socks5 => {
                 if let Some(ref handler) = self.socks5_handler {
-                    handler.clone().handle(client).await
+                    let stats = handler.clone().handle(client).await;
+                    // Record relay stats to tracking store if available
+                    if let (Some(ref store), Ok(Some(relay_stats))) = (&self.tracking_store, &stats) {
+                        // Record inbound (remote to client)
+                        store.record_connection_data(
+                            &tracking_key,
+                            relay_stats.bytes_remote_to_client,
+                            true,
+                        );
+                        // Record outbound (client to remote)
+                        store.record_connection_data(
+                            &tracking_key,
+                            relay_stats.bytes_client_to_remote,
+                            false,
+                        );
+                    }
+                    stats.map(|opt| opt.map(|_| ()))
                 } else {
-                    self.reject_unknown(client, "SOCKS5 not enabled").await
+                    self.reject_unknown(client, "SOCKS5 not enabled").await.map(|_| None)
                 }
             }
             DetectedProtocol::HttpConnect | DetectedProtocol::HttpOther => {
                 if let Some(ref handler) = self.http_handler {
-                    handler.clone().handle(client).await
+                    handler.clone().handle(client).await.map(|_| None)
                 } else {
-                    self.reject_unknown(client, "HTTP proxy not enabled").await
+                    self.reject_unknown(client, "HTTP proxy not enabled").await.map(|_| None)
                 }
             }
-            DetectedProtocol::Unknown => self.reject_unknown(client, "unsupported protocol").await,
+            DetectedProtocol::Unknown => self.reject_unknown(client, "unsupported protocol").await.map(|_| None),
         };
 
         // Track connection as Closed when done
@@ -243,7 +259,7 @@ impl ProtocolDispatcher {
             store.update_connection(tracking_key, create_stats_entry(ConnectionState::Closed));
         }
 
-        result
+        relay_stats.map(|opt| opt.map(|_| ()).unwrap_or(()))
     }
 
     /// Reject connection with unknown protocol

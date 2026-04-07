@@ -10,6 +10,7 @@ use tracing::{debug, error, info};
 use super::auth::CombinedAuthHandler;
 use super::commands::CommandHandler;
 use super::handshake::Handshake;
+use dae_relay::RelayStats;
 
 /// SOCKS5 连接处理器配置
 ///
@@ -111,7 +112,10 @@ impl Socks5Handler {
     /// 1. **问候阶段**：调用 Handshake 处理客户端问候和认证方法协商
     /// 2. **认证阶段**（可选）：如果选择了 USERNAME_PASSWORD 认证，执行认证流程
     /// 3. **请求阶段**：调用 CommandHandler 处理请求
-    pub async fn handle(self: Arc<Self>, mut client: TcpStream) -> std::io::Result<()> {
+    ///
+    /// # 返回值
+    /// 返回 `Ok(Some(RelayStats))` 如果有字节统计，`Ok(None)` 对于不支持统计的命令。
+    pub async fn handle(self: Arc<Self>, mut client: TcpStream) -> std::io::Result<Option<RelayStats>> {
         // Phase 1: Greeting and authentication method selection
         let handshake = Handshake::new(self.config.auth_handler.clone());
         let auth_method = handshake.handle_greeting(&mut client).await?;

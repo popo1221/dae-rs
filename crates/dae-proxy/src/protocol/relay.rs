@@ -122,6 +122,35 @@ pub async fn relay_bidirectional_with_stats(
     ))
 }
 
+/// Relay data bidirectionally with stats recording callback.
+///
+/// This is a wrapper around `relay_bidirectional_with_stats` that calls
+/// the provided callback with the relay statistics after completion.
+///
+/// # Arguments
+///
+/// * `client` - The client-side TCP stream
+/// * `remote` - The remote-side TCP stream
+/// * `on_complete` - Callback called with (bytes_client_to_remote, bytes_remote_to_client)
+///
+/// # Returns
+///
+/// Returns `Ok(())` on success, or the first error encountered.
+#[allow(dead_code)]
+pub async fn relay_bidirectional_with_callback<F, Fut>(
+    client: TcpStream,
+    remote: TcpStream,
+    on_complete: F,
+) -> std::io::Result<()>
+where
+    F: FnOnce(u64, u64) -> Fut,
+    Fut: std::future::Future<Output = ()>,
+{
+    let stats = relay_bidirectional_with_stats(client, remote).await?;
+    on_complete(stats.bytes_client_to_remote, stats.bytes_remote_to_client).await;
+    Ok(())
+}
+
 /// Relay data from a client to a remote, returning only after the client finishes sending.
 ///
 /// This is a unidirectional relay that copies data from client to remote only.

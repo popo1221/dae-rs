@@ -11,6 +11,7 @@ use tracing::info;
 use super::address::Socks5Address;
 use super::consts;
 use super::reply::Socks5Reply;
+use dae_relay::{relay_bidirectional_with_stats, RelayStats};
 
 /// SOCKS5 命令类型
 ///
@@ -100,7 +101,10 @@ impl CommandHandler {
     /// |VER |CMD |RSV |ATYP|  DST.ADDR   |  DST.PORT   |
     /// | 1  | 1  |  1 |  1  | Variable   |      2      |
     /// ```
-    pub async fn handle_request(&self, mut client: TcpStream) -> std::io::Result<()> {
+    ///
+    /// # 返回值
+    /// 返回 `Ok(Some(RelayStats))` 如果有字节统计，`Ok(None)` 对于不支持统计的命令。
+    pub async fn handle_request(&self, mut client: TcpStream) -> std::io::Result<Option<RelayStats>> {
         // Read request: VER (1) + CMD (1) + RSV (1) + ATYP (1) + DST.ADDR + DST.PORT (2)
         let mut header = [0u8; 4];
         client.read_exact(&mut header).await?;
@@ -136,7 +140,10 @@ impl CommandHandler {
         tracing::debug!("SOCKS5 request: {:?} to {:?}", command, dst_addr);
 
         match command {
-            Socks5Command::Connect => self.handle_connect(client, &dst_addr).await,
+            Socks5Command::Connect => {
+                let stats = self.handle_connect(client, &dst_addr).await?;
+                Ok(Some(stats))
+            }
             Socks5Command::Bind => {
                 self.send_reply(
                     &mut client,
@@ -149,7 +156,10 @@ impl CommandHandler {
                     "BIND command not supported",
                 ))
             }
-            Socks5Command::UdpAssociate => self.handle_udp_associate(client, &dst_addr).await,
+            Socks5Command::UdpAssociate => {
+                self.handle_udp_associate(client, &dst_addr).await?;
+                Ok(None)
+            }
         }
     }
 
@@ -163,14 +173,15 @@ impl CommandHandler {
     /// 3. 建立到目标服务器的 TCP 连接
     /// 4. 发送成功响应
     /// 5. 桥接客户端和目标服务器的连接
+    ///
+    /// # 返回值
+    /// 返回 `Ok(RelayStats)` 包含字节统计，或错误。
     #[allow(clippy::incompatible_msrv)]
     pub async fn handle_connect(
         &self,
         mut client: TcpStream,
         dst_addr: &Socks5Address,
-    ) -> std::io::Result<()> {
-        use dae_relay::relay_bidirectional as relay;
-
+    ) -> std::io::Result<RelayStats> {
         // Resolve address
         let socket_addr = match dst_addr.to_socket_addr() {
             Some(addr) => addr,
@@ -251,8 +262,8 @@ impl CommandHandler {
 
         info!("SOCKS5 CONNECT: -> {}", socket_addr);
 
-        // Relay data between client and remote
-        relay(client, remote).await
+        // Relay data between client and remote and return stats
+        relay_bidirectional_with_stats(client, remote).await
     }
 
     /// 处理 UDP ASSOCIATE 命令
