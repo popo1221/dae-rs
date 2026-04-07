@@ -126,16 +126,14 @@ impl Rule {
     /// Note: DnsType, Capability, and NodeTag map to 0 (Domain) as fallback
     /// since they don't have direct equivalents in tracking::types::RuleType
     pub fn rule_type_u8(&self) -> u8 {
-        use crate::rules::RuleType;
         use crate::rules::DomainRuleType;
+        use crate::rules::RuleType;
         match self {
-            Rule::Domain(r) => {
-                match &r.rule_type {
-                    DomainRuleType::Exact(_) => RuleType::Domain as u8,
-                    DomainRuleType::Suffix(_) => RuleType::DomainSuffix as u8,
-                    DomainRuleType::Keyword(_) => RuleType::DomainKeyword as u8,
-                }
-            }
+            Rule::Domain(r) => match &r.rule_type {
+                DomainRuleType::Exact(_) => RuleType::Domain as u8,
+                DomainRuleType::Suffix(_) => RuleType::DomainSuffix as u8,
+                DomainRuleType::Keyword(_) => RuleType::DomainKeyword as u8,
+            },
             Rule::IpCidr(_) => RuleType::IpCidr as u8,
             Rule::GeoIp(_) => RuleType::GeoIp as u8,
             Rule::Process(_) => RuleType::Process as u8,

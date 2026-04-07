@@ -605,10 +605,8 @@ impl HttpProxyHandler {
             Err(e) => return Err(e),
         };
 
-        tracking_info = tracking_info.with_bytes(
-            stats.bytes_remote_to_client,
-            stats.bytes_client_to_remote,
-        );
+        tracking_info =
+            tracking_info.with_bytes(stats.bytes_remote_to_client, stats.bytes_client_to_remote);
 
         Ok(((), tracking_info))
     }

@@ -104,7 +104,10 @@ impl CommandHandler {
     ///
     /// # 返回值
     /// 返回 `Ok(Some(RelayStats))` 如果有字节统计，`Ok(None)` 对于不支持统计的命令。
-    pub async fn handle_request(&self, mut client: TcpStream) -> std::io::Result<Option<RelayStats>> {
+    pub async fn handle_request(
+        &self,
+        mut client: TcpStream,
+    ) -> std::io::Result<Option<RelayStats>> {
         // Read request: VER (1) + CMD (1) + RSV (1) + ATYP (1) + DST.ADDR + DST.PORT (2)
         let mut header = [0u8; 4];
         client.read_exact(&mut header).await?;

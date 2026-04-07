@@ -115,7 +115,10 @@ impl Socks5Handler {
     ///
     /// # 返回值
     /// 返回 `Ok(Some(RelayStats))` 如果有字节统计，`Ok(None)` 对于不支持统计的命令。
-    pub async fn handle(self: Arc<Self>, mut client: TcpStream) -> std::io::Result<Option<RelayStats>> {
+    pub async fn handle(
+        self: Arc<Self>,
+        mut client: TcpStream,
+    ) -> std::io::Result<Option<RelayStats>> {
         // Phase 1: Greeting and authentication method selection
         let handshake = Handshake::new(self.config.auth_handler.clone());
         let auth_method = handshake.handle_greeting(&mut client).await?;

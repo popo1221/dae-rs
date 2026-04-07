@@ -566,10 +566,9 @@ impl VmessHandler {
         );
 
         // Build tracking info
-        let mut tracking_info =
-            VmessTrackingInfo::with_user_id(&self.config.server.user_id)
-                .with_target_addr(&target_str)
-                .with_security_level("AEAD-2022");
+        let mut tracking_info = VmessTrackingInfo::with_user_id(&self.config.server.user_id)
+            .with_target_addr(&target_str)
+            .with_security_level("AEAD-2022");
 
         // Connect to upstream VMess server
         let remote_addr = format!("{}:{}", self.config.server.addr, self.config.server.port);
@@ -595,10 +594,8 @@ impl VmessHandler {
         };
 
         // Update tracking info with bytes
-        tracking_info = tracking_info.with_bytes(
-            stats.bytes_remote_to_client,
-            stats.bytes_client_to_remote,
-        );
+        tracking_info =
+            tracking_info.with_bytes(stats.bytes_remote_to_client, stats.bytes_client_to_remote);
 
         Ok(((), tracking_info))
     }

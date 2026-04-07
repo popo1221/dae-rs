@@ -88,11 +88,10 @@ impl MetricsServer {
         use crate::metrics::tracking::{
             CONNECTION_STATE_COUNTER, DROPPED_COUNTER, NODE_BYTES_IN_COUNTER,
             NODE_BYTES_OUT_COUNTER, NODE_REQUESTS_COUNTER, PROXY_PROTOCOL_BYTES_IN_COUNTER,
-            PROXY_PROTOCOL_BYTES_OUT_COUNTER, PROXY_PROTOCOL_CONNECTIONS_COUNTER,
-            ROUTED_COUNTER, RULE_MATCH_BYTES_COUNTER, RULE_MATCH_BY_ACTION_COUNTER,
-            RULE_MATCH_BY_TYPE_COUNTER, TRACKING_ACTIVE_CONNECTIONS_GAUGE,
-            TRACKING_BYTES_IN_COUNTER, TRACKING_BYTES_OUT_COUNTER, TRACKING_PACKETS_COUNTER,
-            UNMATCHED_COUNTER,
+            PROXY_PROTOCOL_BYTES_OUT_COUNTER, PROXY_PROTOCOL_CONNECTIONS_COUNTER, ROUTED_COUNTER,
+            RULE_MATCH_BYTES_COUNTER, RULE_MATCH_BY_ACTION_COUNTER, RULE_MATCH_BY_TYPE_COUNTER,
+            TRACKING_ACTIVE_CONNECTIONS_GAUGE, TRACKING_BYTES_IN_COUNTER,
+            TRACKING_BYTES_OUT_COUNTER, TRACKING_PACKETS_COUNTER, UNMATCHED_COUNTER,
         };
 
         self.registry
@@ -166,10 +165,8 @@ impl MetricsServer {
             .register(Box::new((*RULE_MATCH_BY_ACTION_COUNTER).clone()))?;
         self.registry
             .register(Box::new((*RULE_MATCH_BYTES_COUNTER).clone()))?;
-        self.registry
-            .register(Box::new(DROPPED_COUNTER.clone()))?;
-        self.registry
-            .register(Box::new(ROUTED_COUNTER.clone()))?;
+        self.registry.register(Box::new(DROPPED_COUNTER.clone()))?;
+        self.registry.register(Box::new(ROUTED_COUNTER.clone()))?;
         self.registry
             .register(Box::new(UNMATCHED_COUNTER.clone()))?;
 

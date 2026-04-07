@@ -339,7 +339,10 @@ impl Hysteria2Handler {
     ///
     /// - `Ok(RelayStats)`: 处理成功完成，包含字节统计
     /// - `Err(Hysteria2Error)`: 处理过程中发生错误
-    pub async fn handle_connection(&self, mut stream: TcpStream) -> Result<RelayStats, Hysteria2Error> {
+    pub async fn handle_connection(
+        &self,
+        mut stream: TcpStream,
+    ) -> Result<RelayStats, Hysteria2Error> {
         // Read client hello
         let mut hello_buf = [0u8; 1024];
         let n = stream.read(&mut hello_buf).await?;

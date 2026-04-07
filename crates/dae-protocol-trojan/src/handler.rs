@@ -722,7 +722,10 @@ impl TrojanHandler {
 
         // Read password (56 bytes)
         let mut password_buf = vec![0u8; 56];
-        client.read_exact(&mut password_buf).await.map_err(TrojanError::Io)?;
+        client
+            .read_exact(&mut password_buf)
+            .await
+            .map_err(TrojanError::Io)?;
 
         // Validate password
         let expected_password = self.config.server.password.as_bytes();
@@ -736,7 +739,10 @@ impl TrojanHandler {
 
         // Read command byte
         let mut cmd_buf = [0u8; 1];
-        client.read_exact(&mut cmd_buf).await.map_err(TrojanError::Io)?;
+        client
+            .read_exact(&mut cmd_buf)
+            .await
+            .map_err(TrojanError::Io)?;
         let command = cmd_buf[0];
         let cmd = match command {
             0x01 => TrojanCommand::Proxy,
@@ -756,19 +762,24 @@ impl TrojanHandler {
         } else {
             self.config.server.password.clone()
         };
-        let mut tracking_info = TrojanTrackingInfo::with_password(&password_hint)
-            .with_command(cmd);
+        let mut tracking_info = TrojanTrackingInfo::with_password(&password_hint).with_command(cmd);
 
         // Parse address based on type
         let mut atyp_buf = [0u8; 1];
-        client.read_exact(&mut atyp_buf).await.map_err(TrojanError::Io)?;
+        client
+            .read_exact(&mut atyp_buf)
+            .await
+            .map_err(TrojanError::Io)?;
         let atyp = atyp_buf[0];
 
         let address = match atyp {
             0x01 => {
                 // IPv4（4 字节）
                 let mut ip_buf = [0u8; 4];
-                client.read_exact(&mut ip_buf).await.map_err(TrojanError::Io)?;
+                client
+                    .read_exact(&mut ip_buf)
+                    .await
+                    .map_err(TrojanError::Io)?;
                 TrojanTargetAddress::Ipv4(IpAddr::V4(Ipv4Addr::new(
                     ip_buf[0], ip_buf[1], ip_buf[2], ip_buf[3],
                 )))
@@ -776,10 +787,16 @@ impl TrojanHandler {
             0x02 => {
                 // Domain（1 字节长度 + 域名）
                 let mut len_buf = [0u8; 1];
-                client.read_exact(&mut len_buf).await.map_err(TrojanError::Io)?;
+                client
+                    .read_exact(&mut len_buf)
+                    .await
+                    .map_err(TrojanError::Io)?;
                 let domain_len = len_buf[0] as usize;
                 let mut domain_buf = vec![0u8; domain_len];
-                client.read_exact(&mut domain_buf).await.map_err(TrojanError::Io)?;
+                client
+                    .read_exact(&mut domain_buf)
+                    .await
+                    .map_err(TrojanError::Io)?;
                 let domain = String::from_utf8(domain_buf).map_err(|_| {
                     TrojanError::Io(std::io::Error::new(
                         std::io::ErrorKind::InvalidData,
@@ -791,7 +808,10 @@ impl TrojanHandler {
             0x03 => {
                 // IPv6（16 字节）
                 let mut ip_buf = [0u8; 16];
-                client.read_exact(&mut ip_buf).await.map_err(TrojanError::Io)?;
+                client
+                    .read_exact(&mut ip_buf)
+                    .await
+                    .map_err(TrojanError::Io)?;
                 TrojanTargetAddress::Ipv6(IpAddr::V6(Ipv6Addr::new(
                     u16::from_be_bytes([ip_buf[0], ip_buf[1]]),
                     u16::from_be_bytes([ip_buf[2], ip_buf[3]]),
@@ -813,12 +833,18 @@ impl TrojanHandler {
 
         // Read port (2 bytes)
         let mut port_buf = [0u8; 2];
-        client.read_exact(&mut port_buf).await.map_err(TrojanError::Io)?;
+        client
+            .read_exact(&mut port_buf)
+            .await
+            .map_err(TrojanError::Io)?;
         let port = u16::from_be_bytes(port_buf);
 
         // Read final CRLF (2 bytes)
         let mut crlf_buf = [0u8; 2];
-        client.read_exact(&mut crlf_buf).await.map_err(TrojanError::Io)?;
+        client
+            .read_exact(&mut crlf_buf)
+            .await
+            .map_err(TrojanError::Io)?;
         if crlf_buf != TROJAN_CRLF {
             return Err(TrojanError::Io(std::io::Error::new(
                 std::io::ErrorKind::InvalidData,
@@ -850,19 +876,20 @@ impl TrojanHandler {
                 );
 
                 // Connect to backend server
-                let remote = match tokio::time::timeout(timeout, TcpStream::connect(&remote_addr)).await {
-                    Ok(Ok(s)) => s,
-                    Ok(Err(e)) => {
-                        error!("Failed to connect to Trojan backend: {}", e);
-                        return Err(TrojanError::Io(e));
-                    }
-                    Err(_) => {
-                        return Err(TrojanError::Io(std::io::Error::new(
-                            std::io::ErrorKind::TimedOut,
-                            "connection to Trojan server timed out",
-                        )));
-                    }
-                };
+                let remote =
+                    match tokio::time::timeout(timeout, TcpStream::connect(&remote_addr)).await {
+                        Ok(Ok(s)) => s,
+                        Ok(Err(e)) => {
+                            error!("Failed to connect to Trojan backend: {}", e);
+                            return Err(TrojanError::Io(e));
+                        }
+                        Err(_) => {
+                            return Err(TrojanError::Io(std::io::Error::new(
+                                std::io::ErrorKind::TimedOut,
+                                "connection to Trojan server timed out",
+                            )));
+                        }
+                    };
 
                 debug!("Connected to Trojan server {}", remote_addr);
 
@@ -872,10 +899,8 @@ impl TrojanHandler {
                     Err(e) => return Err(TrojanError::Io(e)),
                 };
 
-                tracking_info = tracking_info.with_bytes(
-                    stats.bytes_remote_to_client,
-                    stats.bytes_client_to_remote,
-                );
+                tracking_info = tracking_info
+                    .with_bytes(stats.bytes_remote_to_client, stats.bytes_client_to_remote);
 
                 Ok(((), tracking_info))
             }

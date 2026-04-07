@@ -392,10 +392,7 @@ impl ShadowsocksHandler {
 
         let target_str = format!("{}:{}", target_addr, target_port);
 
-        info!(
-            "Shadowsocks TCP: {} -> {}",
-            client_addr, target_str
-        );
+        info!("Shadowsocks TCP: {} -> {}", client_addr, target_str);
 
         // Get cipher type from config
         let cipher_str = format!("{}", self.config.server.method);
@@ -420,8 +417,8 @@ impl ShadowsocksHandler {
         debug!("Connected to Shadowsocks server {}", remote_addr);
 
         // Build tracking info
-        let mut tracking_info = ShadowsocksTrackingInfo::with_cipher_type(&cipher_str)
-            .with_target_addr(&target_str);
+        let mut tracking_info =
+            ShadowsocksTrackingInfo::with_cipher_type(&cipher_str).with_target_addr(&target_str);
 
         // Relay with stats
         let stats = match dae_relay::relay_bidirectional_with_stats(client, remote).await {
@@ -429,10 +426,8 @@ impl ShadowsocksHandler {
             Err(e) => return Err(ShadowsocksError::Io(e)),
         };
 
-        tracking_info = tracking_info.with_bytes(
-            stats.bytes_remote_to_client,
-            stats.bytes_client_to_remote,
-        );
+        tracking_info =
+            tracking_info.with_bytes(stats.bytes_remote_to_client, stats.bytes_client_to_remote);
 
         Ok(((), tracking_info))
     }

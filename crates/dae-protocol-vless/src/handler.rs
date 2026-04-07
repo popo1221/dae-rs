@@ -719,7 +719,9 @@ impl VlessHandler {
                 )))
             }
             VlessCommand::XtlsVision => {
-                let result = self.handle_reality_vision_with_tracking(client, tracking_info).await;
+                let result = self
+                    .handle_reality_vision_with_tracking(client, tracking_info)
+                    .await;
                 match result {
                     (Ok(()), info) => Ok(((), info)),
                     (Err(e), _) => Err(e),
@@ -861,32 +863,30 @@ impl VlessHandler {
 
         // Connect to VLESS server
         let remote_addr = format!("{}:{}", self.config.server.addr, self.config.server.port);
-        let mut remote = match tokio::time::timeout(
-            self.config.tcp_timeout,
-            TcpStream::connect(&remote_addr),
-        )
-        .await
-        {
-            Ok(Ok(s)) => s,
-            Ok(Err(_e)) => {
-                return (
-                    Err(VlessError::Io(std::io::Error::new(
-                        ErrorKind::TimedOut,
-                        "connection timed out",
-                    ))),
-                    tracking_info,
-                )
-            }
-            Err(_) => {
-                return (
-                    Err(VlessError::Io(std::io::Error::new(
-                        ErrorKind::TimedOut,
-                        "connection timed out",
-                    ))),
-                    tracking_info,
-                )
-            }
-        };
+        let mut remote =
+            match tokio::time::timeout(self.config.tcp_timeout, TcpStream::connect(&remote_addr))
+                .await
+            {
+                Ok(Ok(s)) => s,
+                Ok(Err(_e)) => {
+                    return (
+                        Err(VlessError::Io(std::io::Error::new(
+                            ErrorKind::TimedOut,
+                            "connection timed out",
+                        ))),
+                        tracking_info,
+                    )
+                }
+                Err(_) => {
+                    return (
+                        Err(VlessError::Io(std::io::Error::new(
+                            ErrorKind::TimedOut,
+                            "connection timed out",
+                        ))),
+                        tracking_info,
+                    )
+                }
+            };
 
         if let Err(e) = remote.write_all(&client_hello).await {
             return (Err(VlessError::Io(e)), tracking_info);
@@ -899,23 +899,24 @@ impl VlessHandler {
 
         // Read server response
         let mut server_response = vec![0u8; 8192];
-        let n = match tokio::time::timeout(self.config.tcp_timeout, remote.read(&mut server_response))
-            .await
-        {
-            Ok(Ok(n)) => n,
-            Ok(Err(e)) => {
-                return (Err(VlessError::Io(e)), tracking_info);
-            }
-            Err(_) => {
-                return (
-                    Err(VlessError::Io(std::io::Error::new(
-                        ErrorKind::TimedOut,
-                        "read timed out",
-                    ))),
-                    tracking_info,
-                );
-            }
-        };
+        let n =
+            match tokio::time::timeout(self.config.tcp_timeout, remote.read(&mut server_response))
+                .await
+            {
+                Ok(Ok(n)) => n,
+                Ok(Err(e)) => {
+                    return (Err(VlessError::Io(e)), tracking_info);
+                }
+                Err(_) => {
+                    return (
+                        Err(VlessError::Io(std::io::Error::new(
+                            ErrorKind::TimedOut,
+                            "read timed out",
+                        ))),
+                        tracking_info,
+                    );
+                }
+            };
 
         if n == 0 {
             return (
@@ -993,7 +994,10 @@ impl VlessTrackingInfo {
 
     /// Create from UUID bytes
     pub fn with_uuid(uuid: &[u8]) -> Self {
-        let uuid_str = uuid.iter().map(|b| format!("{:02x}", b)).collect::<String>();
+        let uuid_str = uuid
+            .iter()
+            .map(|b| format!("{:02x}", b))
+            .collect::<String>();
         Self {
             uuid: uuid_str,
             ..Default::default()

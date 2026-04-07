@@ -10,7 +10,7 @@ use tokio::net::TcpStream;
 use tracing::{debug, error};
 
 use crate::tracking::store::SharedTrackingStore;
-use crate::tracking::types::{ConnectionKey, ConnectionStatsEntry, ConnectionState};
+use crate::tracking::types::{ConnectionKey, ConnectionState, ConnectionStatsEntry};
 
 /// Convert SocketAddr to IPv4 u32 (for ConnectionKey)
 fn socket_addr_to_ipv4_u32(addr: &SocketAddr) -> u32 {
@@ -185,14 +185,20 @@ impl ProtocolDispatcher {
             Ok(Err(e)) => {
                 debug!("Failed to peek client bytes from {}: {}", client_addr, e);
                 if let Some(ref store) = self.tracking_store {
-                    store.update_connection(tracking_key, create_stats_entry(ConnectionState::Closed));
+                    store.update_connection(
+                        tracking_key,
+                        create_stats_entry(ConnectionState::Closed),
+                    );
                 }
                 return Err(e);
             }
             Err(_) => {
                 debug!("Protocol detection timeout for {}", client_addr);
                 if let Some(ref store) = self.tracking_store {
-                    store.update_connection(tracking_key, create_stats_entry(ConnectionState::Closed));
+                    store.update_connection(
+                        tracking_key,
+                        create_stats_entry(ConnectionState::Closed),
+                    );
                 }
                 return Err(std::io::Error::new(
                     std::io::ErrorKind::TimedOut,
@@ -217,7 +223,10 @@ impl ProtocolDispatcher {
 
         // Track connection as Established
         if let Some(ref store) = self.tracking_store {
-            store.update_connection(tracking_key, create_stats_entry(ConnectionState::Established));
+            store.update_connection(
+                tracking_key,
+                create_stats_entry(ConnectionState::Established),
+            );
         }
 
         let relay_stats = match protocol {
@@ -225,7 +234,8 @@ impl ProtocolDispatcher {
                 if let Some(ref handler) = self.socks5_handler {
                     let stats = handler.clone().handle(client).await;
                     // Record relay stats to tracking store if available
-                    if let (Some(ref store), Ok(Some(relay_stats))) = (&self.tracking_store, &stats) {
+                    if let (Some(ref store), Ok(Some(relay_stats))) = (&self.tracking_store, &stats)
+                    {
                         // Record inbound (remote to client)
                         store.record_connection_data(
                             &tracking_key,
@@ -241,17 +251,24 @@ impl ProtocolDispatcher {
                     }
                     stats.map(|opt| opt.map(|_| ()))
                 } else {
-                    self.reject_unknown(client, "SOCKS5 not enabled").await.map(|_| None)
+                    self.reject_unknown(client, "SOCKS5 not enabled")
+                        .await
+                        .map(|_| None)
                 }
             }
             DetectedProtocol::HttpConnect | DetectedProtocol::HttpOther => {
                 if let Some(ref handler) = self.http_handler {
                     handler.clone().handle(client).await.map(|_| None)
                 } else {
-                    self.reject_unknown(client, "HTTP proxy not enabled").await.map(|_| None)
+                    self.reject_unknown(client, "HTTP proxy not enabled")
+                        .await
+                        .map(|_| None)
                 }
             }
-            DetectedProtocol::Unknown => self.reject_unknown(client, "unsupported protocol").await.map(|_| None),
+            DetectedProtocol::Unknown => self
+                .reject_unknown(client, "unsupported protocol")
+                .await
+                .map(|_| None),
         };
 
         // Track connection as Closed when done

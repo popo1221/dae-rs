@@ -184,7 +184,9 @@ impl RuleTrackingStore {
     #[allow(dead_code)]
     pub fn record_match(&self, rule_id: u32, rule_type: u8, action: u8, bytes: u64) {
         let mut rules = self.rules.write().unwrap();
-        let stats = rules.entry(rule_id).or_insert_with(|| RuleStatsEntry::new(rule_id, rule_type));
+        let stats = rules
+            .entry(rule_id)
+            .or_insert_with(|| RuleStatsEntry::new(rule_id, rule_type));
         stats.record_match(crate::tracking::types::RuleAction::from(action), bytes);
     }
 }
@@ -398,7 +400,9 @@ impl TrackingStore {
 
     /// Get all protocol-specific tracking info
     #[allow(dead_code)]
-    pub fn get_all_protocol_tracking(&self) -> std::collections::HashMap<String, ProtocolTrackingInfo> {
+    pub fn get_all_protocol_tracking(
+        &self,
+    ) -> std::collections::HashMap<String, ProtocolTrackingInfo> {
         let tracking = self.protocol_tracking.read().unwrap();
         tracking.clone()
     }
@@ -572,7 +576,10 @@ impl TrackingStore {
             // Tracking API endpoints
             .route("/api/tracking/overview", get(api_overview_handler))
             .route("/api/tracking/connections", get(api_connections_handler))
-            .route("/api/tracking/connections/*key", get(api_connection_detail_handler))
+            .route(
+                "/api/tracking/connections/*key",
+                get(api_connection_detail_handler),
+            )
             .route("/api/tracking/protocols", get(api_protocols_handler))
             .route("/api/tracking/rules", get(api_rules_handler))
             .route("/api/tracking/nodes", get(api_nodes_handler))
@@ -609,7 +616,8 @@ async fn tracking_metrics_handler(State(state): State<MetricsHttpState>) -> Resp
     response
 }
 
-/// JSON API handler
+/// JSON API handler (legacy fallback)
+#[allow(dead_code)]
 async fn tracking_json_handler(State(state): State<MetricsHttpState>) -> Response<Body> {
     let store = &state.store;
     let overall = store.get_overall();
@@ -675,10 +683,10 @@ use crate::control_types::{
 /// Query parameters for connections endpoint
 #[derive(Debug, Deserialize)]
 pub struct ConnectionsQuery {
-    pub state: Option<String>,   // active, closed, all
-    pub limit: Option<usize>,   // max connections to return
+    pub state: Option<String>,    // active, closed, all
+    pub limit: Option<usize>,     // max connections to return
     pub protocol: Option<String>, // tcp, udp
-    pub sort_by: Option<String>, // bytes_in, bytes_out, last_time
+    pub sort_by: Option<String>,  // bytes_in, bytes_out, last_time
 }
 
 /// Convert ConnectionKey to string representation
@@ -799,7 +807,7 @@ async fn api_connections_handler(
 ) -> Response<Body> {
     let store = &state.store;
     let all_connections = store.connections.get_active();
-    let total_count = all_connections.len();
+    let _total_count = all_connections.len();
 
     // Count active
     let active_count = all_connections
@@ -814,16 +822,13 @@ async fn api_connections_handler(
     if let Some(ref state_filter) = query.state {
         match state_filter.as_str() {
             "active" => {
-                filtered.retain(|(_, stats)| {
-                    stats.state != ConnectionState::Closed as u8
-                });
+                filtered.retain(|(_, stats)| stats.state != ConnectionState::Closed as u8);
             }
             "closed" => {
-                filtered.retain(|(_, stats)| {
-                    stats.state == ConnectionState::Closed as u8
-                });
+                filtered.retain(|(_, stats)| stats.state == ConnectionState::Closed as u8);
             }
-            "all" | _ => {} // No filter
+            "all" => {} // No filter
+            _ => {}     // Unknown filter - no filter applied
         }
     }
 
@@ -911,7 +916,9 @@ async fn api_connection_detail_handler(
     if parts.len() != 3 {
         let error = Response::builder()
             .status(StatusCode::BAD_REQUEST)
-            .body(Body::from("Invalid key format. Expected: src_ip:port-dst_ip:port-proto"))
+            .body(Body::from(
+                "Invalid key format. Expected: src_ip:port-dst_ip:port-proto",
+            ))
             .unwrap();
         return error;
     }
@@ -983,11 +990,10 @@ async fn api_connection_detail_handler(
         );
         res
     } else {
-        let error = Response::builder()
+        Response::builder()
             .status(StatusCode::NOT_FOUND)
             .body(Body::from("Connection not found"))
-            .unwrap();
-        error
+            .unwrap()
     }
 }
 

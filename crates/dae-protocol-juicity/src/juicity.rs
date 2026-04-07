@@ -299,7 +299,10 @@ impl JuicityHandler {
     }
 
     /// Handle Juicity TCP connection with relay stats tracking
-    pub async fn handle_tcp_with_tracking(self: Arc<Self>, mut client: TcpStream) -> Result<RelayStats, JuicityError> {
+    pub async fn handle_tcp_with_tracking(
+        self: Arc<Self>,
+        mut client: TcpStream,
+    ) -> Result<RelayStats, JuicityError> {
         let client_addr = client.peer_addr()?;
         debug!("Juicity TCP connection from {}", client_addr);
 
