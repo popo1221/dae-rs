@@ -20,6 +20,7 @@ use tracing::{debug, info, warn};
 use super::codec::JuicityCodec;
 use super::types::{JuicityAddress, JuicityCommand, JuicityFrame};
 use dae_protocol_core::{Handler, HandlerConfig, ProtocolType};
+use dae_relay::{relay_bidirectional_with_stats, RelayStats};
 
 /// Juicity 错误类型
 ///
@@ -291,7 +292,14 @@ impl JuicityHandler {
     /// # 握手格式
     ///
     /// [2 字节魔术头 0xCAFE][1 字节版本][32 字节令牌][1 字节拥塞控制]
-    pub async fn handle_tcp(self: Arc<Self>, mut client: TcpStream) -> Result<(), JuicityError> {
+    /// Handle Juicity TCP client connection
+    pub async fn handle_tcp(self: Arc<Self>, client: TcpStream) -> Result<(), JuicityError> {
+        let _stats = self.handle_tcp_with_tracking(client).await?;
+        Ok(())
+    }
+
+    /// Handle Juicity TCP connection with relay stats tracking
+    pub async fn handle_tcp_with_tracking(self: Arc<Self>, mut client: TcpStream) -> Result<RelayStats, JuicityError> {
         let client_addr = client.peer_addr()?;
         debug!("Juicity TCP connection from {}", client_addr);
 
@@ -332,29 +340,19 @@ impl JuicityHandler {
 
         debug!("Juicity handshake successful from {}", client_addr);
 
-        // For TCP, the rest is just relay
-        // In a full implementation, we would parse the target from additional headers
-        // and relay between client and remote server
-
-        // For now, just relay data
-        self.relay_tcp(client).await
+        // Relay data with tracking
+        self.relay_tcp_with_tracking(client).await
     }
 
-    /// Relay TCP data between client and server
-    async fn relay_tcp(&self, client: TcpStream) -> Result<(), JuicityError> {
+    /// Relay TCP data between client and server with stats tracking
+    async fn relay_tcp_with_tracking(&self, client: TcpStream) -> Result<RelayStats, JuicityError> {
         let remote_addr = format!("{}:{}", self.config.server_addr, self.config.server_port);
 
         let remote =
             tokio::time::timeout(self.config.timeout, TcpStream::connect(&remote_addr)).await??;
 
-        let (mut cr, mut cw) = tokio::io::split(client);
-        let (mut rr, mut rw) = tokio::io::split(remote);
-
-        let client_to_remote = tokio::io::copy(&mut cr, &mut rw);
-        let remote_to_client = tokio::io::copy(&mut rr, &mut cw);
-
-        tokio::try_join!(client_to_remote, remote_to_client)?;
-        Ok(())
+        let stats = relay_bidirectional_with_stats(client, remote).await?;
+        Ok(stats)
     }
 
     /// Handle UDP traffic

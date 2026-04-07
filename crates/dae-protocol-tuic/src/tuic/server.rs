@@ -10,6 +10,8 @@ use tokio::net::TcpStream;
 use tokio::sync::RwLock;
 use tracing::{debug, error, info, warn};
 
+use dae_relay::{relay_bidirectional_with_stats, RelayStats};
+
 use super::codec::TuicCodec;
 use super::consts::{TuicCommand, TuicError};
 use super::TuicConfig;
@@ -159,20 +161,19 @@ async fn handle_client(
 }
 
 async fn handle_tcp_relay(
-    mut client_stream: TcpStream,
+    client_stream: TcpStream,
     session: TuicSession,
-) -> Result<(), TuicError> {
+) -> Result<RelayStats, TuicError> {
     if let Some((host, port)) = session.target_addr {
         let target: SocketAddr = format!("{}:{}", host, port)
             .parse()
             .map_err(|e| TuicError::InvalidProtocol(format!("Invalid target address: {}", e)))?;
-        let mut target_stream = TcpStream::connect(target).await?;
-        let (mut cr, mut cw) = client_stream.split();
-        let (mut tr, mut tw) = target_stream.split();
-        tokio::io::copy(&mut cr, &mut tw).await?;
-        tokio::io::copy(&mut tr, &mut cw).await?;
+        let target_stream = TcpStream::connect(target).await?;
+        let stats = relay_bidirectional_with_stats(client_stream, target_stream).await?;
+        Ok(stats)
+    } else {
+        Ok(RelayStats::default())
     }
-    Ok(())
 }
 
 #[cfg(test)]

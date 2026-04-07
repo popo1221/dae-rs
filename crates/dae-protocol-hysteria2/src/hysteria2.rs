@@ -31,6 +31,7 @@ use tokio::net::{TcpListener, TcpStream};
 use tracing::{error, info, warn};
 
 use dae_protocol_core::{Handler, HandlerConfig, ProtocolType};
+use dae_relay::RelayStats;
 
 /// Hysteria2 服务器配置
 ///
@@ -336,9 +337,9 @@ impl Hysteria2Handler {
     ///
     /// # 返回值
     ///
-    /// - `Ok(())`: 处理成功完成
+    /// - `Ok(RelayStats)`: 处理成功完成，包含字节统计
     /// - `Err(Hysteria2Error)`: 处理过程中发生错误
-    pub async fn handle(&self, mut stream: TcpStream) -> Result<(), Hysteria2Error> {
+    pub async fn handle_connection(&self, mut stream: TcpStream) -> Result<RelayStats, Hysteria2Error> {
         // Read client hello
         let mut hello_buf = [0u8; 1024];
         let n = stream.read(&mut hello_buf).await?;
@@ -365,12 +366,24 @@ impl Hysteria2Handler {
         self.send_server_hello(&mut stream, &server_hello).await?;
 
         // Handle the UDP relay
-        if self.config.udp_enabled {
+        let stats = if self.config.udp_enabled {
             self.handle_udp_relay(stream, client_hello.local_addr)
-                .await?;
-        }
+                .await?
+        } else {
+            RelayStats::default()
+        };
 
-        Ok(())
+        Ok(stats)
+    }
+
+    /// Handle with tracking for protocol-specific stats
+    pub async fn handle_with_tracking(
+        self: Arc<Self>,
+        stream: TcpStream,
+    ) -> std::io::Result<RelayStats> {
+        self.handle_connection(stream)
+            .await
+            .map_err(std::io::Error::other)
     }
 
     fn parse_client_hello(&self, data: &[u8]) -> Result<Hysteria2ClientHello, Hysteria2Error> {
@@ -441,11 +454,12 @@ impl Hysteria2Handler {
         &self,
         _stream: TcpStream,
         _local_addr: Option<Hysteria2Address>,
-    ) -> Result<(), Hysteria2Error> {
+    ) -> Result<RelayStats, Hysteria2Error> {
         // UDP relay implementation would go here
         // This involves setting up UDP hole punching and relay
+        // Hysteria2 uses QUIC, so byte tracking is done at QUIC level
         warn!("UDP relay not yet fully implemented - requires QUIC integration");
-        Ok(())
+        Ok(RelayStats::default())
     }
 }
 
@@ -537,8 +551,10 @@ impl Handler for Hysteria2Handler {
         &self.config
     }
 
-    async fn handle(self: Arc<Self>, _stream: TcpStream) -> std::io::Result<()> {
-        // Hysteria2 uses QUIC
+    /// Handle connection (required by Handler trait)
+    async fn handle(self: Arc<Self>, stream: TcpStream) -> std::io::Result<()> {
+        // Delegate to handle_with_tracking and ignore stats
+        let _stats = self.handle_with_tracking(stream).await?;
         Ok(())
     }
 }
