@@ -302,6 +302,31 @@ impl TrackingStore {
         }
     }
 
+    /// Record proxy hop completion for a connection
+    ///
+    /// Updates the hop index and latency for a connection when a proxy hop completes.
+    /// This is used to track multi-hop proxy chain traversal.
+    ///
+    /// # Arguments
+    /// * `key` - The connection key
+    /// * `hop_index` - The hop index (0 = direct, 1+ = proxy hop number)
+    /// * `hop_latency_ms` - Latency of this hop in milliseconds
+    /// * `_success` - Whether the hop succeeded (reserved for future use)
+    #[allow(dead_code)]
+    pub fn record_proxy_hop(
+        &self,
+        key: &ConnectionKey,
+        hop_index: u8,
+        hop_latency_ms: u32,
+        _success: bool,
+    ) {
+        if let Some(mut stats) = self.connections.get(key) {
+            stats.hop_index = hop_index;
+            stats.hop_latency_ms = hop_latency_ms;
+            self.connections.update(*key, stats);
+        }
+    }
+
     // ==================== Overall Stats ====================
 
     /// Get overall stats
@@ -377,6 +402,57 @@ impl TrackingStore {
         let mut overall = self.overall.write().unwrap();
         overall.dns_queries_total += 1;
         overall.dns_errors += 1;
+    }
+
+    // ==================== TLS Handshake Stats ====================
+
+    /// Record a TLS handshake start
+    ///
+    /// Returns the handshake start timestamp for calculating latency on completion.
+    ///
+    /// # Returns
+    /// * `u64` - The handshake start timestamp in epoch milliseconds
+    #[allow(dead_code)]
+    pub fn record_tls_handshake_start(&self) -> u64 {
+        let timestamp = current_epoch_ms();
+        let mut overall = self.overall.write().unwrap();
+        overall.tls_handshakes_total += 1;
+        timestamp
+    }
+
+    /// Record a TLS handshake success
+    ///
+    /// # Arguments
+    /// * `start_time` - The handshake start timestamp from `record_tls_handshake_start`
+    /// * `tls_version` - TLS version used (e.g., 0x0303 for TLS 1.2, 0x0304 for TLS 1.3)
+    /// * `cipher_suite` - Cipher suite ID used
+    #[allow(dead_code)]
+    pub fn record_tls_handshake_success(
+        &self,
+        start_time: u64,
+        _tls_version: u16,
+        _cipher_suite: u16,
+    ) {
+        let latency_ms = current_epoch_ms().saturating_sub(start_time);
+        let mut overall = self.overall.write().unwrap();
+        overall.tls_handshake_successes += 1;
+        overall.tls_handshake_latency_sum_ms += latency_ms;
+        overall.tls_handshake_latency_count += 1;
+    }
+
+    /// Record a TLS handshake failure
+    ///
+    /// # Arguments
+    /// * `start_time` - The handshake start timestamp from `record_tls_handshake_start`
+    /// * `error` - Error message describing the failure
+    #[allow(dead_code)]
+    pub fn record_tls_handshake_failure(&self, start_time: u64, error: &str) {
+        let latency_ms = current_epoch_ms().saturating_sub(start_time);
+        let mut overall = self.overall.write().unwrap();
+        overall.tls_handshake_failures += 1;
+        overall.tls_handshake_latency_sum_ms += latency_ms;
+        overall.tls_handshake_latency_count += 1;
+        overall.tls_handshake_last_error = error.to_string();
     }
 
     // ==================== eBPF Stats Polling ====================

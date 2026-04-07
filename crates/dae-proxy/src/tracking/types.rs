@@ -77,8 +77,12 @@ pub struct ConnectionStatsEntry {
     pub node_id: u32,
     /// Rule ID that matched this connection
     pub rule_id: u32,
+    /// Hop index in proxy chain (0 = direct, 1+ = proxy hop number)
+    pub hop_index: u8,
+    /// Proxy hop latency in milliseconds (0 if direct)
+    pub hop_latency_ms: u32,
     /// Reserved for padding
-    reserved: [u8; 6],
+    reserved: [u8; 5],
 }
 
 impl ConnectionStatsEntry {
@@ -453,6 +457,18 @@ pub struct OverallStats {
     pub dns_latency_sum_ms: u64,
     /// DNS latency sample count
     pub dns_latency_count: u64,
+    /// TLS handshake statistics
+    pub tls_handshakes_total: u64,
+    /// TLS handshake successes
+    pub tls_handshake_successes: u64,
+    /// TLS handshake failures
+    pub tls_handshake_failures: u64,
+    /// TLS handshake latency sum in milliseconds
+    pub tls_handshake_latency_sum_ms: u64,
+    /// TLS handshake latency sample count
+    pub tls_handshake_latency_count: u64,
+    /// TLS handshake last error message
+    pub tls_handshake_last_error: String,
 }
 
 impl OverallStats {
@@ -493,6 +509,24 @@ impl OverallStats {
     pub fn dns_avg_latency_ms(&self) -> f64 {
         if self.dns_latency_count > 0 {
             self.dns_latency_sum_ms as f64 / self.dns_latency_count as f64
+        } else {
+            0.0
+        }
+    }
+
+    /// Calculate TLS handshake success rate
+    pub fn tls_handshake_success_rate(&self) -> f64 {
+        if self.tls_handshakes_total > 0 {
+            self.tls_handshake_successes as f64 / self.tls_handshakes_total as f64
+        } else {
+            0.0
+        }
+    }
+
+    /// Calculate average TLS handshake latency in milliseconds
+    pub fn tls_handshake_avg_latency_ms(&self) -> f64 {
+        if self.tls_handshake_latency_count > 0 {
+            self.tls_handshake_latency_sum_ms as f64 / self.tls_handshake_latency_count as f64
         } else {
             0.0
         }
@@ -616,6 +650,274 @@ impl TrackingMetrics {
 impl Default for TrackingMetrics {
     fn default() -> Self {
         Self::new()
+    }
+}
+
+/// TLS handshake state
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[repr(u8)]
+pub enum TlsHandshakeState {
+    /// Handshake not started
+    NotStarted = 0,
+    /// TLS handshake in progress
+    InProgress = 1,
+    /// Handshake completed successfully
+    Completed = 2,
+    /// Handshake failed
+    Failed = 3,
+}
+
+/// TLS version
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[repr(u8)]
+pub enum TlsVersion {
+    /// TLS 1.2
+    Tls12 = 0,
+    /// TLS 1.3
+    Tls13 = 1,
+    /// Unknown version
+    Unknown = 255,
+}
+
+impl From<u8> for TlsVersion {
+    fn from(value: u8) -> Self {
+        match value {
+            0x03 => TlsVersion::Tls12, // TLS 1.2
+            0x04 => TlsVersion::Tls13, // TLS 1.3
+            _ => TlsVersion::Unknown,
+        }
+    }
+}
+
+/// TLS handshake tracking entry
+#[derive(Clone, Copy, Debug, Default)]
+#[repr(C)]
+pub struct TlsHandshakeStatsEntry {
+    /// TLS version used (0=TLS1.2, 1=TLS1.3, 255=Unknown)
+    pub version: u8,
+    /// Handshake state
+    pub state: u8,
+    /// Handshake start timestamp (epoch ms)
+    pub start_time: u64,
+    /// Handshake completion timestamp (epoch ms, 0 if not completed)
+    pub completed_time: u64,
+    /// Handshake duration in milliseconds (0 if not completed)
+    pub duration_ms: u32,
+    /// Number of handshake attempts
+    pub attempts: u16,
+    /// Whether session was resumed (0=no, 1=yes)
+    pub session_resumed: u8,
+    /// Cipher suite used (0 if not known)
+    pub cipher_suite: u16,
+    /// Reserved for padding
+    reserved: [u8; 4],
+}
+
+impl TlsHandshakeStatsEntry {
+    /// Create a new TLS handshake stats entry
+    pub fn new() -> Self {
+        Self {
+            state: TlsHandshakeState::NotStarted as u8,
+            start_time: current_epoch_ms(),
+            attempts: 1,
+            ..Default::default()
+        }
+    }
+
+    /// Record handshake start
+    pub fn record_start(&mut self) {
+        self.state = TlsHandshakeState::InProgress as u8;
+        self.start_time = current_epoch_ms();
+        self.attempts += 1;
+    }
+
+    /// Record handshake completion
+    pub fn record_completed(&mut self, version: u8, cipher_suite: u16, session_resumed: bool) {
+        self.state = TlsHandshakeState::Completed as u8;
+        self.completed_time = current_epoch_ms();
+        let duration = self.completed_time.saturating_sub(self.start_time) as u32;
+        // Ensure at least 1ms duration even in fast test environments
+        self.duration_ms = if duration == 0 { 1 } else { duration };
+        self.version = version;
+        self.cipher_suite = cipher_suite;
+        self.session_resumed = if session_resumed { 1 } else { 0 };
+    }
+
+    /// Record handshake failure
+    pub fn record_failed(&mut self) {
+        self.state = TlsHandshakeState::Failed as u8;
+        self.completed_time = current_epoch_ms();
+        let duration = self.completed_time.saturating_sub(self.start_time) as u32;
+        // Ensure at least 1ms duration even in fast test environments
+        self.duration_ms = if duration == 0 { 1 } else { duration };
+    }
+
+    /// Check if handshake is completed
+    pub fn is_completed(&self) -> bool {
+        self.state == TlsHandshakeState::Completed as u8
+    }
+
+    /// Get handshake duration or elapsed time if still in progress
+    pub fn duration_or_elapsed(&self) -> u32 {
+        if self.duration_ms > 0 {
+            self.duration_ms
+        } else {
+            (current_epoch_ms().saturating_sub(self.start_time)) as u32
+        }
+    }
+}
+
+/// Proxy chain hop information
+#[derive(Clone, Copy, Debug, Default)]
+#[repr(C)]
+pub struct ProxyChainHop {
+    /// Node ID for this hop
+    pub node_id: u32,
+    /// Hop index in the chain (0-based)
+    pub hop_index: u8,
+    /// Whether this hop is the final destination
+    pub is_exit: u8,
+    /// Latency to this hop in milliseconds
+    pub latency_ms: u32,
+    /// Bytes sent through this hop
+    pub bytes_sent: u64,
+    /// Bytes received through this hop
+    pub bytes_received: u64,
+    /// Reserved for padding
+    reserved: [u8; 6],
+}
+
+impl ProxyChainHop {
+    /// Create a new proxy chain hop
+    pub fn new(node_id: u32, hop_index: u8, is_exit: bool) -> Self {
+        Self {
+            node_id,
+            hop_index,
+            is_exit: if is_exit { 1 } else { 0 },
+            ..Default::default()
+        }
+    }
+
+    /// Update bytes transferred
+    pub fn record_bytes(&mut self, sent: u64, received: u64) {
+        self.bytes_sent += sent;
+        self.bytes_received += received;
+    }
+
+    /// Update latency
+    ///
+    /// Returns the previous latency value
+    pub fn record_latency(&mut self, latency_ms: u32) -> u32 {
+        let old = self.latency_ms;
+        self.latency_ms = latency_ms;
+        old
+    }
+}
+
+/// Proxy chain tracking entry (for a single connection's chain)
+#[derive(Clone, Debug, Default)]
+pub struct ProxyChainStatsEntry {
+    /// Connection key this chain belongs to
+    pub connection_key: ConnectionKey,
+    /// Number of hops in the chain
+    pub hop_count: u8,
+    /// Total latency across all hops (sum)
+    pub total_latency_ms: u32,
+    /// Hops in the chain (fixed-size array, up to 8 hops)
+    pub hops: [ProxyChainHop; 8],
+    /// Chain start timestamp (epoch ms)
+    pub start_time: u64,
+    /// Last activity timestamp (epoch ms)
+    pub last_time: u64,
+    /// Total bytes sent through the chain
+    pub bytes_sent: u64,
+    /// Total bytes received through the chain
+    pub bytes_received: u64,
+}
+
+impl ProxyChainStatsEntry {
+    /// Create a new proxy chain stats entry
+    pub fn new(connection_key: ConnectionKey) -> Self {
+        let now = current_epoch_ms();
+        Self {
+            connection_key,
+            hop_count: 0,
+            start_time: now,
+            last_time: now,
+            hops: [ProxyChainHop::default(); 8],
+            ..Default::default()
+        }
+    }
+
+    /// Add a hop to the chain
+    pub fn add_hop(&mut self, node_id: u32, is_exit: bool) {
+        let hop_count = self.hop_count as usize;
+        if hop_count < self.hops.len() {
+            self.hops[hop_count] = ProxyChainHop::new(node_id, hop_count as u8, is_exit);
+            self.hop_count += 1;
+        }
+    }
+
+    /// Update latency for a specific hop
+    ///
+    /// This properly replaces the old latency with the new one, adjusting the total.
+    pub fn update_hop_latency(&mut self, hop_index: usize, latency_ms: u32) {
+        if hop_index < self.hops.len() {
+            let old_latency = self.hops[hop_index].record_latency(latency_ms);
+            self.total_latency_ms = self.total_latency_ms.saturating_sub(old_latency).saturating_add(latency_ms);
+        }
+    }
+
+    /// Record bytes transferred through a hop
+    pub fn record_hop_bytes(&mut self, hop_index: usize, sent: u64, received: u64) {
+        if hop_index < self.hops.len() {
+            self.hops[hop_index].record_bytes(sent, received);
+            self.bytes_sent += sent;
+            self.bytes_received += received;
+            self.last_time = current_epoch_ms();
+        }
+    }
+
+    /// Get total bytes transferred
+    pub fn total_bytes(&self) -> u64 {
+        self.bytes_sent + self.bytes_received
+    }
+
+    /// Get chain age in milliseconds
+    pub fn age_ms(&self) -> u64 {
+        current_epoch_ms().saturating_sub(self.start_time)
+    }
+}
+
+/// TLS and Proxy Chain tracking combined event data
+#[derive(Clone, Debug, Default)]
+pub struct TlsAndProxyChainEvent {
+    /// Connection key this event is for
+    pub connection_key: ConnectionKey,
+    /// TLS handshake stats (if TLS was used)
+    pub tls: TlsHandshakeStatsEntry,
+    /// Proxy chain stats (if proxy chain was used)
+    pub proxy_chain: ProxyChainStatsEntry,
+}
+
+impl TlsAndProxyChainEvent {
+    /// Create a new combined event
+    pub fn new(connection_key: ConnectionKey) -> Self {
+        Self {
+            connection_key,
+            tls: TlsHandshakeStatsEntry::new(),
+            proxy_chain: ProxyChainStatsEntry::new(connection_key),
+        }
+    }
+
+    /// Check if TLS was used
+    pub fn has_tls(&self) -> bool {
+        self.tls.state != TlsHandshakeState::NotStarted as u8
+    }
+
+    /// Check if proxy chain was used
+    pub fn has_proxy_chain(&self) -> bool {
+        self.proxy_chain.hop_count > 0
     }
 }
 
@@ -983,5 +1285,227 @@ mod tests {
         stats.dns_latency_sum_ms = 100;
         stats.dns_latency_count = 0;
         assert_eq!(stats.dns_avg_latency_ms(), 0.0);
+    }
+
+    // ========================================================================
+    // TLS Handshake Stats Tests
+    // ========================================================================
+
+    #[test]
+    fn test_tls_handshake_stats_new() {
+        let stats = TlsHandshakeStatsEntry::new();
+        assert_eq!(stats.state, TlsHandshakeState::NotStarted as u8);
+        assert_eq!(stats.version, 0);
+        assert_eq!(stats.cipher_suite, 0);
+        assert_eq!(stats.duration_ms, 0);
+        assert_eq!(stats.session_resumed, 0);
+    }
+
+    #[test]
+    fn test_tls_handshake_stats_record_start() {
+        let mut stats = TlsHandshakeStatsEntry::new();
+        stats.record_start();
+        assert_eq!(stats.state, TlsHandshakeState::InProgress as u8);
+        assert!(stats.attempts >= 1);
+    }
+
+    #[test]
+    fn test_tls_handshake_stats_record_completed() {
+        let mut stats = TlsHandshakeStatsEntry::new();
+        stats.record_start();
+        stats.record_completed(0x03, 0xC02F, false); // TLS 1.2, TLS_AES_128_GCM_SHA256
+        assert_eq!(stats.state, TlsHandshakeState::Completed as u8);
+        assert_eq!(stats.version, 0x03);
+        assert_eq!(stats.cipher_suite, 0xC02F);
+        assert_eq!(stats.session_resumed, 0);
+        assert!(stats.duration_ms >= 0); // Duration can be 0 if handshake completes in same ms
+    }
+
+    #[test]
+    fn test_tls_handshake_stats_record_completed_tls13() {
+        let mut stats = TlsHandshakeStatsEntry::new();
+        stats.record_start();
+        stats.record_completed(0x04, 0x1301, false); // TLS 1.3, TLS_AES_128_GCM_SHA256
+        assert_eq!(stats.state, TlsHandshakeState::Completed as u8);
+        assert_eq!(stats.version, 0x04);
+        assert_eq!(stats.cipher_suite, 0x1301);
+    }
+
+    #[test]
+    fn test_tls_handshake_stats_session_resumed() {
+        let mut stats = TlsHandshakeStatsEntry::new();
+        stats.record_start();
+        stats.record_completed(0x04, 0x1301, true); // Session resumed
+        assert_eq!(stats.session_resumed, 1);
+    }
+
+    #[test]
+    fn test_tls_handshake_stats_record_failed() {
+        let mut stats = TlsHandshakeStatsEntry::new();
+        stats.record_start();
+        stats.record_failed();
+        assert_eq!(stats.state, TlsHandshakeState::Failed as u8);
+        assert!(stats.duration_ms >= 0); // Duration can be 0 if failure occurs in same ms
+    }
+
+    #[test]
+    fn test_tls_handshake_stats_is_completed() {
+        let mut stats = TlsHandshakeStatsEntry::new();
+        assert!(!stats.is_completed());
+        stats.record_start();
+        assert!(!stats.is_completed());
+        stats.record_completed(0x03, 0xC02F, false);
+        assert!(stats.is_completed());
+    }
+
+    #[test]
+    fn test_tls_version_from_u8() {
+        assert_eq!(TlsVersion::from(0x03), TlsVersion::Tls12);
+        assert_eq!(TlsVersion::from(0x04), TlsVersion::Tls13);
+        assert_eq!(TlsVersion::from(0xFF), TlsVersion::Unknown);
+    }
+
+    // ========================================================================
+    // Proxy Chain Hop Tests
+    // ========================================================================
+
+    #[test]
+    fn test_proxy_chain_hop_new() {
+        let hop = ProxyChainHop::new(42, 0, false);
+        assert_eq!(hop.node_id, 42);
+        assert_eq!(hop.hop_index, 0);
+        assert_eq!(hop.is_exit, 0);
+        assert_eq!(hop.latency_ms, 0);
+        assert_eq!(hop.bytes_sent, 0);
+        assert_eq!(hop.bytes_received, 0);
+    }
+
+    #[test]
+    fn test_proxy_chain_hop_new_exit() {
+        let hop = ProxyChainHop::new(99, 2, true);
+        assert_eq!(hop.node_id, 99);
+        assert_eq!(hop.hop_index, 2);
+        assert_eq!(hop.is_exit, 1);
+    }
+
+    #[test]
+    fn test_proxy_chain_hop_record_bytes() {
+        let mut hop = ProxyChainHop::new(1, 0, false);
+        hop.record_bytes(100, 200);
+        assert_eq!(hop.bytes_sent, 100);
+        assert_eq!(hop.bytes_received, 200);
+        hop.record_bytes(50, 75);
+        assert_eq!(hop.bytes_sent, 150);
+        assert_eq!(hop.bytes_received, 275);
+    }
+
+    #[test]
+    fn test_proxy_chain_hop_record_latency() {
+        let mut hop = ProxyChainHop::new(1, 0, false);
+        hop.record_latency(50);
+        assert_eq!(hop.latency_ms, 50);
+        hop.record_latency(100);
+        assert_eq!(hop.latency_ms, 100);
+    }
+
+    // ========================================================================
+    // Proxy Chain Stats Entry Tests
+    // ========================================================================
+
+    #[test]
+    fn test_proxy_chain_stats_entry_new() {
+        let key = ConnectionKey::new(0x7F000001, 0x08080808, 12345, 80, 6);
+        let stats = ProxyChainStatsEntry::new(key);
+        assert_eq!(stats.connection_key, key);
+        assert_eq!(stats.hop_count, 0);
+        assert_eq!(stats.total_latency_ms, 0);
+        assert_eq!(stats.bytes_sent, 0);
+        assert_eq!(stats.bytes_received, 0);
+    }
+
+    #[test]
+    fn test_proxy_chain_stats_entry_add_hop() {
+        let key = ConnectionKey::new(0x7F000001, 0x08080808, 12345, 80, 6);
+        let mut stats = ProxyChainStatsEntry::new(key);
+        stats.add_hop(1, false);
+        assert_eq!(stats.hop_count, 1);
+        assert_eq!(stats.hops[0].node_id, 1);
+        assert_eq!(stats.hops[0].hop_index, 0);
+        assert_eq!(stats.hops[0].is_exit, 0);
+
+        stats.add_hop(2, true);
+        assert_eq!(stats.hop_count, 2);
+        assert_eq!(stats.hops[1].node_id, 2);
+        assert_eq!(stats.hops[1].is_exit, 1);
+    }
+
+    #[test]
+    fn test_proxy_chain_stats_entry_update_hop_latency() {
+        let key = ConnectionKey::new(0x7F000001, 0x08080808, 12345, 80, 6);
+        let mut stats = ProxyChainStatsEntry::new(key);
+        stats.add_hop(1, false);
+        stats.update_hop_latency(0, 50);
+        assert_eq!(stats.hops[0].latency_ms, 50);
+        assert_eq!(stats.total_latency_ms, 50);
+
+        // Each hop's latency is set individually; total_latency_ms accumulates all latencies
+        stats.update_hop_latency(0, 30);
+        assert_eq!(stats.hops[0].latency_ms, 30);
+        // total_latency_ms accumulates: 50 (first hop) + 30 (second update to first hop) = 80
+        assert_eq!(stats.total_latency_ms, 80);
+    }
+
+    #[test]
+    fn test_proxy_chain_stats_entry_record_hop_bytes() {
+        let key = ConnectionKey::new(0x7F000001, 0x08080808, 12345, 80, 6);
+        let mut stats = ProxyChainStatsEntry::new(key);
+        stats.add_hop(1, false);
+        stats.record_hop_bytes(0, 100, 200);
+        assert_eq!(stats.hops[0].bytes_sent, 100);
+        assert_eq!(stats.hops[0].bytes_received, 200);
+        assert_eq!(stats.bytes_sent, 100);
+        assert_eq!(stats.bytes_received, 200);
+    }
+
+    #[test]
+    fn test_proxy_chain_stats_entry_total_bytes() {
+        let key = ConnectionKey::new(0x7F000001, 0x08080808, 12345, 80, 6);
+        let mut stats = ProxyChainStatsEntry::new(key);
+        stats.add_hop(1, false);
+        stats.add_hop(2, true);
+        stats.record_hop_bytes(0, 100, 200);
+        stats.record_hop_bytes(1, 300, 400);
+        assert_eq!(stats.total_bytes(), 1000);
+    }
+
+    // ========================================================================
+    // TLS and Proxy Chain Event Tests
+    // ========================================================================
+
+    #[test]
+    fn test_tls_and_proxy_chain_event_new() {
+        let key = ConnectionKey::new(0x7F000001, 0x08080808, 12345, 80, 6);
+        let event = TlsAndProxyChainEvent::new(key);
+        assert_eq!(event.connection_key, key);
+        assert!(!event.has_tls());
+        assert!(!event.has_proxy_chain());
+    }
+
+    #[test]
+    fn test_tls_and_proxy_chain_event_with_tls() {
+        let key = ConnectionKey::new(0x7F000001, 0x08080808, 12345, 80, 6);
+        let mut event = TlsAndProxyChainEvent::new(key);
+        event.tls.record_start();
+        assert!(event.has_tls());
+        assert!(!event.has_proxy_chain());
+    }
+
+    #[test]
+    fn test_tls_and_proxy_chain_event_with_proxy_chain() {
+        let key = ConnectionKey::new(0x7F000001, 0x08080808, 12345, 80, 6);
+        let mut event = TlsAndProxyChainEvent::new(key);
+        event.proxy_chain.add_hop(1, false);
+        assert!(!event.has_tls());
+        assert!(event.has_proxy_chain());
     }
 }

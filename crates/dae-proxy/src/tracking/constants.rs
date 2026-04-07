@@ -114,6 +114,10 @@ pub mod event_type {
     pub const NODE: u8 = 2;
     /// Stats event type
     pub const STATS: u8 = 3;
+    /// TLS handshake event type
+    pub const TLS_HANDSHAKE: u8 = 4;
+    /// Proxy hop event type
+    pub const PROXY_HOP: u8 = 5;
 }
 
 /// Latency sample for histogram calculation
