@@ -864,7 +864,10 @@ impl ProxyChainStatsEntry {
     pub fn update_hop_latency(&mut self, hop_index: usize, latency_ms: u32) {
         if hop_index < self.hops.len() {
             let old_latency = self.hops[hop_index].record_latency(latency_ms);
-            self.total_latency_ms = self.total_latency_ms.saturating_sub(old_latency).saturating_add(latency_ms);
+            self.total_latency_ms = self
+                .total_latency_ms
+                .saturating_sub(old_latency)
+                .saturating_add(latency_ms);
         }
     }
 
@@ -1448,11 +1451,11 @@ mod tests {
         assert_eq!(stats.hops[0].latency_ms, 50);
         assert_eq!(stats.total_latency_ms, 50);
 
-        // Each hop's latency is set individually; total_latency_ms accumulates all latencies
+        // Each hop's latency is replaced individually; total_latency_ms is the sum of current hop latencies
         stats.update_hop_latency(0, 30);
         assert_eq!(stats.hops[0].latency_ms, 30);
-        // total_latency_ms accumulates: 50 (first hop) + 30 (second update to first hop) = 80
-        assert_eq!(stats.total_latency_ms, 80);
+        // total_latency_ms = 30 (only hop[0] with latency=30)
+        assert_eq!(stats.total_latency_ms, 30);
     }
 
     #[test]
