@@ -13,7 +13,7 @@ use crate::metrics::{
     inc_node_latency_test, ACTIVE_TCP_CONNECTIONS_GAUGE, ACTIVE_UDP_CONNECTIONS_GAUGE,
     CONNECTION_COUNTER,
 };
-use crate::tracking::store::SharedTrackingStore;
+use crate::tracking::store::{SharedTrackingStore, TrackingStore};
 use crate::tracking::types::ConnectionState;
 use std::path::Path;
 use std::sync::Arc;
@@ -43,7 +43,7 @@ impl ControlState {
         Self {
             running: Arc::new(RwLock::new(false)),
             start_time: SystemTime::now(),
-            tracking_store: None,
+            tracking_store: Some(Arc::new(TrackingStore::new())),
             reload_callback: None,
             node_tester: None,
             config_state: RwLock::new(ConfigState {
