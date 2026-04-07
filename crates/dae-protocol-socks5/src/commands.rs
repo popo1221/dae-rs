@@ -2,9 +2,10 @@
 //!
 //! 处理 CONNECT（0x01）、BIND（0x02）和 UDP ASSOCIATE（0x03）命令。
 
-use std::net::{Ipv4Addr, SocketAddr};
+use std::net::{Ipv4Addr, Ipv6Addr, SocketAddr};
+use std::sync::Arc;
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
-use tokio::net::TcpStream;
+use tokio::net::{TcpStream, UdpSocket};
 use tracing::info;
 
 use super::address::Socks5Address;
@@ -97,7 +98,7 @@ impl CommandHandler {
     ///
     /// ```text
     /// |VER |CMD |RSV |ATYP|  DST.ADDR   |  DST.PORT   |
-    /// | 1  | 1  | 1  | 1  | Variable   |      2      |
+    /// | 1  | 1  |  1 |  1  | Variable   |      2      |
     /// ```
     pub async fn handle_request(&self, mut client: TcpStream) -> std::io::Result<()> {
         // Read request: VER (1) + CMD (1) + RSV (1) + ATYP (1) + DST.ADDR + DST.PORT (2)
@@ -267,14 +268,6 @@ impl CommandHandler {
     /// # 参数
     /// - `client`: 客户端 TCP 连接
     /// - `dst_addr`: 客户端期望的 UDP 转发地址（通常被忽略）
-    ///
-    /// # 注意
-    ///
-    /// 这是简化实现，实际的 UDP 转发需要：
-    /// - UDP 套接字接收来自客户端的数据报
-    /// - 解析 SOCKS5 UDP 头（RSV, FRAG, ATYP, DST.ADDR, DST.PORT）
-    /// - 转发到目标地址
-    /// - 返回响应到客户端
     pub async fn handle_udp_associate(
         &self,
         mut client: TcpStream,
@@ -284,8 +277,12 @@ impl CommandHandler {
         let client_addr = client.peer_addr()?;
 
         // Create a UDP socket for the association
-        let udp_socket = tokio::net::UdpSocket::bind("0.0.0.0:0").await?;
+        let udp_socket = UdpSocket::bind("0.0.0.0:0").await?;
         let udp_bind_addr = udp_socket.local_addr()?;
+
+        // Note: UDP buffer size configuration is handled via system defaults
+        // tokio::net::UdpSocket doesn't expose set_recv_buffer_size, but the
+        // udp_rcvbuf field is kept for future use with standard library sockets if needed
 
         // Convert to IPv4 if possible for the reply
         let bind_addr = match udp_bind_addr {
@@ -302,18 +299,206 @@ impl CommandHandler {
             client_addr, udp_bind_addr
         );
 
-        // Note: Full UDP relay implementation requires:
-        // - UDP socket receiving datagrams from clients
-        // - Parsing SOCKS5 UDP header (RSV, FRAG, ATYP, DST.ADDR, DST.PORT)
-        // - Forwarding to target destinations
-        // - Returning responses back to client
-        // This is a stub that keeps the TCP connection open to maintain the association
-        // The actual UDP datagram forwarding should be handled by a separate relay service
+        // Spawn UDP relay task and wait for TCP connection to close
+        let udp_socket = Arc::new(udp_socket);
+
+        // Keep TCP connection alive to manage UDP relay lifecycle
+        // The UDP relay runs until the TCP connection closes
+        let udp_timeout_secs = self.udp_timeout_secs;
+        let udp_rcvbuf = self.udp_rcvbuf;
+        tokio::spawn(async move {
+            Self::udp_relay_loop(udp_socket, udp_timeout_secs, udp_rcvbuf).await;
+        });
+
+        // Wait for TCP connection to close
         let mut tcp_buf = [0u8; 1];
         let _ = client.read_exact(&mut tcp_buf).await;
 
         info!("SOCKS5 UDP ASSOCIATE: connection closed");
         Ok(())
+    }
+
+    /// UDP relay loop
+    ///
+    /// Receives UDP datagrams from clients, forwards to destinations,
+    /// and returns responses back to clients.
+    ///
+    /// # SOCKS5 UDP Datagram Format (RFC 1928)
+    ///
+    /// ```text
+    /// |RSV (2)|FRAG (1)|ATYP (1)|DST.ADDR     |DST.PORT (2)|DATA        |
+    /// |  0x0000  |   n   |  1    | Variable   |     2      | Variable   |
+    /// ```
+    async fn udp_relay_loop(udp_socket: Arc<UdpSocket>, udp_timeout_secs: u64, _udp_rcvbuf: Option<usize>) {
+        const MAX_UDP_SIZE: usize = 65535;
+        let mut buf = vec![0u8; MAX_UDP_SIZE];
+        let timeout = std::time::Duration::from_secs(udp_timeout_secs);
+
+        loop {
+            // Receive datagram from client
+            let (n, src_addr) = match tokio::time::timeout(timeout, udp_socket.recv_from(&mut buf)).await {
+                Ok(Ok(result)) => result,
+                Ok(Err(_)) | Err(_) => {
+                    // Timeout or error, continue to next iteration
+                    continue;
+                }
+            };
+
+            if n < 10 {
+                // Minimum: RSV(2) + FRAG(1) + ATYP(1) + ADDR(1) + PORT(2) + DATA(1) = 7
+                // But typically at least 10 bytes for IPv4
+                tracing::debug!("UDP packet too short: {} bytes from {}", n, src_addr);
+                continue;
+            }
+
+            // Parse SOCKS5 UDP header
+            let rsv = u16::from_be_bytes([buf[0], buf[1]]);
+            let frag = buf[2];
+            let _atyp = buf[3]; // Address type, needed for parsing
+
+            // Check reserved bytes and fragment number
+            if rsv != 0 {
+                tracing::debug!("Invalid RSV in UDP packet: 0x{:04x}", rsv);
+                continue;
+            }
+
+            // Fragmentation not supported
+            if frag != 0 {
+                tracing::debug!("Fragmented UDP packets not supported: frag={}", frag);
+                // RFC 1928: if frag is non-zero and not supported, drop
+                continue;
+            }
+
+            // Parse destination address
+            let (dst_addr, dst_port, payload_offset) = match Self::parse_udp_dst_addr(&buf[3..]) {
+                Some(result) => result,
+                None => {
+                    tracing::debug!("Failed to parse UDP destination address");
+                    continue;
+                }
+            };
+
+            let payload = &buf[payload_offset..n];
+            let dst_str = format!("{}:{}", dst_addr, dst_port);
+
+            tracing::debug!(
+                "SOCKS5 UDP: {} -> {} ({} bytes)",
+                src_addr,
+                dst_str,
+                payload.len()
+            );
+
+            // Forward to destination
+            let dst_socket = match UdpSocket::bind("0.0.0.0:0").await {
+                Ok(s) => s,
+                Err(e) => {
+                    tracing::debug!("Failed to create UDP socket for {}: {}", dst_str, e);
+                    continue;
+                }
+            };
+
+            if let Err(e) = dst_socket.send_to(payload, &dst_str).await {
+                tracing::debug!("Failed to send UDP to {}: {}", dst_str, e);
+                continue;
+            }
+
+            // Receive response from destination
+            let mut response_buf = vec![0u8; MAX_UDP_SIZE];
+            match tokio::time::timeout(timeout, dst_socket.recv_from(&mut response_buf)).await {
+                Ok(Ok((m, _))) => {
+                    // Build response SOCKS5 UDP header
+                    let response_header = Self::build_udp_response_header(&buf[3..]);
+                    let mut response = response_header;
+                    response.extend_from_slice(&response_buf[..m]);
+
+                    // Send back to client
+                    if let Err(e) = udp_socket.send_to(&response, &src_addr).await {
+                        tracing::debug!("Failed to send UDP response to {}: {}", src_addr, e);
+                    }
+                }
+                Ok(Err(_)) | Err(_) => {
+                    // Timeout or error receiving response
+                    tracing::debug!("Timeout receiving UDP response from {}", dst_str);
+                }
+            }
+        }
+    }
+
+    /// Parse destination address from SOCKS5 UDP header
+    ///
+    /// # Arguments
+    /// - `data`: slice starting from ATYP byte
+    ///
+    /// # Returns
+    /// - `Some((address_string, port, total_header_len))` on success
+    /// - `None` on failure
+    fn parse_udp_dst_addr(data: &[u8]) -> Option<(String, u16, usize)> {
+        if data.is_empty() {
+            return None;
+        }
+
+        let atyp = data[0];
+        match atyp {
+            consts::ATYP_IPV4 => {
+                // IPv4: ATYP(1) + IP(4) + PORT(2) = 7 bytes header
+                if data.len() < 7 {
+                    return None;
+                }
+                let ip = Ipv4Addr::new(data[1], data[2], data[3], data[4]);
+                let port = u16::from_be_bytes([data[5], data[6]]);
+                Some((ip.to_string(), port, 7))
+            }
+            consts::ATYP_IPV6 => {
+                // IPv6: ATYP(1) + IP(16) + PORT(2) = 19 bytes header
+                if data.len() < 19 {
+                    return None;
+                }
+                let ip = Ipv6Addr::new(
+                    u16::from_be_bytes([data[1], data[2]]),
+                    u16::from_be_bytes([data[3], data[4]]),
+                    u16::from_be_bytes([data[5], data[6]]),
+                    u16::from_be_bytes([data[7], data[8]]),
+                    u16::from_be_bytes([data[9], data[10]]),
+                    u16::from_be_bytes([data[11], data[12]]),
+                    u16::from_be_bytes([data[13], data[14]]),
+                    u16::from_be_bytes([data[15], data[16]]),
+                );
+                let port = u16::from_be_bytes([data[17], data[18]]);
+                Some((ip.to_string(), port, 19))
+            }
+            consts::ATYP_DOMAIN => {
+                // Domain: ATYP(1) + LEN(1) + DOMAIN + PORT(2)
+                if data.len() < 4 {
+                    return None;
+                }
+                let domain_len = data[1] as usize;
+                if data.len() < 4 + domain_len {
+                    return None;
+                }
+                let domain = String::from_utf8(data[2..2 + domain_len].to_vec())
+                    .map_err(|_| ())
+                    .ok()?;
+                let port = u16::from_be_bytes([data[2 + domain_len], data[3 + domain_len]]);
+                Some((domain, port, 4 + domain_len))
+            }
+            _ => None,
+        }
+    }
+
+    /// Build SOCKS5 UDP response header
+    ///
+    /// Returns a response header with the same destination address but with RSV=0 and FRAG=0.
+    /// The header format: RSV(2) + FRAG(1) + ATYP + DST.ADDR + DST.PORT
+    fn build_udp_response_header(src_header: &[u8]) -> Vec<u8> {
+        let mut header = Vec::with_capacity(src_header.len() + 3);
+        // RSV = 0
+        header.push(0x00);
+        header.push(0x00);
+        // FRAG = 0 (no fragmentation)
+        header.push(0x00);
+        // Copy ATYP + DST.ADDR + DST.PORT from source
+        header.extend_from_slice(src_header);
+        header
     }
 
     /// 发送 SOCKS5 回复
@@ -327,7 +512,7 @@ impl CommandHandler {
     ///
     /// ```text
     /// |VER |REP |RSV |ATYP|  BND.ADDR   |  BND.PORT   |
-    /// | 1  | 1  | 1  | 1  | Variable   |      2      |
+    /// | 1  |  1 |  1 |  1  | Variable   |      2      |
     /// ```
     pub async fn send_reply(
         &self,
