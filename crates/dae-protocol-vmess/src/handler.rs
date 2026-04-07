@@ -418,3 +418,188 @@ impl Handler for VmessHandler {
         self.handle(stream).await.map_err(std::io::Error::from)
     }
 }
+
+/// VMess tracking information for protocol-specific tracking
+#[derive(Debug, Default, Clone)]
+pub struct VmessTrackingInfo {
+    /// User ID (UUID)
+    pub user_id: String,
+    /// Security level
+    pub security_level: String,
+    /// Target address
+    pub target_addr: String,
+    /// Inbound bytes
+    pub bytes_in: u64,
+    /// Outbound bytes
+    pub bytes_out: u64,
+}
+
+impl VmessTrackingInfo {
+    /// Create a new VMess tracking info
+    pub fn new() -> Self {
+        Self::default()
+    }
+
+    /// Create from user_id
+    pub fn with_user_id(user_id: &str) -> Self {
+        Self {
+            user_id: user_id.to_string(),
+            ..Default::default()
+        }
+    }
+
+    /// Set security level
+    pub fn with_security_level(mut self, level: &str) -> Self {
+        self.security_level = level.to_string();
+        self
+    }
+
+    /// Set target address
+    pub fn with_target_addr(mut self, addr: &str) -> Self {
+        self.target_addr = addr.to_string();
+        self
+    }
+
+    /// Set bytes transferred
+    pub fn with_bytes(mut self, bytes_in: u64, bytes_out: u64) -> Self {
+        self.bytes_in = bytes_in;
+        self.bytes_out = bytes_out;
+        self
+    }
+}
+
+impl VmessHandler {
+    /// Handle VMess connection with protocol tracking
+    ///
+    /// This method extends `handle` by capturing protocol-specific
+    /// tracking information including user_id, security level, and target address.
+    ///
+    /// # Returns
+    ///
+    /// - `Ok(((), VmessTrackingInfo))`: Success with tracking info
+    /// - `Err(VmessError)`: Connection error
+    pub async fn handle_with_tracking(
+        self: Arc<Self>,
+        mut client: TcpStream,
+    ) -> Result<((), VmessTrackingInfo), VmessError> {
+        let client_addr = client.peer_addr()?;
+
+        // Read length prefix (4 bytes, big-endian)
+        let mut len_buf = [0u8; 4];
+        client.read_exact(&mut len_buf).await?;
+        let header_len = u32::from_be_bytes(len_buf) as usize;
+
+        // Prevent oversized headers (DoS protection)
+        if header_len > 65535 {
+            warn!(
+                "VMess TCP: {} header_len {} too large",
+                client_addr, header_len
+            );
+            return Err(VmessError::Io(std::io::Error::new(
+                std::io::ErrorKind::InvalidData,
+                "VMess header too large",
+            )));
+        }
+
+        // Read encrypted header
+        let mut encrypted_header = vec![0u8; header_len];
+        client.read_exact(&mut encrypted_header).await?;
+
+        debug!("VMess TCP: {} header_len={}", client_addr, header_len);
+
+        // Derive user_key from user_id
+        let user_key = Self::derive_user_key(&self.config.server.user_id);
+
+        // Decrypt VMess AEAD header
+        let decrypted_header = match Self::decrypt_header(&user_key, &encrypted_header) {
+            Ok(header) => header,
+            Err(e) => {
+                warn!(
+                    "VMess TCP: {} header decryption failed: {} — dropping connection",
+                    client_addr, e
+                );
+                return Err(VmessError::Io(std::io::Error::new(
+                    std::io::ErrorKind::InvalidData,
+                    format!("VMess header decryption failed: {}", e),
+                )));
+            }
+        };
+
+        // Parse target address and port
+        let (target_addr, target_port) =
+            match VmessTargetAddress::parse_from_bytes(&decrypted_header) {
+                Some((addr, port)) => (addr, port),
+                None => {
+                    warn!(
+                        "VMess TCP: {} standard header parsing failed, using fallback heuristic.",
+                        client_addr
+                    );
+                    // Fallback parsing
+                    if let Some(pos) = decrypted_header
+                        .iter()
+                        .position(|&b| matches!(b, 0x01..=0x03))
+                    {
+                        if let Some(result) =
+                            VmessTargetAddress::parse_from_bytes(&decrypted_header[pos..])
+                        {
+                            (result.0, result.1)
+                        } else {
+                            return Err(VmessError::Io(std::io::Error::new(
+                                std::io::ErrorKind::InvalidData,
+                                "invalid VMess decrypted header",
+                            )));
+                        }
+                    } else {
+                        return Err(VmessError::Io(std::io::Error::new(
+                            std::io::ErrorKind::InvalidData,
+                            "no address in VMess header",
+                        )));
+                    }
+                }
+            };
+
+        let target_str = format!("{}:{}", target_addr, target_port);
+
+        info!(
+            "VMess TCP: {} -> {} (via {}:{})",
+            client_addr, target_str, self.config.server.addr, self.config.server.port
+        );
+
+        // Build tracking info
+        let mut tracking_info =
+            VmessTrackingInfo::with_user_id(&self.config.server.user_id)
+                .with_target_addr(&target_str)
+                .with_security_level("AEAD-2022");
+
+        // Connect to upstream VMess server
+        let remote_addr = format!("{}:{}", self.config.server.addr, self.config.server.port);
+        let timeout = self.config.tcp_timeout;
+
+        let remote = match tokio::time::timeout(timeout, TcpStream::connect(&remote_addr)).await {
+            Ok(Ok(s)) => s,
+            Ok(Err(e)) => return Err(VmessError::Io(e)),
+            Err(_) => {
+                return Err(VmessError::Io(std::io::Error::new(
+                    std::io::ErrorKind::TimedOut,
+                    "connection to VMess server timed out",
+                )));
+            }
+        };
+
+        debug!("Connected to VMess server {}", remote_addr);
+
+        // Relay with stats
+        let stats = match dae_relay::relay_bidirectional_with_stats(client, remote).await {
+            Ok(s) => s,
+            Err(e) => return Err(VmessError::Io(e)),
+        };
+
+        // Update tracking info with bytes
+        tracking_info = tracking_info.with_bytes(
+            stats.bytes_remote_to_client,
+            stats.bytes_client_to_remote,
+        );
+
+        Ok(((), tracking_info))
+    }
+}

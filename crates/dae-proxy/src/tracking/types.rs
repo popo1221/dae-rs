@@ -343,6 +343,62 @@ impl ProtocolStats {
     }
 }
 
+/// Protocol-specific tracking information
+///
+/// This struct captures protocol-specific metadata for each proxy protocol
+/// (VLESS, VMess, Trojan, Shadowsocks, HTTP Proxy) to provide detailed
+/// tracking beyond basic connection stats.
+#[derive(Clone, Debug, Default)]
+pub struct ProtocolTrackingInfo {
+    /// Protocol name (e.g., "vless", "vmess", "trojan", "shadowsocks", "http")
+    pub protocol: String,
+    /// Inbound bytes (remote to client)
+    pub bytes_in: u64,
+    /// Outbound bytes (client to remote)
+    pub bytes_out: u64,
+    /// Protocol-specific metadata
+    ///
+    /// VLESS: uuid, flow, target_addr
+    /// VMess: user_id, security_level, target_addr
+    /// Trojan: password_hint, target_addr, command
+    /// Shadowsocks: cipher_type, target_addr
+    /// HTTP: method, host, path
+    pub metadata: std::collections::HashMap<String, String>,
+}
+
+impl ProtocolTrackingInfo {
+    /// Create a new protocol tracking info
+    pub fn new(protocol: &str) -> Self {
+        Self {
+            protocol: protocol.to_string(),
+            ..Default::default()
+        }
+    }
+
+    /// Set inbound bytes
+    pub fn with_bytes_in(mut self, bytes: u64) -> Self {
+        self.bytes_in = bytes;
+        self
+    }
+
+    /// Set outbound bytes
+    pub fn with_bytes_out(mut self, bytes: u64) -> Self {
+        self.bytes_out = bytes;
+        self
+    }
+
+    /// Add metadata entry
+    pub fn with_metadata(mut self, key: &str, value: &str) -> Self {
+        self.metadata.insert(key.to_string(), value.to_string());
+        self
+    }
+
+    /// Get total bytes transferred
+    pub fn total_bytes(&self) -> u64 {
+        self.bytes_in + self.bytes_out
+    }
+}
+
 /// Tracking event for export via ringbuf
 #[derive(Clone, Copy, Debug)]
 #[repr(C)]

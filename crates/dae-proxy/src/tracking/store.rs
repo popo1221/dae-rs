@@ -209,6 +209,8 @@ pub struct TrackingStore {
     overall: RwLock<OverallStats>,
     /// Start time for uptime calculation
     start_time: Instant,
+    /// Protocol-specific tracking info (keyed by protocol name)
+    protocol_tracking: RwLock<std::collections::HashMap<String, ProtocolTrackingInfo>>,
 }
 
 impl TrackingStore {
@@ -221,6 +223,7 @@ impl TrackingStore {
             protocols: RwLock::new(ProtocolStats::default()),
             overall: RwLock::new(OverallStats::new()),
             start_time: Instant::now(),
+            protocol_tracking: RwLock::new(std::collections::HashMap::new()),
         }
     }
 
@@ -294,6 +297,60 @@ impl TrackingStore {
     #[allow(dead_code)]
     pub fn get_protocol_stats(&self) -> ProtocolStats {
         self.protocols.read().unwrap().clone()
+    }
+
+    // ==================== Protocol-Specific Tracking ====================
+
+    /// Record protocol-specific tracking information
+    ///
+    /// This method records detailed tracking information for proxy protocols
+    /// such as VLESS, VMess, Trojan, Shadowsocks, and HTTP Proxy.
+    ///
+    /// # Arguments
+    ///
+    /// * `info` - Protocol tracking information containing protocol name,
+    ///   bytes transferred, and protocol-specific metadata
+    ///
+    /// # Example
+    ///
+    /// ```ignore
+    /// let info = ProtocolTrackingInfo::new("vless")
+    ///     .with_bytes_in(1024)
+    ///     .with_bytes_out(2048)
+    ///     .with_metadata("uuid", "550e8400-e29b...")
+    ///     .with_metadata("flow", "vision");
+    /// store.record_protocol_tracking(info);
+    /// ```
+    #[allow(dead_code)]
+    pub fn record_protocol_tracking(&self, info: ProtocolTrackingInfo) {
+        let mut tracking = self.protocol_tracking.write().unwrap();
+        let entry = tracking.entry(info.protocol.clone()).or_insert_with(|| {
+            ProtocolTrackingInfo::new(&info.protocol)
+        });
+        entry.bytes_in += info.bytes_in;
+        entry.bytes_out += info.bytes_out;
+        // Merge metadata (last write wins for duplicate keys)
+        for (k, v) in info.metadata {
+            entry.metadata.insert(k, v);
+        }
+    }
+
+    /// Get protocol-specific tracking info
+    ///
+    /// # Arguments
+    ///
+    /// * `protocol` - Protocol name (e.g., "vless", "vmess", "trojan")
+    #[allow(dead_code)]
+    pub fn get_protocol_tracking(&self, protocol: &str) -> Option<ProtocolTrackingInfo> {
+        let tracking = self.protocol_tracking.read().unwrap();
+        tracking.get(protocol).cloned()
+    }
+
+    /// Get all protocol-specific tracking info
+    #[allow(dead_code)]
+    pub fn get_all_protocol_tracking(&self) -> std::collections::HashMap<String, ProtocolTrackingInfo> {
+        let tracking = self.protocol_tracking.read().unwrap();
+        tracking.clone()
     }
 
     // ==================== Accessor Methods ====================

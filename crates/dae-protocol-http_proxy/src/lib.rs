@@ -397,3 +397,219 @@ impl HttpProxyServer {
         }
     }
 }
+
+/// HTTP tracking information for protocol-specific tracking
+#[derive(Debug, Default, Clone)]
+pub struct HttpTrackingInfo {
+    /// HTTP method (CONNECT, GET, POST, etc.)
+    pub method: String,
+    /// Target host
+    pub host: String,
+    /// Target path (if available)
+    pub path: String,
+    /// Inbound bytes
+    pub bytes_in: u64,
+    /// Outbound bytes
+    pub bytes_out: u64,
+}
+
+impl HttpTrackingInfo {
+    /// Create a new HTTP tracking info
+    pub fn new() -> Self {
+        Self::default()
+    }
+
+    /// Set method
+    pub fn with_method(mut self, method: &str) -> Self {
+        self.method = method.to_string();
+        self
+    }
+
+    /// Set host
+    pub fn with_host(mut self, host: &str) -> Self {
+        self.host = host.to_string();
+        self
+    }
+
+    /// Set path
+    pub fn with_path(mut self, path: &str) -> Self {
+        self.path = path.to_string();
+        self
+    }
+
+    /// Set bytes transferred
+    pub fn with_bytes(mut self, bytes_in: u64, bytes_out: u64) -> Self {
+        self.bytes_in = bytes_in;
+        self.bytes_out = bytes_out;
+        self
+    }
+}
+
+impl HttpProxyHandler {
+    /// Handle HTTP proxy connection with protocol tracking
+    ///
+    /// This method extends `handle` by capturing protocol-specific
+    /// tracking information including HTTP method, host, and path.
+    ///
+    /// # Returns
+    ///
+    /// - `Ok(((), HttpTrackingInfo))`: Success with tracking info
+    /// - `Err(std::io::Error)`: Connection error
+    #[allow(dead_code)]
+    pub async fn handle_with_tracking(
+        self: Arc<Self>,
+        mut client: TcpStream,
+    ) -> std::io::Result<((), HttpTrackingInfo)> {
+        use tokio::io::{AsyncBufReadExt, AsyncWriteExt};
+
+        // Read the request line
+        let mut line = String::new();
+        let mut reader = tokio::io::BufReader::new(&mut client);
+
+        // Read headers until empty line
+        let mut headers = std::collections::HashMap::new();
+        loop {
+            line.clear();
+            match reader.read_line(&mut line).await {
+                Ok(0) => return Ok(((), HttpTrackingInfo::default())),
+                Ok(_n) => {
+                    let line = line.trim_end();
+                    if line.is_empty() {
+                        break; // End of headers
+                    }
+                    if let Some(colon_idx) = line.find(':') {
+                        let key = line[..colon_idx].trim().to_lowercase();
+                        let value = line[colon_idx + 1..].trim();
+                        headers.insert(key, value.to_string());
+                    }
+                }
+                Err(e) => return Err(e),
+            }
+        }
+
+        debug!("HTTP proxy request headers: {:?}", headers);
+
+        // Check for Proxy-Authorization
+        if let Some((ref username, ref password)) = self.config.auth {
+            let auth_header = headers.get("proxy-authorization");
+            let authorized = if let Some(value) = auth_header {
+                if let Some(cred) = BasicAuth::from_header(value) {
+                    cred.matches(username, password)
+                } else {
+                    false
+                }
+            } else {
+                false
+            };
+
+            if !authorized {
+                info!("HTTP proxy: unauthorized access attempt");
+                client.write_all(consts::HTTP_PROXY_AUTH_REQUIRED).await?;
+                return Err(std::io::Error::new(
+                    std::io::ErrorKind::PermissionDenied,
+                    "proxy authentication required",
+                ));
+            }
+        }
+
+        // Parse the request line to extract method and path
+        let request_line = line.clone();
+        let parts: Vec<&str> = request_line.split_whitespace().collect();
+        let method = if parts.is_empty() {
+            "UNKNOWN".to_string()
+        } else {
+            parts[0].to_string()
+        };
+        let path = if parts.len() > 1 {
+            parts[1].to_string()
+        } else {
+            String::new()
+        };
+
+        // Parse the CONNECT request or other methods
+        let request = match HttpConnectRequest::parse(&line) {
+            Some(r) => r,
+            None => {
+                client.write_all(consts::HTTP_BAD_GATEWAY).await?;
+                return Err(std::io::Error::new(
+                    std::io::ErrorKind::InvalidInput,
+                    "invalid HTTP request",
+                ));
+            }
+        };
+
+        info!("HTTP {}: {}:{}", method, request.host, request.port);
+
+        // Build tracking info
+        let mut tracking_info = HttpTrackingInfo::new()
+            .with_method(&method)
+            .with_host(&request.host)
+            .with_path(&path);
+
+        // Connect to target
+        let target_addr: SocketAddr =
+            match SocketAddr::from_str(&format!("{}:{}", request.host, request.port)) {
+                Ok(addr) => addr,
+                Err(_) => {
+                    // Try DNS resolution
+                    match tokio::net::lookup_host(format!("{}:{}", request.host, request.port))
+                        .await
+                    {
+                        Ok(mut addrs) => match addrs.next() {
+                            Some(addr) => addr,
+                            None => {
+                                client.write_all(consts::HTTP_BAD_GATEWAY).await?;
+                                return Err(std::io::Error::new(
+                                    std::io::ErrorKind::HostUnreachable,
+                                    "no addresses found",
+                                ));
+                            }
+                        },
+                        Err(e) => {
+                            client.write_all(consts::HTTP_BAD_GATEWAY).await?;
+                            return Err(std::io::Error::new(
+                                std::io::ErrorKind::HostUnreachable,
+                                format!("DNS resolution failed: {e}"),
+                            ));
+                        }
+                    }
+                }
+            };
+
+        // Connect to remote
+        let timeout = std::time::Duration::from_secs(self.config.tcp_timeout_secs);
+        let remote = match tokio::time::timeout(timeout, TcpStream::connect(target_addr)).await {
+            Ok(Ok(s)) => s,
+            Ok(Err(e)) => {
+                warn!("HTTP CONNECT: failed to connect to {}: {}", target_addr, e);
+                client.write_all(consts::HTTP_BAD_GATEWAY).await?;
+                return Err(e);
+            }
+            Err(_) => {
+                client.write_all(consts::HTTP_BAD_GATEWAY).await?;
+                return Err(std::io::Error::new(
+                    std::io::ErrorKind::TimedOut,
+                    "connection timeout",
+                ));
+            }
+        };
+
+        // Send 200 Connection Established
+        client.write_all(consts::HTTP_OK).await?;
+
+        info!("HTTP CONNECT tunnel established: -> {}", target_addr);
+
+        // Relay with stats
+        let stats = match dae_relay::relay_bidirectional_with_stats(client, remote).await {
+            Ok(s) => s,
+            Err(e) => return Err(e),
+        };
+
+        tracking_info = tracking_info.with_bytes(
+            stats.bytes_remote_to_client,
+            stats.bytes_client_to_remote,
+        );
+
+        Ok(((), tracking_info))
+    }
+}

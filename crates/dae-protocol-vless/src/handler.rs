@@ -628,6 +628,320 @@ impl VlessHandler {
             ))),
         }
     }
+
+    /// Handle VLESS connection with protocol tracking
+    ///
+    /// This method extends `handle_vless` by capturing protocol-specific
+    /// tracking information including UUID, flow type, and target address.
+    ///
+    /// # Returns
+    ///
+    /// - `Ok(((), VlessTrackingInfo))`: Success with tracking info
+    /// - `Err(VlessError)`: Connection error
+    pub async fn handle_vless_with_tracking(
+        self: Arc<Self>,
+        mut client: TcpStream,
+    ) -> Result<((), VlessTrackingInfo), VlessError> {
+        let client_addr = client.peer_addr()?;
+
+        // Read VLESS header
+        let mut header_buf = vec![0u8; VLESS_HEADER_MIN_SIZE];
+        client.read_exact(&mut header_buf).await?;
+
+        // Validate version
+        if header_buf[0] != VLESS_VERSION {
+            error!("Invalid VLESS version: {}", header_buf[0]);
+            return Err(VlessError::Io(std::io::Error::new(
+                std::io::ErrorKind::InvalidData,
+                "invalid VLESS version",
+            )));
+        }
+
+        // Extract UUID (bytes 1-16)
+        let uuid = &header_buf[1..17];
+        if !Self::validate_uuid(uuid) {
+            error!("Invalid UUID length");
+            return Err(VlessError::Io(std::io::Error::new(
+                std::io::ErrorKind::InvalidData,
+                "invalid UUID",
+            )));
+        }
+
+        // Validate UUID against config
+        let expected_uuid = self.config.server.uuid.as_bytes();
+        if expected_uuid.len() == 16 && uuid != expected_uuid {
+            error!("UUID mismatch");
+            return Err(VlessError::Io(std::io::Error::new(
+                std::io::ErrorKind::PermissionDenied,
+                "invalid UUID",
+            )));
+        }
+
+        // Extract command (byte 18)
+        let command = header_buf[18];
+        let cmd = VlessCommand::from_u8(command).ok_or_else(|| {
+            error!("Unknown VLESS command: {}", command);
+            std::io::Error::new(std::io::ErrorKind::InvalidData, "unknown VLESS command")
+        })?;
+
+        // Build tracking info
+        let mut tracking_info = VlessTrackingInfo::with_uuid(uuid).with_command(cmd);
+
+        // Set flow type based on command
+        match cmd {
+            VlessCommand::Tcp => {
+                tracking_info = tracking_info.with_flow("tcp");
+            }
+            VlessCommand::Udp => {
+                tracking_info = tracking_info.with_flow("udp");
+            }
+            VlessCommand::XtlsVision => {
+                tracking_info = tracking_info.with_flow("xtls-vision");
+            }
+        }
+
+        debug!("VLESS: {} command={:?}", client_addr, cmd);
+
+        // Handle based on command
+        match cmd {
+            VlessCommand::Tcp => {
+                let result = self.handle_tcp_with_tracking(client, tracking_info).await;
+                match result {
+                    (Ok(()), info) => Ok(((), info)),
+                    (Err(e), _) => Err(e),
+                }
+            }
+            VlessCommand::Udp => {
+                error!("VLESS UDP: UDP traffic should go through the UDP port, not TCP");
+                Err(VlessError::Io(std::io::Error::new(
+                    std::io::ErrorKind::InvalidInput,
+                    "UDP traffic should use the UDP port",
+                )))
+            }
+            VlessCommand::XtlsVision => {
+                let result = self.handle_reality_vision_with_tracking(client, tracking_info).await;
+                match result {
+                    (Ok(()), info) => Ok(((), info)),
+                    (Err(e), _) => Err(e),
+                }
+            }
+        }
+    }
+
+    /// Handle VLESS TCP connection with tracking
+    async fn handle_tcp_with_tracking(
+        self: &Arc<Self>,
+        mut client: TcpStream,
+        mut tracking_info: VlessTrackingInfo,
+    ) -> (Result<(), VlessError>, VlessTrackingInfo) {
+        // Read additional header: port(4) + atyp(1) + addr + iv(16)
+        let mut addl_buf = vec![0u8; 64];
+        if let Err(e) = client.read_exact(&mut addl_buf).await {
+            return (Err(VlessError::Io(e)), tracking_info);
+        }
+
+        // Parse target address
+        let address = match self.parse_target_address(&addl_buf) {
+            Ok(addr) => addr,
+            Err(e) => return (Err(e), tracking_info),
+        };
+
+        let target_str = format!("{}", address);
+
+        info!(
+            "VLESS TCP: -> {} (via {}:{})",
+            address, self.config.server.addr, self.config.server.port
+        );
+
+        // Connect to VLESS server
+        let remote_addr = format!("{}:{}", self.config.server.addr, self.config.server.port);
+        let timeout = self.config.tcp_timeout;
+
+        let remote = match tokio::time::timeout(timeout, TcpStream::connect(&remote_addr)).await {
+            Ok(Ok(s)) => s,
+            Ok(Err(e)) => return (Err(VlessError::Io(e)), tracking_info),
+            Err(_) => {
+                return (
+                    Err(VlessError::Io(std::io::Error::new(
+                        std::io::ErrorKind::TimedOut,
+                        "connection to VLESS server timed out",
+                    ))),
+                    tracking_info,
+                )
+            }
+        };
+
+        debug!("Connected to VLESS server {}", remote_addr);
+
+        // Relay with stats
+        let stats = match dae_relay::relay_bidirectional_with_stats(client, remote).await {
+            Ok(s) => s,
+            Err(e) => return (Err(VlessError::Io(e)), tracking_info),
+        };
+
+        // Update tracking info with target address and bytes
+        tracking_info = tracking_info
+            .with_target_addr(&target_str)
+            .with_bytes(stats.bytes_client_to_remote, stats.bytes_remote_to_client);
+
+        (Ok(()), tracking_info)
+    }
+
+    /// Handle VLESS Reality Vision connection with tracking
+    async fn handle_reality_vision_with_tracking(
+        self: &Arc<Self>,
+        client: TcpStream,
+        mut tracking_info: VlessTrackingInfo,
+    ) -> (Result<(), VlessError>, VlessTrackingInfo) {
+        let reality_config = match self.config.server.reality.as_ref() {
+            Some(c) => c,
+            None => {
+                return (
+                    Err(VlessError::Io(std::io::Error::new(
+                        std::io::ErrorKind::InvalidInput,
+                        "Reality config required for XTLS Vision",
+                    ))),
+                    tracking_info,
+                )
+            }
+        };
+
+        // Generate temporary X25519 key pair
+        let mut rng = rand::rngs::OsRng;
+        let scalar = curve25519_dalek::Scalar::random(&mut rng);
+        let point = curve25519_dalek::MontgomeryPoint::mul_base(&scalar);
+        let client_public: [u8; 32] = point.to_bytes();
+
+        // Validate server public key length
+        let server_public_key = &reality_config.public_key;
+        if server_public_key.len() != 32 {
+            return (
+                Err(VlessError::Io(std::io::Error::new(
+                    std::io::ErrorKind::InvalidInput,
+                    "Invalid server public key length",
+                ))),
+                tracking_info,
+            );
+        }
+
+        // Calculate shared secret
+        let server_point_array: [u8; 32] = match server_public_key.as_slice().try_into() {
+            Ok(arr) => arr,
+            Err(_) => {
+                return (
+                    Err(VlessError::Io(std::io::Error::new(
+                        ErrorKind::InvalidInput,
+                        "Invalid public key",
+                    ))),
+                    tracking_info,
+                )
+            }
+        };
+        let server_point = curve25519_dalek::MontgomeryPoint(server_point_array);
+        let shared_point = server_point * scalar;
+        let shared_secret: [u8; 32] = shared_point.to_bytes();
+
+        // Build Reality request
+        let mut request = [0u8; 48];
+        let hmac_key = hmac_sha256(&shared_secret, b"Reality Souls");
+        request[..32].copy_from_slice(&hmac_key);
+
+        if reality_config.short_id.len() >= 8 {
+            request[32..40].copy_from_slice(&reality_config.short_id[..8]);
+        }
+        let random_bytes: [u8; 8] = rand::random();
+        request[40..].copy_from_slice(&random_bytes);
+
+        // Build fake TLS ClientHello
+        let destination = &reality_config.destination;
+        let client_hello = match build_reality_client_hello(&client_public, &request, destination) {
+            Ok(hello) => hello,
+            Err(e) => return (Err(e), tracking_info),
+        };
+
+        // Connect to VLESS server
+        let remote_addr = format!("{}:{}", self.config.server.addr, self.config.server.port);
+        let mut remote = match tokio::time::timeout(
+            self.config.tcp_timeout,
+            TcpStream::connect(&remote_addr),
+        )
+        .await
+        {
+            Ok(Ok(s)) => s,
+            Ok(Err(_e)) => {
+                return (
+                    Err(VlessError::Io(std::io::Error::new(
+                        ErrorKind::TimedOut,
+                        "connection timed out",
+                    ))),
+                    tracking_info,
+                )
+            }
+            Err(_) => {
+                return (
+                    Err(VlessError::Io(std::io::Error::new(
+                        ErrorKind::TimedOut,
+                        "connection timed out",
+                    ))),
+                    tracking_info,
+                )
+            }
+        };
+
+        if let Err(e) = remote.write_all(&client_hello).await {
+            return (Err(VlessError::Io(e)), tracking_info);
+        }
+        if let Err(e) = remote.flush().await {
+            return (Err(VlessError::Io(e)), tracking_info);
+        }
+
+        debug!("Sent Reality ClientHello to {}", remote_addr);
+
+        // Read server response
+        let mut server_response = vec![0u8; 8192];
+        let n = match tokio::time::timeout(self.config.tcp_timeout, remote.read(&mut server_response))
+            .await
+        {
+            Ok(Ok(n)) => n,
+            Ok(Err(e)) => {
+                return (Err(VlessError::Io(e)), tracking_info);
+            }
+            Err(_) => {
+                return (
+                    Err(VlessError::Io(std::io::Error::new(
+                        ErrorKind::TimedOut,
+                        "read timed out",
+                    ))),
+                    tracking_info,
+                );
+            }
+        };
+
+        if n == 0 {
+            return (
+                Err(VlessError::Io(std::io::Error::new(
+                    std::io::ErrorKind::UnexpectedEof,
+                    "server closed connection",
+                ))),
+                tracking_info,
+            );
+        }
+
+        debug!("Received {} bytes from server", n);
+
+        // Relay with stats
+        let stats = match dae_relay::relay_bidirectional_with_stats(client, remote).await {
+            Ok(s) => s,
+            Err(e) => return (Err(VlessError::Io(e)), tracking_info),
+        };
+
+        // Update tracking info with target address and bytes
+        tracking_info = tracking_info
+            .with_target_addr(destination)
+            .with_bytes(stats.bytes_client_to_remote, stats.bytes_remote_to_client);
+
+        (Ok(()), tracking_info)
+    }
 }
 
 /// 为 VlessHandler 实现 Handler trait
@@ -651,5 +965,63 @@ impl Handler for VlessHandler {
         self.handle_vless(stream)
             .await
             .map_err(std::io::Error::from)
+    }
+}
+
+/// VLESS tracking information for protocol-specific tracking
+#[derive(Debug, Default, Clone)]
+pub struct VlessTrackingInfo {
+    /// UUID (user identification)
+    pub uuid: String,
+    /// Flow type (Vision/XTLS)
+    pub flow: String,
+    /// Command type (TCP/UDP/XtlsVision)
+    pub command: String,
+    /// Target address
+    pub target_addr: String,
+    /// Inbound bytes
+    pub bytes_in: u64,
+    /// Outbound bytes
+    pub bytes_out: u64,
+}
+
+impl VlessTrackingInfo {
+    /// Create a new VLESS tracking info
+    pub fn new() -> Self {
+        Self::default()
+    }
+
+    /// Create from UUID bytes
+    pub fn with_uuid(uuid: &[u8]) -> Self {
+        let uuid_str = uuid.iter().map(|b| format!("{:02x}", b)).collect::<String>();
+        Self {
+            uuid: uuid_str,
+            ..Default::default()
+        }
+    }
+
+    /// Set flow type
+    pub fn with_flow(mut self, flow: &str) -> Self {
+        self.flow = flow.to_string();
+        self
+    }
+
+    /// Set command type
+    pub fn with_command(mut self, cmd: VlessCommand) -> Self {
+        self.command = format!("{:?}", cmd);
+        self
+    }
+
+    /// Set target address
+    pub fn with_target_addr(mut self, addr: &str) -> Self {
+        self.target_addr = addr.to_string();
+        self
+    }
+
+    /// Set bytes transferred
+    pub fn with_bytes(mut self, bytes_in: u64, bytes_out: u64) -> Self {
+        self.bytes_in = bytes_in;
+        self.bytes_out = bytes_out;
+        self
     }
 }

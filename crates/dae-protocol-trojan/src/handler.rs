@@ -701,6 +701,257 @@ impl Handler for TrojanHandler {
     }
 }
 
+impl TrojanHandler {
+    /// Handle Trojan connection with protocol tracking
+    ///
+    /// This method extends `handle` by capturing protocol-specific
+    /// tracking information including password hint, command type, and target address.
+    ///
+    /// # Returns
+    ///
+    /// - `Ok(((), TrojanTrackingInfo))`: Success with tracking info
+    /// - `Err(TrojanError)`: Connection error
+    #[allow(dead_code)]
+    pub async fn handle_with_tracking(
+        self: Arc<Self>,
+        mut client: TcpStream,
+    ) -> Result<((), TrojanTrackingInfo), TrojanError> {
+        use tokio::io::AsyncReadExt;
+
+        let client_addr = client.peer_addr().map_err(TrojanError::Io)?;
+
+        // Read password (56 bytes)
+        let mut password_buf = vec![0u8; 56];
+        client.read_exact(&mut password_buf).await.map_err(TrojanError::Io)?;
+
+        // Validate password
+        let expected_password = self.config.server.password.as_bytes();
+        if expected_password.len() == 56 && password_buf[..] != expected_password[..] {
+            error!("Trojan password mismatch from {}", client_addr);
+            return Err(TrojanError::Io(std::io::Error::new(
+                std::io::ErrorKind::PermissionDenied,
+                "invalid Trojan password",
+            )));
+        }
+
+        // Read command byte
+        let mut cmd_buf = [0u8; 1];
+        client.read_exact(&mut cmd_buf).await.map_err(TrojanError::Io)?;
+        let command = cmd_buf[0];
+        let cmd = match command {
+            0x01 => TrojanCommand::Proxy,
+            0x02 => TrojanCommand::UdpAssociate,
+            _ => {
+                error!("Unknown Trojan command: {}", command);
+                return Err(TrojanError::Io(std::io::Error::new(
+                    std::io::ErrorKind::InvalidData,
+                    "unknown Trojan command",
+                )));
+            }
+        };
+
+        // Build tracking info
+        let password_hint = if self.config.server.password.len() > 8 {
+            format!("{}...", &self.config.server.password[..8])
+        } else {
+            self.config.server.password.clone()
+        };
+        let mut tracking_info = TrojanTrackingInfo::with_password(&password_hint)
+            .with_command(cmd);
+
+        // Parse address based on type
+        let mut atyp_buf = [0u8; 1];
+        client.read_exact(&mut atyp_buf).await.map_err(TrojanError::Io)?;
+        let atyp = atyp_buf[0];
+
+        let address = match atyp {
+            0x01 => {
+                // IPv4（4 字节）
+                let mut ip_buf = [0u8; 4];
+                client.read_exact(&mut ip_buf).await.map_err(TrojanError::Io)?;
+                TrojanTargetAddress::Ipv4(IpAddr::V4(Ipv4Addr::new(
+                    ip_buf[0], ip_buf[1], ip_buf[2], ip_buf[3],
+                )))
+            }
+            0x02 => {
+                // Domain（1 字节长度 + 域名）
+                let mut len_buf = [0u8; 1];
+                client.read_exact(&mut len_buf).await.map_err(TrojanError::Io)?;
+                let domain_len = len_buf[0] as usize;
+                let mut domain_buf = vec![0u8; domain_len];
+                client.read_exact(&mut domain_buf).await.map_err(TrojanError::Io)?;
+                let domain = String::from_utf8(domain_buf).map_err(|_| {
+                    TrojanError::Io(std::io::Error::new(
+                        std::io::ErrorKind::InvalidData,
+                        "invalid domain in Trojan header",
+                    ))
+                })?;
+                TrojanTargetAddress::Domain(domain, 0)
+            }
+            0x03 => {
+                // IPv6（16 字节）
+                let mut ip_buf = [0u8; 16];
+                client.read_exact(&mut ip_buf).await.map_err(TrojanError::Io)?;
+                TrojanTargetAddress::Ipv6(IpAddr::V6(Ipv6Addr::new(
+                    u16::from_be_bytes([ip_buf[0], ip_buf[1]]),
+                    u16::from_be_bytes([ip_buf[2], ip_buf[3]]),
+                    u16::from_be_bytes([ip_buf[4], ip_buf[5]]),
+                    u16::from_be_bytes([ip_buf[6], ip_buf[7]]),
+                    u16::from_be_bytes([ip_buf[8], ip_buf[9]]),
+                    u16::from_be_bytes([ip_buf[10], ip_buf[11]]),
+                    u16::from_be_bytes([ip_buf[12], ip_buf[13]]),
+                    u16::from_be_bytes([ip_buf[14], ip_buf[15]]),
+                )))
+            }
+            _ => {
+                return Err(TrojanError::Io(std::io::Error::new(
+                    std::io::ErrorKind::InvalidData,
+                    "invalid address type in Trojan header",
+                )));
+            }
+        };
+
+        // Read port (2 bytes)
+        let mut port_buf = [0u8; 2];
+        client.read_exact(&mut port_buf).await.map_err(TrojanError::Io)?;
+        let port = u16::from_be_bytes(port_buf);
+
+        // Read final CRLF (2 bytes)
+        let mut crlf_buf = [0u8; 2];
+        client.read_exact(&mut crlf_buf).await.map_err(TrojanError::Io)?;
+        if crlf_buf != TROJAN_CRLF {
+            return Err(TrojanError::Io(std::io::Error::new(
+                std::io::ErrorKind::InvalidData,
+                "invalid Trojan header: missing CRLF",
+            )));
+        }
+
+        // Build target address string
+        let address_str = match &address {
+            TrojanTargetAddress::Domain(d, _) => format!("{}:{}", d, port),
+            _ => format!("{}:{}", address, port),
+        };
+        tracking_info = tracking_info.with_target_addr(&address_str);
+
+        match cmd {
+            TrojanCommand::Proxy => {
+                // Use round-robin backend selection
+                let backend = self.next_backend();
+                let remote_addr = format!("{}:{}", backend.addr, backend.port);
+                let timeout = self.config.tcp_timeout;
+
+                info!(
+                    "Trojan TCP: {} -> {} (via {}:{}, {} backends available)",
+                    client_addr,
+                    address_str,
+                    backend.addr,
+                    backend.port,
+                    self.backend_count()
+                );
+
+                // Connect to backend server
+                let remote = match tokio::time::timeout(timeout, TcpStream::connect(&remote_addr)).await {
+                    Ok(Ok(s)) => s,
+                    Ok(Err(e)) => {
+                        error!("Failed to connect to Trojan backend: {}", e);
+                        return Err(TrojanError::Io(e));
+                    }
+                    Err(_) => {
+                        return Err(TrojanError::Io(std::io::Error::new(
+                            std::io::ErrorKind::TimedOut,
+                            "connection to Trojan server timed out",
+                        )));
+                    }
+                };
+
+                debug!("Connected to Trojan server {}", remote_addr);
+
+                // Relay with stats
+                let stats = match dae_relay::relay_bidirectional_with_stats(client, remote).await {
+                    Ok(s) => s,
+                    Err(e) => return Err(TrojanError::Io(e)),
+                };
+
+                tracking_info = tracking_info.with_bytes(
+                    stats.bytes_remote_to_client,
+                    stats.bytes_client_to_remote,
+                );
+
+                Ok(((), tracking_info))
+            }
+            TrojanCommand::UdpAssociate => {
+                info!(
+                    "Trojan UDP Associate: {} -> {} ({} backends available)",
+                    client_addr,
+                    address_str,
+                    self.backend_count()
+                );
+                // For now, return unsupported error for UDP
+                // Full UDP support would need similar relay logic
+                Err(TrojanError::Io(std::io::Error::new(
+                    std::io::ErrorKind::InvalidInput,
+                    "UDP associate not fully implemented with tracking",
+                )))
+            }
+        }
+    }
+}
+
+/// Trojan tracking information for protocol-specific tracking
+#[derive(Debug, Default, Clone)]
+pub struct TrojanTrackingInfo {
+    /// Password hint (first 8 chars of password)
+    pub password_hint: String,
+    /// Command type (Proxy/UdpAssociate)
+    pub command: String,
+    /// Target address
+    pub target_addr: String,
+    /// Inbound bytes
+    pub bytes_in: u64,
+    /// Outbound bytes
+    pub bytes_out: u64,
+}
+
+impl TrojanTrackingInfo {
+    /// Create a new Trojan tracking info
+    pub fn new() -> Self {
+        Self::default()
+    }
+
+    /// Create from password
+    pub fn with_password(password: &str) -> Self {
+        // Use first 8 chars as hint for privacy
+        let hint = if password.len() > 8 {
+            format!("{}...", &password[..8])
+        } else {
+            password.to_string()
+        };
+        Self {
+            password_hint: hint,
+            ..Default::default()
+        }
+    }
+
+    /// Set command type
+    pub fn with_command(mut self, cmd: TrojanCommand) -> Self {
+        self.command = format!("{:?}", cmd);
+        self
+    }
+
+    /// Set target address
+    pub fn with_target_addr(mut self, addr: &str) -> Self {
+        self.target_addr = addr.to_string();
+        self
+    }
+
+    /// Set bytes transferred
+    pub fn with_bytes(mut self, bytes_in: u64, bytes_out: u64) -> Self {
+        self.bytes_in = bytes_in;
+        self.bytes_out = bytes_out;
+        self
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::super::config::TrojanTlsConfig;

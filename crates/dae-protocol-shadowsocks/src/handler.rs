@@ -307,5 +307,136 @@ impl Handler for ShadowsocksHandler {
     }
 }
 
+/// Shadowsocks tracking information for protocol-specific tracking
+#[derive(Debug, Default, Clone)]
+pub struct ShadowsocksTrackingInfo {
+    /// Cipher type
+    pub cipher_type: String,
+    /// Target address
+    pub target_addr: String,
+    /// Inbound bytes
+    pub bytes_in: u64,
+    /// Outbound bytes
+    pub bytes_out: u64,
+}
+
+impl ShadowsocksTrackingInfo {
+    /// Create a new Shadowsocks tracking info
+    pub fn new() -> Self {
+        Self::default()
+    }
+
+    /// Create with cipher type
+    pub fn with_cipher_type(cipher: &str) -> Self {
+        Self {
+            cipher_type: cipher.to_string(),
+            ..Default::default()
+        }
+    }
+
+    /// Set target address
+    pub fn with_target_addr(mut self, addr: &str) -> Self {
+        self.target_addr = addr.to_string();
+        self
+    }
+
+    /// Set bytes transferred
+    pub fn with_bytes(mut self, bytes_in: u64, bytes_out: u64) -> Self {
+        self.bytes_in = bytes_in;
+        self.bytes_out = bytes_out;
+        self
+    }
+}
+
+impl ShadowsocksHandler {
+    /// Handle Shadowsocks connection with protocol tracking
+    ///
+    /// This method extends `handle` by capturing protocol-specific
+    /// tracking information including cipher type and target address.
+    ///
+    /// # Returns
+    ///
+    /// - `Ok(((), ShadowsocksTrackingInfo))`: Success with tracking info
+    /// - `Err(ShadowsocksError)`: Connection error
+    #[allow(dead_code)]
+    pub async fn handle_with_tracking(
+        self: Arc<Self>,
+        mut client: TcpStream,
+    ) -> Result<((), ShadowsocksTrackingInfo), ShadowsocksError> {
+        let client_addr = client.peer_addr()?;
+
+        // Read the Shadowsocks AEAD header
+        let mut header_buf = vec![0u8; 1];
+        client.read_exact(&mut header_buf).await?;
+
+        // Read length prefix (2 bytes for AEAD)
+        let mut len_buf = [0u8; 2];
+        client.read_exact(&mut len_buf).await?;
+        let payload_len = u16::from_be_bytes(len_buf) as usize;
+
+        // Read encrypted payload
+        let mut encrypted_payload = vec![0u8; payload_len];
+        client.read_exact(&mut encrypted_payload).await?;
+
+        // Parse target address from payload
+        let (target_addr, target_port) = match TargetAddress::parse_from_aead(&encrypted_payload) {
+            Some((addr, port)) => (addr, port),
+            None => {
+                error!("Failed to parse Shadowsocks target address");
+                return Err(ShadowsocksError::Io(std::io::Error::new(
+                    std::io::ErrorKind::InvalidData,
+                    "invalid Shadowsocks AEAD payload",
+                )));
+            }
+        };
+
+        let target_str = format!("{}:{}", target_addr, target_port);
+
+        info!(
+            "Shadowsocks TCP: {} -> {}",
+            client_addr, target_str
+        );
+
+        // Get cipher type from config
+        let cipher_str = format!("{}", self.config.server.method);
+
+        // Connect to the Shadowsocks server
+        let remote_addr = format!("{}:{}", self.config.server.addr, self.config.server.port);
+        let timeout = self.config.tcp_timeout;
+
+        let remote = match tokio::time::timeout(timeout, TcpStream::connect(&remote_addr)).await {
+            Ok(Ok(s)) => s,
+            Ok(Err(e)) => {
+                return Err(ShadowsocksError::Io(e));
+            }
+            Err(_) => {
+                return Err(ShadowsocksError::Io(std::io::Error::new(
+                    std::io::ErrorKind::TimedOut,
+                    "connection to Shadowsocks server timed out",
+                )));
+            }
+        };
+
+        debug!("Connected to Shadowsocks server {}", remote_addr);
+
+        // Build tracking info
+        let mut tracking_info = ShadowsocksTrackingInfo::with_cipher_type(&cipher_str)
+            .with_target_addr(&target_str);
+
+        // Relay with stats
+        let stats = match dae_relay::relay_bidirectional_with_stats(client, remote).await {
+            Ok(s) => s,
+            Err(e) => return Err(ShadowsocksError::Io(e)),
+        };
+
+        tracking_info = tracking_info.with_bytes(
+            stats.bytes_remote_to_client,
+            stats.bytes_client_to_remote,
+        );
+
+        Ok(((), tracking_info))
+    }
+}
+
 /// SsClientConfig 实现 HandlerConfig trait
 impl HandlerConfig for SsClientConfig {}
