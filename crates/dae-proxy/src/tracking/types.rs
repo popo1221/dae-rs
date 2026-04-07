@@ -439,6 +439,20 @@ pub struct OverallStats {
     pub routed_total: u64,
     /// Total unmatched packets
     pub unmatched_total: u64,
+    /// DNS statistics
+    pub dns_queries_total: u64,
+    /// DNS cache hits
+    pub dns_cache_hits: u64,
+    /// DNS cache misses
+    pub dns_cache_misses: u64,
+    /// DNS upstream switches (fallback triggered)
+    pub dns_upstream_switches: u64,
+    /// DNS errors
+    pub dns_errors: u64,
+    /// DNS latency sum in milliseconds
+    pub dns_latency_sum_ms: u64,
+    /// DNS latency sample count
+    pub dns_latency_count: u64,
 }
 
 impl OverallStats {
@@ -460,6 +474,25 @@ impl OverallStats {
     pub fn bytes_per_second(&self, uptime_secs: u64) -> f64 {
         if uptime_secs > 0 {
             self.bytes_total as f64 / uptime_secs as f64
+        } else {
+            0.0
+        }
+    }
+
+    /// Calculate DNS cache hit rate
+    pub fn dns_cache_hit_rate(&self) -> f64 {
+        let total = self.dns_cache_hits.saturating_add(self.dns_cache_misses);
+        if total > 0 {
+            self.dns_cache_hits as f64 / total as f64
+        } else {
+            0.0
+        }
+    }
+
+    /// Calculate average DNS latency in milliseconds
+    pub fn dns_avg_latency_ms(&self) -> f64 {
+        if self.dns_latency_count > 0 {
+            self.dns_latency_sum_ms as f64 / self.dns_latency_count as f64
         } else {
             0.0
         }
@@ -896,5 +929,59 @@ mod tests {
         let mut stats = OverallStats::new();
         stats.bytes_total = 1024;
         assert_eq!(stats.bytes_per_second(8), 128.0);
+    }
+
+    // ========================================================================
+    // DNS Stats Tests
+    // ========================================================================
+
+    #[test]
+    fn test_overall_stats_dns_defaults() {
+        let stats = OverallStats::new();
+        assert_eq!(stats.dns_queries_total, 0);
+        assert_eq!(stats.dns_cache_hits, 0);
+        assert_eq!(stats.dns_cache_misses, 0);
+        assert_eq!(stats.dns_upstream_switches, 0);
+        assert_eq!(stats.dns_errors, 0);
+        assert_eq!(stats.dns_latency_sum_ms, 0);
+        assert_eq!(stats.dns_latency_count, 0);
+    }
+
+    #[test]
+    fn test_overall_stats_dns_cache_hit_rate() {
+        let stats = OverallStats::new();
+        assert_eq!(stats.dns_cache_hit_rate(), 0.0);
+
+        let mut stats = OverallStats::new();
+        stats.dns_cache_hits = 80;
+        stats.dns_cache_misses = 20;
+        assert!((stats.dns_cache_hit_rate() - 0.8).abs() < 0.001);
+    }
+
+    #[test]
+    fn test_overall_stats_dns_cache_hit_rate_zero_total() {
+        let mut stats = OverallStats::new();
+        stats.dns_cache_hits = 0;
+        stats.dns_cache_misses = 0;
+        assert_eq!(stats.dns_cache_hit_rate(), 0.0);
+    }
+
+    #[test]
+    fn test_overall_stats_dns_avg_latency() {
+        let stats = OverallStats::new();
+        assert_eq!(stats.dns_avg_latency_ms(), 0.0);
+
+        let mut stats = OverallStats::new();
+        stats.dns_latency_sum_ms = 500;
+        stats.dns_latency_count = 10;
+        assert!((stats.dns_avg_latency_ms() - 50.0).abs() < 0.001);
+    }
+
+    #[test]
+    fn test_overall_stats_dns_avg_latency_zero_count() {
+        let mut stats = OverallStats::new();
+        stats.dns_latency_sum_ms = 100;
+        stats.dns_latency_count = 0;
+        assert_eq!(stats.dns_avg_latency_ms(), 0.0);
     }
 }

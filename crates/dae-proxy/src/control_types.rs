@@ -221,6 +221,12 @@ pub struct ApiOverviewStats {
     pub unmatched_total: u64,
     pub packets_per_second: f64,
     pub bytes_per_second: f64,
+    pub dns_queries_total: u64,
+    pub dns_cache_hits: u64,
+    pub dns_cache_misses: u64,
+    pub dns_upstream_switches: u64,
+    pub dns_errors: u64,
+    pub dns_avg_latency_ms: f64,
 }
 
 /// Overview statistics response

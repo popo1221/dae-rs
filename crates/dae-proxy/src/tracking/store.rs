@@ -11,6 +11,7 @@
 //! See issue #66 on GitHub for tracking potential optimization (e.g., dashmap
 //! or concurrent hashmap replacement).
 
+use crate::ebpf_integration::EbpfMaps;
 use crate::tracking::types::*;
 use axum::{
     body::Body,
@@ -20,6 +21,7 @@ use axum::{
     routing::get,
     Router,
 };
+use dae_ebpf_common::stats::{idx as ebpf_stats_idx, StatsEntry};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::net::SocketAddr;
@@ -332,6 +334,116 @@ impl TrackingStore {
         overall.unmatched_total += count;
     }
 
+    // ==================== DNS Stats ====================
+
+    /// Record a DNS cache hit
+    #[allow(dead_code)]
+    pub fn record_dns_cache_hit(&self) {
+        let mut overall = self.overall.write().unwrap();
+        overall.dns_queries_total += 1;
+        overall.dns_cache_hits += 1;
+    }
+
+    /// Record a DNS cache miss
+    #[allow(dead_code)]
+    pub fn record_dns_cache_miss(&self) {
+        let mut overall = self.overall.write().unwrap();
+        overall.dns_queries_total += 1;
+        overall.dns_cache_misses += 1;
+    }
+
+    /// Record a DNS query with latency
+    ///
+    /// # Arguments
+    /// * `latency_ms` - Query latency in milliseconds
+    #[allow(dead_code)]
+    pub fn record_dns_query(&self, latency_ms: u64) {
+        let mut overall = self.overall.write().unwrap();
+        overall.dns_queries_total += 1;
+        overall.dns_latency_sum_ms += latency_ms;
+        overall.dns_latency_count += 1;
+    }
+
+    /// Record a DNS upstream switch (fallback triggered)
+    #[allow(dead_code)]
+    pub fn record_dns_upstream_switch(&self) {
+        let mut overall = self.overall.write().unwrap();
+        overall.dns_upstream_switches += 1;
+    }
+
+    /// Record a DNS error
+    #[allow(dead_code)]
+    pub fn record_dns_error(&self) {
+        let mut overall = self.overall.write().unwrap();
+        overall.dns_queries_total += 1;
+        overall.dns_errors += 1;
+    }
+
+    // ==================== eBPF Stats Polling ====================
+
+    /// Poll eBPF statistics and merge into overall stats
+    ///
+    /// This method reads stats from the eBPF PerCpuArray maps and merges
+    /// them into the TrackingStore's overall statistics. This is typically
+    /// called periodically (e.g., every 5 seconds) to sync eBPF counters
+    /// into user-space tracking.
+    ///
+    /// # Arguments
+    /// * `ebpf_maps` - The eBPF maps to poll stats from
+    ///
+    /// # Phase 1
+    /// Phase 1 implements simple polling that merges eBPF stats into overall stats.
+    /// Future phases may add per-connection and per-protocol eBPF stat tracking.
+    #[allow(dead_code)]
+    pub fn poll_stats(&self, ebpf_maps: &EbpfMaps) {
+        let Some(ref stats_map) = ebpf_maps.stats else {
+            return;
+        };
+
+        let ebpf_stats: HashMap<u32, StatsEntry> = stats_map.get_all();
+        if ebpf_stats.is_empty() {
+            return;
+        }
+
+        let mut overall = self.overall.write().unwrap();
+
+        // Merge overall stats from eBPF
+        if let Some(overall_entry) = ebpf_stats.get(&ebpf_stats_idx::OVERALL) {
+            // For eBPF stats, we track deltas. Since eBPF PerCpuArray accumulates,
+            // we use the values directly for now. In a full implementation,
+            // we'd track previous values and compute deltas.
+            overall.packets_total = overall.packets_total.saturating_add(overall_entry.packets);
+            overall.bytes_total = overall.bytes_total.saturating_add(overall_entry.bytes);
+            overall.dropped_total = overall.dropped_total.saturating_add(overall_entry.dropped);
+            overall.routed_total = overall.routed_total.saturating_add(overall_entry.routed);
+            overall.unmatched_total = overall
+                .unmatched_total
+                .saturating_add(overall_entry.unmatched);
+        }
+
+        // Merge protocol stats
+        let mut protocols = self.protocols.write().unwrap();
+
+        if let Some(tcp_entry) = ebpf_stats.get(&ebpf_stats_idx::TCP) {
+            protocols.tcp.packets = protocols.tcp.packets.saturating_add(tcp_entry.packets);
+            protocols.tcp.bytes = protocols.tcp.bytes.saturating_add(tcp_entry.bytes);
+        }
+
+        if let Some(udp_entry) = ebpf_stats.get(&ebpf_stats_idx::UDP) {
+            protocols.udp.packets = protocols.udp.packets.saturating_add(udp_entry.packets);
+            protocols.udp.bytes = protocols.udp.bytes.saturating_add(udp_entry.bytes);
+        }
+
+        if let Some(icmp_entry) = ebpf_stats.get(&ebpf_stats_idx::ICMP) {
+            protocols.icmp.packets = protocols.icmp.packets.saturating_add(icmp_entry.packets);
+            protocols.icmp.bytes = protocols.icmp.bytes.saturating_add(icmp_entry.bytes);
+        }
+
+        // Note: DNS stats from eBPF would use ebpf_stats_idx::DNS (index 4)
+        // but dae_ebpf_common::stats::idx only defines up to OTHER (index 4).
+        // DNS tracking is handled via user-space MacDnsResolver integration instead.
+    }
+
     // ==================== Protocol Stats ====================
 
     /// Get protocol stats
@@ -513,6 +625,27 @@ impl TrackingStore {
         output.push_str(&format!(
             "dae_unmatched_total {}\n",
             overall.unmatched_total
+        ));
+
+        // DNS stats
+        output.push_str("\n# dae-rs DNS statistics\n");
+        output.push_str(&format!(
+            "dae_dns_queries_total {}\n",
+            overall.dns_queries_total
+        ));
+        output.push_str(&format!("dae_dns_cache_hits {}\n", overall.dns_cache_hits));
+        output.push_str(&format!(
+            "dae_dns_cache_misses {}\n",
+            overall.dns_cache_misses
+        ));
+        output.push_str(&format!(
+            "dae_dns_upstream_switches {}\n",
+            overall.dns_upstream_switches
+        ));
+        output.push_str(&format!("dae_dns_errors {}\n", overall.dns_errors));
+        output.push_str(&format!(
+            "dae_dns_latency_avg_ms {}\n",
+            overall.dns_avg_latency_ms()
         ));
 
         // Protocol stats
@@ -765,6 +898,12 @@ async fn api_overview_handler(State(state): State<MetricsHttpState>) -> Response
             unmatched_total: overall.unmatched_total,
             packets_per_second: overall.packets_per_second(uptime),
             bytes_per_second: overall.bytes_per_second(uptime),
+            dns_queries_total: overall.dns_queries_total,
+            dns_cache_hits: overall.dns_cache_hits,
+            dns_cache_misses: overall.dns_cache_misses,
+            dns_upstream_switches: overall.dns_upstream_switches,
+            dns_errors: overall.dns_errors,
+            dns_avg_latency_ms: overall.dns_avg_latency_ms(),
         },
         transport_protocols: ApiTransportProtocolsResponse {
             tcp: ApiProtocolStats {

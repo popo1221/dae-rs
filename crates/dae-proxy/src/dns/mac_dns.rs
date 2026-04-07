@@ -12,6 +12,7 @@ use tokio::sync::RwLock;
 use tracing::{debug, warn};
 
 use crate::mac::MacAddr;
+use crate::tracking::store::SharedTrackingStore;
 
 /// DNS 错误类型
 ///
@@ -150,6 +151,8 @@ pub struct DnsResolution {
 pub struct MacDnsResolver {
     config: MacDnsConfig,
     cache: RwLock<HashMap<(MacAddr, String), DnsCacheEntry>>,
+    /// Optional tracking store for DNS metrics
+    tracking_store: Option<SharedTrackingStore>,
 }
 
 impl MacDnsResolver {
@@ -158,12 +161,22 @@ impl MacDnsResolver {
         Self {
             config,
             cache: RwLock::new(HashMap::new()),
+            tracking_store: None,
         }
     }
 
     /// Create a resolver with default configuration
     pub fn default_config() -> Self {
         Self::new(MacDnsConfig::default())
+    }
+
+    /// Create a new MAC DNS resolver with tracking store
+    pub fn with_tracking_store(config: MacDnsConfig, tracking_store: SharedTrackingStore) -> Self {
+        Self {
+            config,
+            cache: RwLock::new(HashMap::new()),
+            tracking_store: Some(tracking_store),
+        }
     }
 
     /// Get DNS servers for a specific MAC address
@@ -271,6 +284,10 @@ impl MacDnsResolver {
         // Check cache first
         if let Some(entry) = self.get_cached(mac, &domain_lower).await {
             debug!("DNS cache hit for {} (MAC: {})", domain, mac);
+            // Record cache hit in tracking store
+            if let Some(ref store) = self.tracking_store {
+                store.record_dns_cache_hit();
+            }
             return Ok(DnsResolution {
                 addresses: entry.addresses.clone(),
                 server_used: "cache".to_string(),
@@ -280,13 +297,24 @@ impl MacDnsResolver {
         }
 
         debug!("DNS cache miss for {} (MAC: {}), resolving...", domain, mac);
+        // Record cache miss in tracking store
+        if let Some(ref store) = self.tracking_store {
+            store.record_dns_cache_miss();
+        }
 
         let (primary_servers, fallback_servers) = self.get_dns_servers_for_mac(mac);
+        let query_start = Instant::now();
+        let mut primary_failed = false;
 
         // Try primary servers first
         for server in &primary_servers {
             match Self::resolve_with_server(&domain_lower, server) {
                 Ok(mut resolution) => {
+                    // Record query latency
+                    let latency_ms = query_start.elapsed().as_millis() as u64;
+                    if let Some(ref store) = self.tracking_store {
+                        store.record_dns_query(latency_ms);
+                    }
                     // Cache the result
                     let entry = DnsCacheEntry {
                         addresses: resolution.addresses.clone(),
@@ -299,6 +327,7 @@ impl MacDnsResolver {
                 }
                 Err(e) => {
                     warn!("DNS resolution failed with server {}: {}", server, e);
+                    primary_failed = true;
                 }
             }
         }
@@ -307,6 +336,17 @@ impl MacDnsResolver {
         for server in &fallback_servers {
             match Self::resolve_with_server(&domain_lower, server) {
                 Ok(mut resolution) => {
+                    // Record upstream switch if we had to use fallback
+                    if primary_failed {
+                        if let Some(ref store) = self.tracking_store {
+                            store.record_dns_upstream_switch();
+                        }
+                    }
+                    // Record query latency
+                    let latency_ms = query_start.elapsed().as_millis() as u64;
+                    if let Some(ref store) = self.tracking_store {
+                        store.record_dns_query(latency_ms);
+                    }
                     // Cache the result
                     let entry = DnsCacheEntry {
                         addresses: resolution.addresses.clone(),
@@ -326,6 +366,10 @@ impl MacDnsResolver {
             }
         }
 
+        // Record error if all servers failed
+        if let Some(ref store) = self.tracking_store {
+            store.record_dns_error();
+        }
         Err(DnsError::ResolutionFailed(format!(
             "All DNS servers failed for domain: {domain}"
         )))
