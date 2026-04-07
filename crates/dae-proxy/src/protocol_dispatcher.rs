@@ -9,6 +9,41 @@ use tokio::io::AsyncWriteExt;
 use tokio::net::TcpStream;
 use tracing::{debug, error};
 
+use crate::tracking::store::SharedTrackingStore;
+use crate::tracking::types::{ConnectionKey, ConnectionStatsEntry, ConnectionState};
+
+/// Convert SocketAddr to IPv4 u32 (for ConnectionKey)
+fn socket_addr_to_ipv4_u32(addr: &SocketAddr) -> u32 {
+    if let std::net::SocketAddr::V4(v4) = addr {
+        let octets = v4.ip().octets();
+        u32::from_le_bytes(octets)
+    } else {
+        0 // Non-IPv4 addresses use 0 as placeholder
+    }
+}
+
+/// Create a ConnectionKey from client and server socket addresses
+fn create_connection_key(client: &SocketAddr, server: &SocketAddr, proto: u8) -> ConnectionKey {
+    ConnectionKey::new(
+        socket_addr_to_ipv4_u32(client),
+        socket_addr_to_ipv4_u32(server),
+        client.port(),
+        server.port(),
+        proto,
+    )
+}
+
+/// Create a ConnectionStatsEntry with given state
+fn create_stats_entry(state: ConnectionState) -> ConnectionStatsEntry {
+    let now = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .unwrap()
+        .as_millis() as u64;
+    let mut entry = ConnectionStatsEntry::new(now);
+    entry.state = state as u8;
+    entry
+}
+
 /// Protocol types detected by the dispatcher
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum DetectedProtocol {
@@ -80,6 +115,8 @@ pub struct ProtocolDispatcher {
     config: ProtocolDispatcherConfig,
     socks5_handler: Option<Arc<dae_protocol_socks5::Socks5Handler>>,
     http_handler: Option<Arc<crate::http_proxy::HttpProxyHandler>>,
+    /// Optional tracking store for connection tracking
+    tracking_store: Option<SharedTrackingStore>,
 }
 
 impl ProtocolDispatcher {
@@ -89,7 +126,14 @@ impl ProtocolDispatcher {
             config,
             socks5_handler: None,
             http_handler: None,
+            tracking_store: None,
         }
+    }
+
+    /// Set the tracking store for connection tracking
+    pub fn with_tracking_store(mut self, store: SharedTrackingStore) -> Self {
+        self.tracking_store = Some(store);
+        self
     }
 
     /// Create with SOCKS5 handler
@@ -116,9 +160,18 @@ impl ProtocolDispatcher {
 
     /// Handle an incoming connection by detecting and routing to appropriate protocol
     pub async fn handle_connection(self: Arc<Self>, client: TcpStream) -> std::io::Result<()> {
-        let addr = client
+        let client_addr = client
             .peer_addr()
             .unwrap_or(SocketAddr::from(([0, 0, 0, 0], 0)));
+
+        // Create tracking key for this connection (dst will be updated later if known)
+        let server_addr = SocketAddr::from(([0, 0, 0, 0], 0));
+        let tracking_key = create_connection_key(&client_addr, &server_addr, 6); // TCP = 6
+
+        // Track connection as New
+        if let Some(ref store) = self.tracking_store {
+            store.update_connection(tracking_key, create_stats_entry(ConnectionState::New));
+        }
 
         // Peek at first few bytes to detect protocol
         let mut peek_buf = [0u8; 16];
@@ -130,11 +183,17 @@ impl ProtocolDispatcher {
         {
             Ok(Ok(n)) => n,
             Ok(Err(e)) => {
-                debug!("Failed to peek client bytes from {}: {}", addr, e);
+                debug!("Failed to peek client bytes from {}: {}", client_addr, e);
+                if let Some(ref store) = self.tracking_store {
+                    store.update_connection(tracking_key, create_stats_entry(ConnectionState::Closed));
+                }
                 return Err(e);
             }
             Err(_) => {
-                debug!("Protocol detection timeout for {}", addr);
+                debug!("Protocol detection timeout for {}", client_addr);
+                if let Some(ref store) = self.tracking_store {
+                    store.update_connection(tracking_key, create_stats_entry(ConnectionState::Closed));
+                }
                 return Err(std::io::Error::new(
                     std::io::ErrorKind::TimedOut,
                     "protocol detection timeout",
@@ -143,7 +202,10 @@ impl ProtocolDispatcher {
         };
 
         if n == 0 {
-            debug!("Client {} closed connection during peek", addr);
+            debug!("Client {} closed connection during peek", client_addr);
+            if let Some(ref store) = self.tracking_store {
+                store.update_connection(tracking_key, create_stats_entry(ConnectionState::Closed));
+            }
             return Err(std::io::Error::new(
                 std::io::ErrorKind::UnexpectedEof,
                 "connection closed",
@@ -151,9 +213,14 @@ impl ProtocolDispatcher {
         }
 
         let protocol = DetectedProtocol::detect(&peek_buf[..n]);
-        debug!("Detected protocol {:?} from {}", protocol, addr);
+        debug!("Detected protocol {:?} from {}", protocol, client_addr);
 
-        match protocol {
+        // Track connection as Established
+        if let Some(ref store) = self.tracking_store {
+            store.update_connection(tracking_key, create_stats_entry(ConnectionState::Established));
+        }
+
+        let result = match protocol {
             DetectedProtocol::Socks5 => {
                 if let Some(ref handler) = self.socks5_handler {
                     handler.clone().handle(client).await
@@ -169,7 +236,14 @@ impl ProtocolDispatcher {
                 }
             }
             DetectedProtocol::Unknown => self.reject_unknown(client, "unsupported protocol").await,
+        };
+
+        // Track connection as Closed when done
+        if let Some(ref store) = self.tracking_store {
+            store.update_connection(tracking_key, create_stats_entry(ConnectionState::Closed));
         }
+
+        result
     }
 
     /// Reject connection with unknown protocol
