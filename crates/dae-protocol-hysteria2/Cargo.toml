@@ -6,14 +6,14 @@ description = "Hysteria2 protocol handler for dae-rs"
 
 [features]
 default = []
-quic = ["quinn"]
+# QUIC support is no longer implemented - feature kept for backward compatibility
+quic = []
 
 [dependencies]
 tokio = { version = "1", features = ["io-util", "net", "rt"] }
 tracing = "0.1"
 thiserror = "1"
 rand = "0.8"
-quinn = { version = "0.10", optional = true }
 dae-protocol-core = { path = "../dae-protocol-core" }
 async-trait = "0.1"
 

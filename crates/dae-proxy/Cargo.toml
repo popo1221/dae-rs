@@ -7,13 +7,13 @@ description = "Proxy protocols for dae-rs - Phase 3: User-space proxy core"
 [features]
 # QUIC-based protocols (optional - quinn adds ~2-3MB binary size)
 # Enable these only if you need QUIC-based protocols
-protocol-hysteria2 = ["quinn", "dae-protocol-hysteria2/quic"]
+protocol-hysteria2 = ["quinn"]
 protocol-tuic = ["quinn"]
 protocol-juicity = ["quinn", "dae-protocol-juicity"]
 
 [dependencies]
 # Core (always included)
-tokio = { version = "1", features = ["full"] }
+tokio = { version = "1", features = ["rt", "sync", "time", "macros", "fs", "signal"] }
 tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 socket2 = { version = "0.5", features = ["all"] }
@@ -62,7 +62,7 @@ prometheus = "0.13"
 axum = "0.7"
 tower-http = { version = "0.6", features = ["cors"] }
 
-# QUIC protocol support (only for hysteria2, tuic, juicity)
+# QUIC protocol support (for tuic, juicity - hysteria2 uses TCP)
 # quinn adds ~2-3MB to binary size
 quinn = { version = "0.10", optional = true }
 
