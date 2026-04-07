@@ -85,6 +85,15 @@ impl MetricsServer {
             EBPF_LATENCY_HISTOGRAM, NODE_LATENCY_HISTOGRAM, REQUEST_SIZE_HISTOGRAM,
             RESPONSE_TIME_HISTOGRAM, RULE_MATCH_LATENCY_HISTOGRAM,
         };
+        use crate::metrics::tracking::{
+            CONNECTION_STATE_COUNTER, DROPPED_COUNTER, NODE_BYTES_IN_COUNTER,
+            NODE_BYTES_OUT_COUNTER, NODE_REQUESTS_COUNTER, PROXY_PROTOCOL_BYTES_IN_COUNTER,
+            PROXY_PROTOCOL_BYTES_OUT_COUNTER, PROXY_PROTOCOL_CONNECTIONS_COUNTER,
+            ROUTED_COUNTER, RULE_MATCH_BYTES_COUNTER, RULE_MATCH_BY_ACTION_COUNTER,
+            RULE_MATCH_BY_TYPE_COUNTER, TRACKING_ACTIVE_CONNECTIONS_GAUGE,
+            TRACKING_BYTES_IN_COUNTER, TRACKING_BYTES_OUT_COUNTER, TRACKING_PACKETS_COUNTER,
+            UNMATCHED_COUNTER,
+        };
 
         self.registry
             .register(Box::new(CONNECTION_COUNTER.clone()))?;
@@ -129,6 +138,40 @@ impl MetricsServer {
             .register(Box::new(RULE_MATCH_LATENCY_HISTOGRAM.clone()))?;
         self.registry
             .register(Box::new((*NODE_LATENCY_HISTOGRAM).clone()))?;
+        self.registry
+            .register(Box::new(CONNECTION_STATE_COUNTER.clone()))?;
+        self.registry
+            .register(Box::new(TRACKING_ACTIVE_CONNECTIONS_GAUGE.clone()))?;
+        self.registry
+            .register(Box::new((*TRACKING_BYTES_IN_COUNTER).clone()))?;
+        self.registry
+            .register(Box::new((*TRACKING_BYTES_OUT_COUNTER).clone()))?;
+        self.registry
+            .register(Box::new((*TRACKING_PACKETS_COUNTER).clone()))?;
+        self.registry
+            .register(Box::new((*PROXY_PROTOCOL_BYTES_IN_COUNTER).clone()))?;
+        self.registry
+            .register(Box::new((*PROXY_PROTOCOL_BYTES_OUT_COUNTER).clone()))?;
+        self.registry
+            .register(Box::new((*PROXY_PROTOCOL_CONNECTIONS_COUNTER).clone()))?;
+        self.registry
+            .register(Box::new((*NODE_BYTES_IN_COUNTER).clone()))?;
+        self.registry
+            .register(Box::new((*NODE_BYTES_OUT_COUNTER).clone()))?;
+        self.registry
+            .register(Box::new((*NODE_REQUESTS_COUNTER).clone()))?;
+        self.registry
+            .register(Box::new((*RULE_MATCH_BY_TYPE_COUNTER).clone()))?;
+        self.registry
+            .register(Box::new((*RULE_MATCH_BY_ACTION_COUNTER).clone()))?;
+        self.registry
+            .register(Box::new((*RULE_MATCH_BYTES_COUNTER).clone()))?;
+        self.registry
+            .register(Box::new(DROPPED_COUNTER.clone()))?;
+        self.registry
+            .register(Box::new(ROUTED_COUNTER.clone()))?;
+        self.registry
+            .register(Box::new(UNMATCHED_COUNTER.clone()))?;
 
         Ok(())
     }

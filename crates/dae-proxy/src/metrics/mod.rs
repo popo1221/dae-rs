@@ -15,6 +15,7 @@ pub mod counter;
 pub mod gauge;
 pub mod histogram;
 pub mod prometheus;
+pub mod tracking;
 
 // Re-export counter functions
 pub use counter::{
@@ -45,3 +46,20 @@ pub use histogram::{
 
 // Re-export prometheus server
 pub use prometheus::{start_metrics_server, stop_metrics_server, MetricsServer};
+
+// Re-export tracking metrics functions
+pub use tracking::{
+    connection_state_name, inc_connection_state, inc_dropped, inc_node_bytes_in,
+    inc_node_bytes_out, inc_proxy_protocol_bytes_in, inc_proxy_protocol_bytes_out,
+    inc_proxy_protocol_connection, inc_rule_match_bytes, inc_rule_match_by_action,
+    inc_rule_match_by_type, inc_routed, inc_tracking_bytes_in, inc_tracking_bytes_out,
+    inc_tracking_packets, inc_unmatched, register_tracking_metrics, rule_action_name,
+    rule_type_name, set_active_connections, transport_name,
+    CONNECTION_STATE_COUNTER, DROPPED_COUNTER, NODE_BYTES_IN_COUNTER,
+    NODE_BYTES_OUT_COUNTER, NODE_REQUESTS_COUNTER, PROXY_PROTOCOL_BYTES_IN_COUNTER,
+    PROXY_PROTOCOL_BYTES_OUT_COUNTER, PROXY_PROTOCOL_CONNECTIONS_COUNTER,
+    ROUTED_COUNTER, RULE_MATCH_BYTES_COUNTER, RULE_MATCH_BY_ACTION_COUNTER,
+    RULE_MATCH_BY_TYPE_COUNTER, TRACKING_ACTIVE_CONNECTIONS_GAUGE,
+    TRACKING_BYTES_IN_COUNTER, TRACKING_BYTES_OUT_COUNTER, TRACKING_PACKETS_COUNTER,
+    UNMATCHED_COUNTER,
+};

@@ -238,11 +238,37 @@ impl TrackingStore {
     /// Update connection stats
     #[allow(dead_code)]
     pub fn update_connection(&self, key: ConnectionKey, stats: ConnectionStatsEntry) {
+        // Record previous state for transition tracking
+        let prev_state = self.connections.get(&key).map(|s| s.state).unwrap_or(0);
+
         self.connections.update(key, stats);
+
+        // Update metrics with state transition
+        crate::metrics::inc_connection_state(stats.state);
+
+        // Update active connections gauge based on state transitions
+        let active_count = self.get_active_connection_count() as i64;
+        crate::metrics::set_active_connections(active_count);
 
         // Update overall stats
         let mut overall = self.overall.write().unwrap();
         overall.connections_total += 1;
+        // Track active connections - only transition if state actually changed
+        let is_closing_or_closed = stats.state == ConnectionState::Closed as u8
+            || stats.state == ConnectionState::Closing as u8;
+        let was_closing_or_closed = prev_state == ConnectionState::Closed as u8
+            || prev_state == ConnectionState::Closing as u8;
+        let is_new_or_established = stats.state == ConnectionState::New as u8
+            || stats.state == ConnectionState::Established as u8;
+        let was_closed_or_zero = prev_state == ConnectionState::Closed as u8
+            || prev_state == ConnectionState::Closing as u8
+            || prev_state == 0;
+
+        if is_closing_or_closed && !was_closing_or_closed {
+            overall.connections_active = overall.connections_active.saturating_sub(1);
+        } else if is_new_or_established && was_closed_or_zero {
+            overall.connections_active = overall.connections_active.saturating_add(1);
+        }
     }
 
     /// Record connection data transfer
@@ -254,6 +280,15 @@ impl TrackingStore {
             // Update protocol stats
             let mut protocols = self.protocols.write().unwrap();
             protocols.get_mut(key.proto).record_packet(bytes);
+
+            // Update tracking metrics
+            let transport = crate::metrics::transport_name(key.proto);
+            if inbound {
+                crate::metrics::inc_tracking_bytes_in(transport, bytes);
+            } else {
+                crate::metrics::inc_tracking_bytes_out(transport, bytes);
+            }
+            crate::metrics::inc_tracking_packets(transport);
 
             // Update overall
             let mut overall = self.overall.write().unwrap();
@@ -273,6 +308,7 @@ impl TrackingStore {
     /// Increment dropped counter
     #[allow(dead_code)]
     pub fn record_dropped(&self, count: u64) {
+        crate::metrics::inc_dropped(count);
         let mut overall = self.overall.write().unwrap();
         overall.dropped_total += count;
     }
@@ -280,6 +316,7 @@ impl TrackingStore {
     /// Increment routed counter
     #[allow(dead_code)]
     pub fn record_routed(&self, count: u64) {
+        crate::metrics::inc_routed(count);
         let mut overall = self.overall.write().unwrap();
         overall.routed_total += count;
     }
@@ -287,6 +324,7 @@ impl TrackingStore {
     /// Increment unmatched counter
     #[allow(dead_code)]
     pub fn record_unmatched(&self, count: u64) {
+        crate::metrics::inc_unmatched(count);
         let mut overall = self.overall.write().unwrap();
         overall.unmatched_total += count;
     }
@@ -325,8 +363,19 @@ impl TrackingStore {
     pub fn record_protocol_tracking(&self, info: ProtocolTrackingInfo) {
         let mut tracking = self.protocol_tracking.write().unwrap();
         let entry = tracking.entry(info.protocol.clone()).or_insert_with(|| {
+            // New protocol entry - increment connection counter
+            crate::metrics::inc_proxy_protocol_connection(&info.protocol);
             ProtocolTrackingInfo::new(&info.protocol)
         });
+
+        // Track bytes if non-zero (indicates delta update)
+        if info.bytes_in > 0 {
+            crate::metrics::inc_proxy_protocol_bytes_in(&info.protocol, info.bytes_in);
+        }
+        if info.bytes_out > 0 {
+            crate::metrics::inc_proxy_protocol_bytes_out(&info.protocol, info.bytes_out);
+        }
+
         entry.bytes_in += info.bytes_in;
         entry.bytes_out += info.bytes_out;
         // Merge metadata (last write wins for duplicate keys)
@@ -424,7 +473,13 @@ impl TrackingStore {
     /// * `bytes` - Number of bytes for this match
     #[allow(dead_code)]
     pub fn record_rule_match(&self, rule_id: u32, rule_type: u8, action: u8, bytes: u64) {
+        // Update rule stats
         self.rules.record_match(rule_id, rule_type, action, bytes);
+
+        // Update Prometheus metrics
+        crate::metrics::inc_rule_match_by_type(rule_type);
+        crate::metrics::inc_rule_match_by_action(action);
+        crate::metrics::inc_rule_match_bytes(rule_type, bytes);
     }
 
     // ==================== Export ====================
