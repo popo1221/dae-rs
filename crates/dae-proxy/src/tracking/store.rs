@@ -14,12 +14,13 @@
 use crate::tracking::types::*;
 use axum::{
     body::Body,
-    extract::State,
+    extract::{Path, Query, State},
     http::{HeaderValue, StatusCode},
     response::Response,
     routing::get,
     Router,
 };
+use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::net::SocketAddr;
 use std::sync::{Arc, RwLock};
@@ -667,6 +668,480 @@ async fn tracking_json_handler(State(state): State<MetricsHttpState>) -> Respons
 /// Health check handler
 async fn health_handler() -> StatusCode {
     StatusCode::OK
+}
+
+// =============================================================================
+// New Tracking API Handlers
+// =============================================================================
+
+use crate::control_types::{
+    ApiConnectionInfo, ApiConnectionsResponse, ApiNodeStats, ApiNodesResponse, ApiOverviewResponse,
+    ApiOverviewStats, ApiProtocolStats, ApiProxyProtocolInfo, ApiProxyProtocolsResponse,
+    ApiRuleStats, ApiRulesResponse, ApiTransportProtocolsResponse,
+};
+
+/// Query parameters for connections endpoint
+#[derive(Debug, Deserialize)]
+pub struct ConnectionsQuery {
+    pub state: Option<String>,   // active, closed, all
+    pub limit: Option<usize>,   // max connections to return
+    pub protocol: Option<String>, // tcp, udp
+    pub sort_by: Option<String>, // bytes_in, bytes_out, last_time
+}
+
+/// Convert ConnectionKey to string representation
+fn connection_key_to_string(key: &ConnectionKey) -> String {
+    format!(
+        "{}:{:05}-{}:{:05}-{}",
+        u32_to_ip(key.src_ip),
+        key.src_port,
+        u32_to_ip(key.dst_ip),
+        key.dst_port,
+        key.proto
+    )
+}
+
+/// Convert u32 IP to string
+fn u32_to_ip(ip: u32) -> String {
+    format!(
+        "{}.{}.{}.{}",
+        (ip >> 24) & 0xFF,
+        (ip >> 16) & 0xFF,
+        (ip >> 8) & 0xFF,
+        ip & 0xFF
+    )
+}
+
+/// Connection state to string
+fn connection_state_to_string(state: u8) -> String {
+    match state {
+        0 => "NEW".to_string(),
+        1 => "ESTABLISHED".to_string(),
+        2 => "CLOSING".to_string(),
+        3 => "CLOSED".to_string(),
+        _ => format!("UNKNOWN({})", state),
+    }
+}
+
+/// Rule type to string
+fn rule_type_to_string(rule_type: u8) -> String {
+    match rule_type {
+        0 => "DOMAIN".to_string(),
+        1 => "DOMAIN_SUFFIX".to_string(),
+        2 => "DOMAIN_KEYWORD".to_string(),
+        3 => "IP_CIDR".to_string(),
+        4 => "GEO_IP".to_string(),
+        5 => "PROCESS".to_string(),
+        _ => format!("UNKNOWN({})", rule_type),
+    }
+}
+
+/// Node status to string
+fn node_status_to_string(status: u8) -> String {
+    match status {
+        0 => "UP".to_string(),
+        1 => "DOWN".to_string(),
+        2 => "DEGRADED".to_string(),
+        _ => format!("UNKNOWN({})", status),
+    }
+}
+
+/// GET /api/tracking/overview - Overall statistics
+async fn api_overview_handler(State(state): State<MetricsHttpState>) -> Response<Body> {
+    let store = &state.store;
+    let overall = store.get_overall();
+    let protocols = store.get_protocol_stats();
+    let uptime = store.uptime_secs();
+
+    let response = ApiOverviewResponse {
+        overall: ApiOverviewStats {
+            uptime_secs: uptime,
+            packets_total: overall.packets_total,
+            bytes_total: overall.bytes_total,
+            connections_total: overall.connections_total,
+            connections_active: overall.connections_active,
+            dropped_total: overall.dropped_total,
+            routed_total: overall.routed_total,
+            unmatched_total: overall.unmatched_total,
+            packets_per_second: overall.packets_per_second(uptime),
+            bytes_per_second: overall.bytes_per_second(uptime),
+        },
+        transport_protocols: ApiTransportProtocolsResponse {
+            tcp: ApiProtocolStats {
+                protocol: "tcp".to_string(),
+                packets: protocols.tcp.packets,
+                bytes: protocols.tcp.bytes,
+                connections: protocols.tcp.connections,
+                active_connections: protocols.tcp.active_connections,
+            },
+            udp: ApiProtocolStats {
+                protocol: "udp".to_string(),
+                packets: protocols.udp.packets,
+                bytes: protocols.udp.bytes,
+                connections: protocols.udp.connections,
+                active_connections: protocols.udp.active_connections,
+            },
+            icmp: ApiProtocolStats {
+                protocol: "icmp".to_string(),
+                packets: protocols.icmp.packets,
+                bytes: protocols.icmp.bytes,
+                connections: protocols.icmp.connections,
+                active_connections: protocols.icmp.active_connections,
+            },
+        },
+    };
+
+    let json = serde_json::to_string_pretty(&response).unwrap_or_default();
+    let mut res = Response::new(Body::from(json));
+    res.headers_mut().insert(
+        "Content-Type",
+        HeaderValue::from_static("application/json; charset=utf-8"),
+    );
+    res
+}
+
+/// GET /api/tracking/connections - List connections with filtering
+async fn api_connections_handler(
+    State(state): State<MetricsHttpState>,
+    Query(query): Query<ConnectionsQuery>,
+) -> Response<Body> {
+    let store = &state.store;
+    let all_connections = store.connections.get_active();
+    let total_count = all_connections.len();
+
+    // Count active
+    let active_count = all_connections
+        .iter()
+        .filter(|(_, stats)| stats.state != ConnectionState::Closed as u8)
+        .count();
+
+    // Apply filters - clone to avoid borrow issues
+    let mut filtered: Vec<_> = all_connections.clone().into_iter().collect();
+
+    // Filter by state
+    if let Some(ref state_filter) = query.state {
+        match state_filter.as_str() {
+            "active" => {
+                filtered.retain(|(_, stats)| {
+                    stats.state != ConnectionState::Closed as u8
+                });
+            }
+            "closed" => {
+                filtered.retain(|(_, stats)| {
+                    stats.state == ConnectionState::Closed as u8
+                });
+            }
+            "all" | _ => {} // No filter
+        }
+    }
+
+    // Filter by protocol
+    if let Some(ref proto_filter) = query.protocol {
+        let proto_num = match proto_filter.to_lowercase().as_str() {
+            "tcp" => 6,
+            "udp" => 17,
+            "icmp" => 1,
+            _ => 0,
+        };
+        if proto_num > 0 {
+            filtered.retain(|(key, _)| key.proto == proto_num);
+        }
+    }
+
+    // Sort
+    if let Some(ref sort_by) = query.sort_by {
+        match sort_by.as_str() {
+            "bytes_in" => filtered.sort_by(|a, b| b.1.bytes_in.cmp(&a.1.bytes_in)),
+            "bytes_out" => filtered.sort_by(|a, b| b.1.bytes_out.cmp(&a.1.bytes_out)),
+            "last_time" => filtered.sort_by(|a, b| b.1.last_time.cmp(&a.1.last_time)),
+            _ => filtered.sort_by(|a, b| b.1.last_time.cmp(&a.1.last_time)),
+        }
+    } else {
+        filtered.sort_by(|a, b| b.1.last_time.cmp(&a.1.last_time));
+    }
+
+    // Apply limit
+    let limit = query.limit.unwrap_or(100);
+    let total_after_filter = filtered.len();
+    filtered.truncate(limit);
+
+    // Convert to API format
+    let connections: Vec<ApiConnectionInfo> = filtered
+        .into_iter()
+        .map(|(key, stats)| {
+            let now = current_epoch_ms();
+            ApiConnectionInfo {
+                key: connection_key_to_string(&key),
+                src_ip: u32_to_ip(key.src_ip),
+                src_port: key.src_port,
+                dst_ip: u32_to_ip(key.dst_ip),
+                dst_port: key.dst_port,
+                proto: key.protocol_name().to_string(),
+                packets_in: stats.packets_in,
+                packets_out: stats.packets_out,
+                bytes_in: stats.bytes_in,
+                bytes_out: stats.bytes_out,
+                state: connection_state_to_string(stats.state),
+                node_id: stats.node_id,
+                rule_id: stats.rule_id,
+                start_time: stats.start_time,
+                last_time: stats.last_time,
+                age_ms: now.saturating_sub(stats.start_time),
+                idle_ms: now.saturating_sub(stats.last_time),
+            }
+        })
+        .collect();
+
+    let response = ApiConnectionsResponse {
+        total: total_after_filter,
+        active: active_count,
+        connections,
+    };
+
+    let json = serde_json::to_string_pretty(&response).unwrap_or_default();
+    let mut res = Response::new(Body::from(json));
+    res.headers_mut().insert(
+        "Content-Type",
+        HeaderValue::from_static("application/json; charset=utf-8"),
+    );
+    res
+}
+
+/// GET /api/tracking/connections/:key - Get specific connection
+async fn api_connection_detail_handler(
+    State(state): State<MetricsHttpState>,
+    Path(key_str): Path<String>,
+) -> Response<Body> {
+    let store = &state.store;
+
+    // Parse the key string (format: src_ip:port-dst_ip:port-proto)
+    let parts: Vec<&str> = key_str.split('-').collect();
+    if parts.len() != 3 {
+        let error = Response::builder()
+            .status(StatusCode::BAD_REQUEST)
+            .body(Body::from("Invalid key format. Expected: src_ip:port-dst_ip:port-proto"))
+            .unwrap();
+        return error;
+    }
+
+    // Parse source
+    let src_parts: Vec<&str> = parts[0].split(':').collect();
+    if src_parts.len() != 2 {
+        let error = Response::builder()
+            .status(StatusCode::BAD_REQUEST)
+            .body(Body::from("Invalid source format. Expected: ip:port"))
+            .unwrap();
+        return error;
+    }
+
+    let src_ip = ip_to_u32(src_parts[0]);
+    let src_port: u16 = src_parts[1].parse().unwrap_or(0);
+
+    // Parse destination
+    let dst_parts: Vec<&str> = parts[1].split(':').collect();
+    if dst_parts.len() != 2 {
+        let error = Response::builder()
+            .status(StatusCode::BAD_REQUEST)
+            .body(Body::from("Invalid destination format. Expected: ip:port"))
+            .unwrap();
+        return error;
+    }
+
+    let dst_ip = ip_to_u32(dst_parts[0]);
+    let dst_port: u16 = dst_parts[1].parse().unwrap_or(0);
+
+    // Parse protocol
+    let proto = match parts[2] {
+        "TCP" | "tcp" | "6" => 6,
+        "UDP" | "udp" | "17" => 17,
+        "ICMP" | "icmp" | "1" => 1,
+        _ => 0,
+    };
+
+    let key = ConnectionKey::new(src_ip, dst_ip, src_port, dst_port, proto);
+
+    // Try to get connection stats
+    if let Some(stats) = store.connections.get(&key) {
+        let now = current_epoch_ms();
+        let info = ApiConnectionInfo {
+            key: connection_key_to_string(&key),
+            src_ip: u32_to_ip(key.src_ip),
+            src_port: key.src_port,
+            dst_ip: u32_to_ip(key.dst_ip),
+            dst_port: key.dst_port,
+            proto: key.protocol_name().to_string(),
+            packets_in: stats.packets_in,
+            packets_out: stats.packets_out,
+            bytes_in: stats.bytes_in,
+            bytes_out: stats.bytes_out,
+            state: connection_state_to_string(stats.state),
+            node_id: stats.node_id,
+            rule_id: stats.rule_id,
+            start_time: stats.start_time,
+            last_time: stats.last_time,
+            age_ms: now.saturating_sub(stats.start_time),
+            idle_ms: now.saturating_sub(stats.last_time),
+        };
+
+        let json = serde_json::to_string_pretty(&info).unwrap_or_default();
+        let mut res = Response::new(Body::from(json));
+        res.headers_mut().insert(
+            "Content-Type",
+            HeaderValue::from_static("application/json; charset=utf-8"),
+        );
+        res
+    } else {
+        let error = Response::builder()
+            .status(StatusCode::NOT_FOUND)
+            .body(Body::from("Connection not found"))
+            .unwrap();
+        error
+    }
+}
+
+/// Convert IP string to u32
+fn ip_to_u32(ip: &str) -> u32 {
+    let parts: Vec<&str> = ip.split('.').collect();
+    if parts.len() != 4 {
+        return 0;
+    }
+    let a: u32 = parts[0].parse().unwrap_or(0);
+    let b: u32 = parts[1].parse().unwrap_or(0);
+    let c: u32 = parts[2].parse().unwrap_or(0);
+    let d: u32 = parts[3].parse().unwrap_or(0);
+    (a << 24) | (b << 16) | (c << 8) | d
+}
+
+/// GET /api/tracking/protocols - Per-protocol breakdown
+async fn api_protocols_handler(State(state): State<MetricsHttpState>) -> Response<Body> {
+    let store = &state.store;
+    let transport_protocols = store.get_protocol_stats();
+    let proxy_protocols = store.get_all_protocol_tracking();
+
+    // Transport protocol stats
+    let transport = ApiTransportProtocolsResponse {
+        tcp: ApiProtocolStats {
+            protocol: "tcp".to_string(),
+            packets: transport_protocols.tcp.packets,
+            bytes: transport_protocols.tcp.bytes,
+            connections: transport_protocols.tcp.connections,
+            active_connections: transport_protocols.tcp.active_connections,
+        },
+        udp: ApiProtocolStats {
+            protocol: "udp".to_string(),
+            packets: transport_protocols.udp.packets,
+            bytes: transport_protocols.udp.bytes,
+            connections: transport_protocols.udp.connections,
+            active_connections: transport_protocols.udp.active_connections,
+        },
+        icmp: ApiProtocolStats {
+            protocol: "icmp".to_string(),
+            packets: transport_protocols.icmp.packets,
+            bytes: transport_protocols.icmp.bytes,
+            connections: transport_protocols.icmp.connections,
+            active_connections: transport_protocols.icmp.active_connections,
+        },
+    };
+
+    // Proxy protocol stats
+    let proxy: Vec<ApiProxyProtocolInfo> = proxy_protocols
+        .into_values()
+        .map(|p| ApiProxyProtocolInfo {
+            protocol: p.protocol.clone(),
+            bytes_in: p.bytes_in,
+            bytes_out: p.bytes_out,
+            total_bytes: p.total_bytes(),
+            metadata: p.metadata,
+        })
+        .collect();
+
+    #[derive(Serialize)]
+    struct ProtocolsResponse {
+        transport: ApiTransportProtocolsResponse,
+        proxy: ApiProxyProtocolsResponse,
+    }
+
+    let response = ProtocolsResponse {
+        transport,
+        proxy: ApiProxyProtocolsResponse { protocols: proxy },
+    };
+
+    let json = serde_json::to_string_pretty(&response).unwrap_or_default();
+    let mut res = Response::new(Body::from(json));
+    res.headers_mut().insert(
+        "Content-Type",
+        HeaderValue::from_static("application/json; charset=utf-8"),
+    );
+    res
+}
+
+/// GET /api/tracking/rules - Rule match statistics
+async fn api_rules_handler(State(state): State<MetricsHttpState>) -> Response<Body> {
+    let store = &state.store;
+    let all_rules = store.rules.get_all();
+
+    let rules: Vec<ApiRuleStats> = all_rules
+        .into_values()
+        .map(|r| ApiRuleStats {
+            rule_id: r.rule_id,
+            rule_type: rule_type_to_string(r.rule_type),
+            match_count: r.match_count,
+            pass_count: r.pass_count,
+            proxy_count: r.proxy_count,
+            drop_count: r.drop_count,
+            bytes_matched: r.bytes_matched,
+        })
+        .collect();
+
+    let response = ApiRulesResponse {
+        total_rules: rules.len(),
+        rules,
+    };
+
+    let json = serde_json::to_string_pretty(&response).unwrap_or_default();
+    let mut res = Response::new(Body::from(json));
+    res.headers_mut().insert(
+        "Content-Type",
+        HeaderValue::from_static("application/json; charset=utf-8"),
+    );
+    res
+}
+
+/// GET /api/tracking/nodes - Per-node statistics
+async fn api_nodes_handler(State(state): State<MetricsHttpState>) -> Response<Body> {
+    let store = &state.store;
+    let all_nodes = store.nodes.get_all();
+
+    let nodes: Vec<ApiNodeStats> = all_nodes
+        .into_iter()
+        .map(|(node_id, n)| ApiNodeStats {
+            node_id,
+            total_requests: n.total_requests,
+            successful_requests: n.successful_requests,
+            failed_requests: n.failed_requests,
+            bytes_sent: n.bytes_sent,
+            bytes_received: n.bytes_received,
+            latency_avg_ms: n.latency_avg(),
+            latency_p50_ms: n.latency_p50,
+            latency_p90_ms: n.latency_p90,
+            latency_p99_ms: n.latency_p99,
+            success_rate: n.success_rate(),
+            status: node_status_to_string(n.status),
+        })
+        .collect();
+
+    let response = ApiNodesResponse {
+        total_nodes: nodes.len(),
+        nodes,
+    };
+
+    let json = serde_json::to_string_pretty(&response).unwrap_or_default();
+    let mut res = Response::new(Body::from(json));
+    res.headers_mut().insert(
+        "Content-Type",
+        HeaderValue::from_static("application/json; charset=utf-8"),
+    );
+    res
 }
 
 impl Default for TrackingStore {
