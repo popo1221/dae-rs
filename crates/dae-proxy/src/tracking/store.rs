@@ -557,40 +557,32 @@ impl TrackingStore {
         let listener = TcpListener::bind(addr).await?;
         info!("Tracking HTTP server listening on {}", addr);
 
-        // Build router based on mode
-        let app = if prometheus_mode {
-            let state = MetricsHttpState {
-                store,
-                prometheus_mode: true,
-                websocket_enabled: websocket,
-            };
-            Router::new()
-                .route(metrics_path, get(tracking_metrics_handler))
-                .route("/health", get(health_handler))
-                .with_state(state)
-                .layer(
-                    CorsLayer::new()
-                        .allow_origin(Any)
-                        .allow_methods(Any)
-                        .allow_headers(Any),
-                )
-        } else {
-            let state = MetricsHttpState {
-                store,
-                prometheus_mode: false,
-                websocket_enabled: websocket,
-            };
-            Router::new()
-                .route(metrics_path, get(tracking_json_handler))
-                .route("/health", get(health_handler))
-                .with_state(state)
-                .layer(
-                    CorsLayer::new()
-                        .allow_origin(Any)
-                        .allow_methods(Any)
-                        .allow_headers(Any),
-                )
+        let state = MetricsHttpState {
+            store,
+            prometheus_mode,
+            websocket_enabled: websocket,
         };
+
+        // Build router with all endpoints
+        let app = Router::new()
+            // Prometheus endpoint
+            .route(metrics_path, get(tracking_metrics_handler))
+            // Health check
+            .route("/health", get(health_handler))
+            // Tracking API endpoints
+            .route("/api/tracking/overview", get(api_overview_handler))
+            .route("/api/tracking/connections", get(api_connections_handler))
+            .route("/api/tracking/connections/*key", get(api_connection_detail_handler))
+            .route("/api/tracking/protocols", get(api_protocols_handler))
+            .route("/api/tracking/rules", get(api_rules_handler))
+            .route("/api/tracking/nodes", get(api_nodes_handler))
+            .with_state(state)
+            .layer(
+                CorsLayer::new()
+                    .allow_origin(Any)
+                    .allow_methods(Any)
+                    .allow_headers(Any),
+            );
 
         axum::serve(listener, app).await?;
         Ok(())
