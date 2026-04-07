@@ -61,7 +61,7 @@ pub use crate::node::{
 };
 pub use crate::rule_engine::{
     new_rule_engine, PacketInfo, RuleAction, RuleEngine, RuleEngineConfig, RuleEngineStats,
-    SharedRuleEngine,
+    RuleMatchInfo, SharedRuleEngine,
 };
 pub use crate::rules::{
     DnsTypeRule, DomainRule, GeoIpRule, IpCidrRule, ProcessRule, Rule, RuleGroup, RuleMatchAction,

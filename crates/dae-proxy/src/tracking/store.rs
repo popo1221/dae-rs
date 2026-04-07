@@ -172,6 +172,20 @@ impl RuleTrackingStore {
         let rules = self.rules.read().unwrap();
         rules.clone()
     }
+
+    /// Record a rule match event
+    ///
+    /// # Arguments
+    /// * `rule_id` - Unique identifier for the rule
+    /// * `rule_type` - Type of rule (0=Domain, 1=DomainSuffix, 2=DomainKeyword, 3=IpCidr, 4=GeoIp, 5=Process)
+    /// * `action` - Action taken (0=Pass, 1=Proxy, 2=Drop)
+    /// * `bytes` - Number of bytes for this match
+    #[allow(dead_code)]
+    pub fn record_match(&self, rule_id: u32, rule_type: u8, action: u8, bytes: u64) {
+        let mut rules = self.rules.write().unwrap();
+        let stats = rules.entry(rule_id).or_insert_with(|| RuleStatsEntry::new(rule_id, rule_type));
+        stats.record_match(crate::tracking::types::RuleAction::from(action), bytes);
+    }
 }
 
 impl Default for RuleTrackingStore {
@@ -340,6 +354,20 @@ impl TrackingStore {
     #[allow(dead_code)]
     pub fn get_rule_count(&self) -> usize {
         self.rules.get_all().len()
+    }
+
+    // ==================== Rule Tracking ====================
+
+    /// Record a rule match event
+    ///
+    /// # Arguments
+    /// * `rule_id` - Unique identifier for the rule
+    /// * `rule_type` - Type of rule (0=Domain, 1=DomainSuffix, 2=DomainKeyword, 3=IpCidr, 4=GeoIp, 5=Process)
+    /// * `action` - Action taken (0=Pass, 1=Proxy, 2=Drop)
+    /// * `bytes` - Number of bytes for this match
+    #[allow(dead_code)]
+    pub fn record_rule_match(&self, rule_id: u32, rule_type: u8, action: u8, bytes: u64) {
+        self.rules.record_match(rule_id, rule_type, action, bytes);
     }
 
     // ==================== Export ====================

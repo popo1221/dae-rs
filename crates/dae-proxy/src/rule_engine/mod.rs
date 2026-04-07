@@ -187,6 +187,41 @@ impl RuleAction {
             RuleAction::Proxy | RuleAction::Default => 0, // Default to pass for now
         }
     }
+
+    /// Convert to u8 for tracking
+    ///
+    /// Maps to tracking::types::RuleAction values:
+    /// - Pass = 0
+    /// - Proxy = 1
+    /// - Drop = 2
+    /// - Default = 3
+    /// - Direct = 4
+    /// - MustDirect = 5
+    pub fn to_u8(&self) -> u8 {
+        match self {
+            RuleAction::Pass => 0,
+            RuleAction::Proxy => 1,
+            RuleAction::Drop => 2,
+            RuleAction::Default => 3,
+            RuleAction::Direct => 4,
+            RuleAction::MustDirect => 5,
+        }
+    }
+}
+
+/// Rule match information for tracking
+///
+/// Contains details about a rule match event for statistics tracking.
+#[derive(Debug, Clone)]
+pub struct RuleMatchInfo {
+    /// The matched rule's action
+    pub action: RuleAction,
+    /// Unique rule identifier
+    pub rule_id: u32,
+    /// Rule type (0=Domain, 1=DomainSuffix, 2=DomainKeyword, 3=IpCidr, 4=GeoIp, 5=Process)
+    pub rule_type: u8,
+    /// Whether a rule matched (false means default action was used)
+    pub matched: bool,
 }
 
 /// 规则引擎配置

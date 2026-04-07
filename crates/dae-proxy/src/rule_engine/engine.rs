@@ -205,6 +205,15 @@ impl RuleEngine {
             a_priority.cmp(&b_priority)
         });
 
+        // Assign unique rule IDs to all rules
+        let mut next_rule_id: u32 = 0;
+        for group in &mut rule_groups {
+            for rule in &mut group.rules {
+                rule.set_rule_id(next_rule_id);
+                next_rule_id += 1;
+            }
+        }
+
         let mut groups = self.rule_groups.write().await;
         *groups = rule_groups;
 
@@ -233,12 +242,11 @@ impl RuleEngine {
         let groups = self.rule_groups.read().await;
 
         for group in groups.iter() {
-            if let Some(action) = group.match_packet(&info) {
+            if let Some((action, _rule_id, _rule_type)) = group.match_packet(&info) {
                 debug!(
                     "Packet matched rule in group '{}': {:?}",
                     group.name, action
                 );
-                // Track rule match (rule type unknown at this level)
                 observe_rule_match_latency(start.elapsed().as_secs_f64());
                 return action.to_action();
             }
@@ -248,6 +256,49 @@ impl RuleEngine {
         debug!("No matching rule, using default action");
         observe_rule_match_latency(start.elapsed().as_secs_f64());
         self.config.default_action
+    }
+
+    /// Match a packet against all rules and return match info
+    ///
+    /// Returns detailed information about which rule matched, including
+    /// rule_id and rule_type for tracking purposes.
+    #[allow(dead_code)]
+    pub async fn match_packet_info(&self, info: &super::PacketInfo) -> super::RuleMatchInfo {
+        let start = Instant::now();
+
+        // Enrich packet info with GeoIP if available
+        let mut info = info.clone();
+        if info.geoip_country.is_none() && self.config.geoip_enabled {
+            info.geoip_country = self.lookup_geoip(&info.destination_ip).await;
+        }
+
+        let groups = self.rule_groups.read().await;
+
+        for group in groups.iter() {
+            if let Some((action, rule_id, rule_type)) = group.match_packet(&info) {
+                debug!(
+                    "Packet matched rule in group '{}': {:?} (rule_id={}, rule_type={})",
+                    group.name, action, rule_id, rule_type
+                );
+                observe_rule_match_latency(start.elapsed().as_secs_f64());
+                return super::RuleMatchInfo {
+                    action: action.to_action(),
+                    rule_id,
+                    rule_type,
+                    matched: true,
+                };
+            }
+        }
+
+        // No matching rule, return default action
+        debug!("No matching rule, using default action");
+        observe_rule_match_latency(start.elapsed().as_secs_f64());
+        super::RuleMatchInfo {
+            action: self.config.default_action,
+            rule_id: u32::MAX, // Invalid rule_id indicates no match
+            rule_type: 0,
+            matched: false,
+        }
     }
 
     /// Lookup GeoIP country for an IP address

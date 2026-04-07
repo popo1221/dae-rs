@@ -48,6 +48,20 @@ pub enum RuleAction {
     MustDirect = 5,
 }
 
+impl From<u8> for RuleAction {
+    fn from(value: u8) -> Self {
+        match value {
+            0 => RuleAction::Pass,
+            1 => RuleAction::Proxy,
+            2 => RuleAction::Drop,
+            3 => RuleAction::Default,
+            4 => RuleAction::Direct,
+            5 => RuleAction::MustDirect,
+            _ => RuleAction::Pass, // Default to Pass for unknown values
+        }
+    }
+}
+
 /// Rule type enumeration
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 #[repr(u8)]

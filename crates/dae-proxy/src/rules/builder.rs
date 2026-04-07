@@ -90,6 +90,7 @@ impl Rule {
             rule,
             action,
             priority,
+            rule_id: 0, // Placeholder, will be set during rule loading
         })
     }
 
@@ -111,6 +112,38 @@ impl Rule {
             Rule::NodeTag(r) => r.matches_packet(info),
         }
     }
+
+    /// Get the rule type as a u8 for tracking purposes
+    ///
+    /// Maps to tracking::types::RuleType values:
+    /// - Domain = 0
+    /// - DomainSuffix = 1
+    /// - DomainKeyword = 2
+    /// - IpCidr = 3
+    /// - GeoIp = 4
+    /// - Process = 5
+    ///
+    /// Note: DnsType, Capability, and NodeTag map to 0 (Domain) as fallback
+    /// since they don't have direct equivalents in tracking::types::RuleType
+    pub fn rule_type_u8(&self) -> u8 {
+        use crate::rules::RuleType;
+        use crate::rules::DomainRuleType;
+        match self {
+            Rule::Domain(r) => {
+                match &r.rule_type {
+                    DomainRuleType::Exact(_) => RuleType::Domain as u8,
+                    DomainRuleType::Suffix(_) => RuleType::DomainSuffix as u8,
+                    DomainRuleType::Keyword(_) => RuleType::DomainKeyword as u8,
+                }
+            }
+            Rule::IpCidr(_) => RuleType::IpCidr as u8,
+            Rule::GeoIp(_) => RuleType::GeoIp as u8,
+            Rule::Process(_) => RuleType::Process as u8,
+            // DnsType, Capability, NodeTag don't have direct tracking equivalents
+            // Map to Domain as fallback
+            Rule::DnsType(_) | Rule::Capability(_) | Rule::NodeTag(_) => RuleType::Domain as u8,
+        }
+    }
 }
 
 /// A rule with its action and priority
@@ -122,12 +155,20 @@ pub struct RuleWithAction {
     pub action: RuleMatchAction,
     /// Rule priority (lower = higher priority)
     pub priority: u32,
+    /// Unique rule identifier for tracking
+    pub rule_id: u32,
 }
 
 impl RuleWithAction {
     /// Check if this rule matches the given packet info
     pub fn matches(&self, info: &PacketInfo, domain_lower: Option<&str>) -> bool {
         self.rule.matches(info, domain_lower)
+    }
+
+    /// Set the rule ID
+    #[allow(dead_code)]
+    pub fn set_rule_id(&mut self, id: u32) {
+        self.rule_id = id;
     }
 }
 
@@ -170,11 +211,13 @@ impl RuleGroup {
     /// Optimizes domain matching by lowercasing ONCE before the rule loop,
     /// then passing the pre-lowercased domain to each rule's matches().
     /// This avoids N × to_lowercase() allocations when there are N domain rules.
-    pub fn match_packet(&self, info: &PacketInfo) -> Option<RuleMatchAction> {
+    ///
+    /// Returns the matched action along with rule_id and rule_type for tracking.
+    pub fn match_packet(&self, info: &PacketInfo) -> Option<(RuleMatchAction, u32, u8)> {
         let domain_lower = info.destination_domain.as_ref().map(|s| s.to_lowercase());
         for rule in &self.rules {
             if rule.matches(info, domain_lower.as_deref()) {
-                return Some(rule.action);
+                return Some((rule.action, rule.rule_id, rule.rule.rule_type_u8()));
             }
         }
         None
@@ -218,11 +261,15 @@ mod tests {
 
         let mut info = PacketInfo::default();
         info.destination_domain = Some("example.cn".to_string());
-        assert_eq!(group.match_packet(&info), Some(RuleMatchAction::Pass));
+        let result = group.match_packet(&info);
+        assert!(result.is_some());
+        assert_eq!(result.unwrap().0, RuleMatchAction::Pass);
 
         let mut info = PacketInfo::default();
         info.destination_ip = IpAddr::V4(Ipv4Addr::new(10, 0, 0, 1));
-        assert_eq!(group.match_packet(&info), Some(RuleMatchAction::Pass));
+        let result = group.match_packet(&info);
+        assert!(result.is_some());
+        assert_eq!(result.unwrap().0, RuleMatchAction::Pass);
 
         let mut info = PacketInfo::default();
         info.destination_ip = IpAddr::V4(Ipv4Addr::new(192, 168, 0, 1));
@@ -256,7 +303,9 @@ mod tests {
 
         let mut info = PacketInfo::default();
         info.destination_domain = Some("example.org".to_string());
-        assert_eq!(group.match_packet(&info), Some(RuleMatchAction::Pass));
+        let result = group.match_packet(&info);
+        assert!(result.is_some());
+        assert_eq!(result.unwrap().0, RuleMatchAction::Pass);
     }
 
     #[test]
